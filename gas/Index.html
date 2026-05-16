@@ -44,7 +44,14 @@
     .dark .fc-theme-standard .fc-scrollgrid { border-color: #475569; }
     .fc-theme-standard th { padding: 12px 0; background: #faf5ff; color: #7e22ce; }
     .dark .fc-theme-standard th { background: #334155; color: #e2e8f0; }
-    .fc-daygrid-day-frame { border-radius: 0.75rem; margin: 4px; border: 1px solid transparent; min-height: 100px; }
+    .fc-daygrid-day-frame { border-radius: 0.75rem; margin: 4px; border: 1px solid transparent; min-height: 88px; }
+    #calendar.calendar-no-vscroll .fc-scroller,
+    #calendar.calendar-no-vscroll .fc-scroller-liquid-absolute {
+      overflow-y: hidden !important;
+    }
+    #calendar.calendar-allow-vscroll .fc-scroller {
+      overflow-y: auto !important;
+    }
     .fc-day-today .fc-daygrid-day-frame { background-color: #f3e8ff !important; }
     .dark .fc-day-today .fc-daygrid-day-frame { background-color: #4c1d95 !important; }
     .fc-event { border-radius: 999px !important; padding: 4px 10px !important; font-size: 0.8rem; border: none !important; cursor: pointer; color: #ffffff !important; text-shadow: 0px 1px 2px rgba(0,0,0,0.4); }
@@ -101,11 +108,11 @@
       <h2 class="text-xl font-semibold text-purple-600 dark:text-purple-400 mb-4">EMD CAR — อัปเดตระบบ</h2>
       <p class="text-slate-600 dark:text-slate-300 text-sm leading-relaxed mb-6">
         หน้าเว็บนี้ได้ถูกพัฒนาใหม่ กรุณาเข้าลิ้งค์
-        <a href="https://github.com/pongvitsam/EMD_CAR" target="_blank" rel="noopener noreferrer" class="text-purple-600 dark:text-purple-400 font-semibold underline break-all">https://github.com/pongvitsam/EMD_CAR</a>
+        <a href="https://pongvitsam.github.io/EMD_CAR/" target="_blank" rel="noopener noreferrer" class="text-purple-600 dark:text-purple-400 font-semibold underline break-all">https://pongvitsam.github.io/EMD_CAR/</a>
         หรือจะดำเนินการต่อในเว็บเก่า ต้องล็อกอินรหัส admin เท่านั้น
       </p>
       <div class="flex flex-col sm:flex-row gap-3 justify-center">
-        <a href="https://github.com/pongvitsam/EMD_CAR" target="_blank" rel="noopener noreferrer" class="inline-flex justify-center items-center bg-purple-500 hover:bg-purple-600 text-white font-medium px-5 py-3 rounded-xl transition shadow">ไปหน้าเว็บใหม่</a>
+        <a href="https://pongvitsam.github.io/EMD_CAR/" target="_blank" rel="noopener noreferrer" class="inline-flex justify-center items-center bg-purple-500 hover:bg-purple-600 text-white font-medium px-5 py-3 rounded-xl transition shadow">ไปหน้าเว็บใหม่</a>
         <button type="button" onclick="window.continueLegacyAsAdmin()" class="inline-flex justify-center items-center bg-slate-600 hover:bg-slate-700 text-white font-medium px-5 py-3 rounded-xl transition shadow">ดำเนินการต่อในเว็บเก่า (Admin)</button>
       </div>
     </div>
@@ -1051,14 +1058,28 @@
       container.innerHTML = cardsHtml || '<div class="col-span-full text-center text-slate-400">ไม่พบรถในระบบ</div>';
     }
 
+    function applyCalendarScrollMode(viewType) {
+      const el = document.getElementById('calendar');
+      if (!el) return;
+      const isList = String(viewType || '').indexOf('list') === 0;
+      el.classList.toggle('calendar-no-vscroll', !isList);
+      el.classList.toggle('calendar-allow-vscroll', isList);
+      if (calendar) calendar.setOption('height', isList ? '100%' : 'auto');
+    }
+
    function setupCalendar(bookings) {
       if(calendar) calendar.destroy();
-      
+      const initialView = window.innerWidth < 768 ? 'listMonth' : 'dayGridMonth';
       calendar = new FullCalendar.Calendar(document.getElementById('calendar'), {
-        initialView: window.innerWidth < 768 ? 'listMonth' : 'dayGridMonth', 
+        initialView: initialView,
         headerToolbar: { left: 'prev,next', center: 'title', right: 'dayGridMonth,listMonth' },
-        locale: 'th', 
-        height: '100%',
+        locale: 'th',
+        height: initialView.indexOf('list') === 0 ? '100%' : 'auto',
+        views: {
+          dayGridMonth: { height: 'auto', dayMaxEventRows: 3 },
+          listMonth: { height: '100%' }
+        },
+        datesSet: function(info) { applyCalendarScrollMode(info.view.type); },
         dayMaxEventRows: 3,
         displayEventTime: false, 
         events: bookings.map(b => {
@@ -1113,6 +1134,7 @@
         }
       });
       calendar.render();
+      applyCalendarScrollMode(calendar.view.type);
     }
 
     function searchBookings() {
