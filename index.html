@@ -107,6 +107,30 @@
         min-height: 460px;
       }
     }
+    .avail-picker { background: #fff; border-radius: 1rem; border: 1px solid #e2e8f0; padding: 1rem 1.1rem 1.15rem; box-shadow: 0 1px 3px rgba(15,23,42,.06); max-width: 320px; }
+    .dark .avail-picker { background: #1e293b; border-color: #475569; }
+    .avail-picker-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; padding: 0 .15rem; }
+    .avail-picker-nav { width: 2rem; height: 2rem; display: flex; align-items: center; justify-content: center; border-radius: 999px; color: #64748b; font-size: 1.1rem; line-height: 1; transition: background .15s; }
+    .avail-picker-nav:hover { background: #f1f5f9; color: #334155; }
+    .dark .avail-picker-nav:hover { background: #334155; color: #e2e8f0; }
+    .avail-picker-title { font-size: 1rem; font-weight: 500; color: #334155; letter-spacing: .01em; }
+    .dark .avail-picker-title { color: #e2e8f0; }
+    .avail-picker-dow { display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; font-size: .8rem; color: #94a3b8; margin-bottom: .35rem; font-weight: 500; }
+    .avail-picker-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+    .avail-picker-day { aspect-ratio: 1; display: flex; align-items: center; justify-content: center; font-size: .9rem; border-radius: 999px; border: 2px solid transparent; cursor: pointer; color: #334155; transition: background .12s, border-color .12s, color .12s; user-select: none; }
+    .dark .avail-picker-day { color: #e2e8f0; }
+    .avail-picker-day.other { color: #cbd5e1; }
+    .dark .avail-picker-day.other { color: #64748b; }
+    .avail-picker-day:hover:not(.other) { background: #f8fafc; }
+    .dark .avail-picker-day:hover:not(.other) { background: #334155; }
+    .avail-picker-day.selected { border-color: #334155; font-weight: 600; }
+    .dark .avail-picker-day.selected { border-color: #e2e8f0; }
+    .avail-picker-day.in-range { background: #f3e8ff; border-color: transparent; border-radius: .35rem; }
+    .dark .avail-picker-day.in-range { background: #4c1d95; }
+    .avail-picker-day.range-start, .avail-picker-day.range-end { border-color: #334155; font-weight: 600; border-radius: 999px; }
+    .dark .avail-picker-day.range-start, .dark .avail-picker-day.range-end { border-color: #e2e8f0; }
+    .avail-busy-card { border: 1px solid #e2e8f0; border-radius: .75rem; padding: .65rem .75rem; background: #f8fafc; }
+    .dark .avail-busy-card { border-color: #475569; background: #0f172a; }
   </style>
 </head>
 <body class="bg-[#fbf5ff] text-slate-700 dark:bg-slate-900 dark:text-slate-200">
@@ -438,6 +462,8 @@
     let dashboardAvailMode = 'single';
     let dashboardAvailDate = '';
     let dashboardAvailEndDate = '';
+    let dashboardAvailViewYm = '';
+    let dashboardAvailRangeStep = 'start';
     let statsSelectedMonth = '';
     let dashboardDeptChartInstance = null;
     let hasViewedCalendarBookingDetail = false;
@@ -646,6 +672,120 @@
       if (dayCount <= 1) return formatThaiDate(new Date(rangeStartMs));
       return formatThaiDate(new Date(rangeStartMs)) + ' – ' + formatThaiDate(new Date(rangeEndMs)) + ' (' + dayCount + ' วัน)';
     }
+    const AVAIL_THAI_MONTHS = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
+    const AVAIL_THAI_DOW = ['จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส', 'อา'];
+    function ymdToParts(ymd) {
+      const p = String(ymd || '').split('-');
+      return { y: parseInt(p[0], 10), m: parseInt(p[1], 10), d: parseInt(p[2], 10) };
+    }
+    function toYmd(y, m, d) {
+      return y + '-' + String(m).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+    }
+    function compareYmd(a, b) { return String(a).localeCompare(String(b)); }
+    function formatBookingTimeRange(b) {
+      const s = parseTimeSafe(b.start);
+      const e = parseTimeSafe(b.end);
+      if (!s || !e) return '-';
+      return formatThaiTime(new Date(s)) + ' – ' + formatThaiTime(new Date(e)) + ' น.';
+    }
+    function ensureDashboardAvailViewYm() {
+      const base = dashboardAvailDate || getTodayDateInputValue();
+      const p = ymdToParts(base);
+      if (!dashboardAvailViewYm && p.y && p.m) dashboardAvailViewYm = p.y + '-' + String(p.m).padStart(2, '0');
+    }
+    function buildAvailCalendarHtml() {
+      ensureDashboardAvailViewYm();
+      const vp = dashboardAvailViewYm.split('-').map(Number);
+      const vy = vp[0];
+      const vm = vp[1];
+      const first = new Date(vy, vm - 1, 1);
+      let startPad = first.getDay();
+      startPad = (startPad + 6) % 7;
+      const gridStart = new Date(vy, vm - 1, 1 - startPad);
+      let rangeLo = '';
+      let rangeHi = '';
+      if (dashboardAvailMode === 'range' && dashboardAvailDate && dashboardAvailEndDate) {
+        rangeLo = compareYmd(dashboardAvailDate, dashboardAvailEndDate) <= 0 ? dashboardAvailDate : dashboardAvailEndDate;
+        rangeHi = compareYmd(dashboardAvailDate, dashboardAvailEndDate) <= 0 ? dashboardAvailEndDate : dashboardAvailDate;
+      }
+      let cells = '';
+      for (let i = 0; i < 42; i++) {
+        const d = new Date(gridStart);
+        d.setDate(gridStart.getDate() + i);
+        const ymd = toYmd(d.getFullYear(), d.getMonth() + 1, d.getDate());
+        const other = d.getMonth() !== vm - 1;
+        let cls = 'avail-picker-day' + (other ? ' other' : '');
+        if (dashboardAvailMode === 'single') {
+          if (ymd === dashboardAvailDate) cls += ' selected';
+        } else if (rangeLo && rangeHi) {
+          if (ymd === rangeLo) cls += ' range-start selected';
+          else if (ymd === rangeHi) cls += ' range-end selected';
+          else if (compareYmd(ymd, rangeLo) >= 0 && compareYmd(ymd, rangeHi) <= 0) cls += ' in-range';
+        } else if (ymd === dashboardAvailDate) {
+          cls += ' selected';
+        }
+        cells += '<button type="button" class="' + cls + '" onclick="window.availCalPickDay(\'' + ymd + '\')">' + d.getDate() + '</button>';
+      }
+      return '<div class="avail-picker">' +
+        '<div class="avail-picker-head">' +
+        '<button type="button" class="avail-picker-nav" onclick="window.availCalPrevMonth()" aria-label="เดือนก่อน">&lsaquo;</button>' +
+        '<span class="avail-picker-title">' + AVAIL_THAI_MONTHS[vm - 1] + ' ' + (vy + 543) + '</span>' +
+        '<button type="button" class="avail-picker-nav" onclick="window.availCalNextMonth()" aria-label="เดือนถัดไป">&rsaquo;</button>' +
+        '</div>' +
+        '<div class="avail-picker-dow">' + AVAIL_THAI_DOW.map(d => '<span>' + d + '</span>').join('') + '</div>' +
+        '<div class="avail-picker-grid">' + cells + '</div></div>';
+    }
+    function formatBusyCarsHtml(busyCars) {
+      if (!busyCars.length) return '';
+      return '<div class="mt-4 space-y-2 max-h-64 overflow-y-auto">' +
+        '<p class="text-sm font-medium text-slate-500 dark:text-slate-400">รถที่มีการจองทับ (' + busyCars.length + ' คัน)</p>' +
+        busyCars.map(row => {
+          const items = row.bookings.slice().sort((a, b) => parseTimeSafe(a.start) - parseTimeSafe(b.start)).map(b =>
+            '<li class="text-slate-600 dark:text-slate-300 text-sm py-1 border-b border-slate-100 dark:border-slate-700 last:border-0">' +
+            '<span class="inline-block font-semibold text-purple-600 dark:text-purple-400 mr-1">' + escapeHtml(formatBookingTimeRange(b)) + '</span>' +
+            formatUserNameColored(b) + ' <span class="text-slate-400">→</span> ' + escapeHtml(b.dest || '-') +
+            '</li>'
+          ).join('');
+          return '<div class="avail-busy-card"><p class="font-semibold text-slate-800 dark:text-slate-100 text-sm mb-1">' + escapeHtml(row.car.plate) + '</p><ul class="pl-0 list-none">' + items + '</ul></div>';
+        }).join('') + '</div>';
+    }
+    window.availCalPrevMonth = function() {
+      ensureDashboardAvailViewYm();
+      const p = dashboardAvailViewYm.split('-').map(Number);
+      const d = new Date(p[0], p[1] - 2, 1);
+      dashboardAvailViewYm = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+      renderDashboardAvailabilityCard();
+    };
+    window.availCalNextMonth = function() {
+      ensureDashboardAvailViewYm();
+      const p = dashboardAvailViewYm.split('-').map(Number);
+      const d = new Date(p[0], p[1], 1);
+      dashboardAvailViewYm = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+      renderDashboardAvailabilityCard();
+    };
+    window.availCalPickDay = function(ymd) {
+      if (dashboardAvailMode === 'single') {
+        dashboardAvailDate = ymd;
+        dashboardAvailEndDate = ymd;
+      } else {
+        if (dashboardAvailRangeStep === 'start' || !dashboardAvailDate) {
+          dashboardAvailDate = ymd;
+          dashboardAvailEndDate = ymd;
+          dashboardAvailRangeStep = 'end';
+        } else {
+          dashboardAvailEndDate = ymd;
+          if (compareYmd(dashboardAvailEndDate, dashboardAvailDate) < 0) {
+            const t = dashboardAvailDate;
+            dashboardAvailDate = dashboardAvailEndDate;
+            dashboardAvailEndDate = t;
+          }
+          dashboardAvailRangeStep = 'start';
+        }
+      }
+      const pp = ymdToParts(ymd);
+      dashboardAvailViewYm = pp.y + '-' + String(pp.m).padStart(2, '0');
+      renderDashboardAvailabilityCard();
+    };
     function renderDashboardAvailabilityCard() {
       const wrap = document.getElementById('dashboard-availability-wrap');
       if (!wrap) return;
@@ -672,42 +812,32 @@
       const availHtml = availableCars.length
         ? availableCars.map(c => '<span class="inline-flex items-center bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 px-3 py-2 rounded-xl text-sm font-semibold">' + escapeHtml(c.plate) + '</span>').join(' ')
         : '<span class="text-sm text-slate-400">ไม่มีรถว่างในช่วงนี้</span>';
-      const busyHtml = busyCars.length
-        ? '<details class="mt-4 text-sm"><summary class="cursor-pointer text-slate-500 dark:text-slate-400 font-medium">รถที่มีการจองทับ (' + busyCars.length + ' คัน)</summary><ul class="mt-2 space-y-2 max-h-48 overflow-y-auto">' + busyCars.map(row => {
-            const b = row.bookings[0];
-            return '<li class="text-slate-600 dark:text-slate-300"><strong>' + escapeHtml(row.car.plate) + '</strong> — ' + formatUserNameColored(b) + ' → ' + escapeHtml(b.dest || '-') + ' <span class="text-xs text-slate-400">(' + formatThaiDateTime(b.start) + ')</span></li>';
-          }).join('') + '</ul></details>'
-        : '';
+      const busyHtml = formatBusyCarsHtml(busyCars);
+      const rangeHint = dashboardAvailMode === 'range'
+        ? (dashboardAvailRangeStep === 'end' ? 'คลิกวันสิ้นสุดช่วง' : 'คลิกวันเริ่มต้นช่วง')
+        : 'คลิกวันที่ในปฏิทิน';
       wrap.innerHTML = '<div class="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm">' +
         '<div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-4">' +
         '<div><h3 class="text-lg font-semibold text-purple-600 dark:text-purple-400">🔎 ตรวจหารถว่าง</h3>' +
-        '<p class="text-sm text-slate-500 dark:text-slate-400 mt-1">เลือกวันเดียวหรือช่วงวัน เพื่อดูรถที่ไม่มีการจองทับตลอดช่วงเวลานั้น</p></div>' +
+        '<p class="text-sm text-slate-500 dark:text-slate-400 mt-1">เลือกวันที่ในปฏิทิน — รถที่ไม่มีการจองทับตลอดช่วงที่เลือก</p></div>' +
         '<div class="flex flex-wrap gap-2">' +
         '<button type="button" onclick="window.setDashboardAvailMode(\'single\')" class="px-4 py-2 rounded-xl text-sm font-medium transition ' + (dashboardAvailMode === 'single' ? 'bg-purple-500 text-white shadow' : 'bg-purple-50 text-purple-700 dark:bg-slate-700 dark:text-purple-300') + '">วันเดียว</button>' +
         '<button type="button" onclick="window.setDashboardAvailMode(\'range\')" class="px-4 py-2 rounded-xl text-sm font-medium transition ' + (dashboardAvailMode === 'range' ? 'bg-purple-500 text-white shadow' : 'bg-purple-50 text-purple-700 dark:bg-slate-700 dark:text-purple-300') + '">ช่วงวัน</button>' +
         '</div></div>' +
-        '<div class="flex flex-col md:flex-row flex-wrap gap-4 items-end mb-4">' +
-        '<div><label class="block text-xs font-medium text-slate-500 mb-1">' + (dashboardAvailMode === 'single' ? 'วันที่' : 'ตั้งแต่วันที่') + '</label>' +
-        '<input type="date" id="dashboard-avail-start" value="' + escapeHtml(dashboardAvailDate) + '" onchange="window.updateDashboardAvailCheck()" class="px-3 py-2 rounded-xl border outline-none dark:bg-slate-700 dark:border-slate-600"></div>' +
-        (dashboardAvailMode === 'range' ? '<div><label class="block text-xs font-medium text-slate-500 mb-1">ถึงวันที่</label><input type="date" id="dashboard-avail-end" value="' + escapeHtml(dashboardAvailEndDate) + '" onchange="window.updateDashboardAvailCheck()" class="px-3 py-2 rounded-xl border outline-none dark:bg-slate-700 dark:border-slate-600"></div>' : '') +
-        '<button type="button" onclick="window.updateDashboardAvailCheck()" class="px-5 py-2 rounded-xl bg-purple-500 hover:bg-purple-600 text-white text-sm font-medium shadow transition">ตรวจสอบ</button>' +
-        '</div>' +
+        '<div class="flex flex-col lg:flex-row gap-6">' +
+        '<div class="shrink-0">' + buildAvailCalendarHtml() +
+        '<p class="text-xs text-slate-400 mt-2 text-center">' + escapeHtml(rangeHint) + '</p></div>' +
+        '<div class="flex-1 min-w-0">' +
         (rangeError ? '<p class="text-sm text-red-500 mb-3">' + escapeHtml(rangeError) + '</p>' : '') +
         '<p class="text-sm text-slate-600 dark:text-slate-300 mb-2">ช่วงที่เลือก: <strong>' + escapeHtml(periodLabel) + '</strong></p>' +
         '<p class="text-sm text-green-700 dark:text-green-400 font-medium mb-2">รถว่าง ' + availableCars.length + ' / ' + activeCars.length + ' คัน</p>' +
-        '<div class="flex flex-wrap gap-2">' + availHtml + '</div>' + busyHtml + '</div>';
+        '<div class="flex flex-wrap gap-2 mb-2">' + availHtml + '</div>' + busyHtml + '</div></div></div>';
+
     }
     window.setDashboardAvailMode = function(mode) {
       dashboardAvailMode = mode === 'range' ? 'range' : 'single';
+      dashboardAvailRangeStep = 'start';
       if (!dashboardAvailEndDate) dashboardAvailEndDate = dashboardAvailDate || getTodayDateInputValue();
-      renderDashboardAvailabilityCard();
-    };
-    window.updateDashboardAvailCheck = function() {
-      const startEl = document.getElementById('dashboard-avail-start');
-      const endEl = document.getElementById('dashboard-avail-end');
-      if (startEl) dashboardAvailDate = startEl.value;
-      if (endEl) dashboardAvailEndDate = endEl.value;
-      else dashboardAvailEndDate = dashboardAvailDate;
       renderDashboardAvailabilityCard();
     };
 
