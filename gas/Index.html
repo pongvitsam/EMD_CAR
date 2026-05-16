@@ -488,12 +488,12 @@
       if (!calendar) return;
       calendar.removeAllEvents();
       const nextEvents = bookings.map(b => {
-        const fullName = getBookingFullName(b);
-        const color = getColorForUser(fullName);
+        const displayName = getBookingDisplayName(b);
+        const color = getColorForUser(b);
         const dest = (b.dest && String(b.dest).trim()) ? String(b.dest).trim() : '-';
         return {
           id: b.id,
-          title: `${fullName} → ${dest}`,
+          title: `${displayName} → ${dest}`,
           start: toCalendarDateTime(b.start),
           end: toCalendarDateTime(b.end),
           backgroundColor: color,
@@ -527,25 +527,52 @@
     }
 
     const userColors = ['#dc2626', '#ea580c', '#d97706', '#65a30d', '#16a34a', '#0d9488', '#2563eb', '#4f46e5', '#7c3aed', '#db2777', '#c026d6', '#0284c7'];
+    const THAI_NAME_TITLES = ['นางสาว', 'น.ส.', 'นส.', 'ด.ช.', 'ด.ญ.', 'นาง', 'นาย'];
+    function stripThaiTitles(name) {
+      let t = String(name || '').trim().replace(/\s+/g, ' ');
+      if (!t) return '';
+      for (const title of THAI_NAME_TITLES) {
+        if (t === title) return '';
+        if (t.startsWith(title + ' ')) {
+          t = t.slice(title.length + 1).trim();
+          continue;
+        }
+        if (t.startsWith(title)) t = t.slice(title.length).trim();
+      }
+      return t.replace(/\s+/g, ' ');
+    }
     function normalizeUserNameKey(name) {
-      return String(name || '').trim().replace(/\s+/g, ' ');
+      return stripThaiTitles(String(name || '').trim().replace(/\s+/g, ' '));
+    }
+    function getBookingDisplayName(b) {
+      if (!b) return '';
+      return String((b.name || '') + ' ' + (b.surname || '')).trim().replace(/\s+/g, ' ');
     }
     function getBookingFullName(b) {
       if (!b) return '';
-      return normalizeUserNameKey((b.name || '') + ' ' + (b.surname || ''));
+      return normalizeUserNameKey(getBookingDisplayName(b));
+    }
+    function getPersonColorKey(nameOrBooking) {
+      if (typeof nameOrBooking === 'object' && nameOrBooking) return getBookingFullName(nameOrBooking);
+      return normalizeUserNameKey(nameOrBooking);
     }
     function getColorForUser(name) {
-      const key = normalizeUserNameKey(name);
+      const key = getPersonColorKey(name);
       if (!key) return userColors[0];
       let hash = 0;
       for (let i = 0; i < key.length; i++) hash = key.charCodeAt(i) + ((hash << 5) - hash);
       return userColors[Math.abs(hash) % userColors.length];
     }
     function formatUserNameColored(nameOrBooking) {
-      const full = typeof nameOrBooking === 'object' ? getBookingFullName(nameOrBooking) : normalizeUserNameKey(nameOrBooking);
-      if (!full) return '-';
-      const color = getColorForUser(full);
-      return '<span style="color:' + color + '" class="font-semibold">' + escapeHtml(full) + '</span>';
+      let display = '';
+      if (typeof nameOrBooking === 'object' && nameOrBooking) {
+        display = getBookingDisplayName(nameOrBooking);
+      } else {
+        display = String(nameOrBooking || '').trim().replace(/\s+/g, ' ');
+      }
+      if (!display) return '-';
+      const color = getColorForUser(nameOrBooking);
+      return '<span style="color:' + color + '" class="font-semibold">' + escapeHtml(display) + '</span>';
     }
     function normalizeDeptKey(dept) {
       let s = String(dept || '').trim();
@@ -890,21 +917,23 @@
       appData.bookings.forEach(b => {
         const d = new Date(b.start);
         if (isNaN(d.getTime()) || d.getFullYear() !== selectedYear || d.getMonth() !== selectedMonthNum - 1) return;
-        const fullName = `${b.name || ''} ${b.surname || ''}`.trim();
-        if (!fullName) return;
-        if (!userStats[fullName]) userStats[fullName] = { name: fullName, count: 0, days: 0, km: 0 };
-        userStats[fullName].count++;
+        const nameKey = getBookingFullName(b);
+        if (!nameKey) return;
+        const displayName = getBookingDisplayName(b);
+        if (!userStats[nameKey]) userStats[nameKey] = { name: displayName, key: nameKey, count: 0, days: 0, km: 0 };
+        else if (displayName.length > userStats[nameKey].name.length) userStats[nameKey].name = displayName;
+        userStats[nameKey].count++;
 
         const startTime = parseTimeSafe(b.start);
         const endTime = parseTimeSafe(b.end);
         if (startTime && endTime && endTime > startTime) {
-          userStats[fullName].days += Math.max(1, Math.ceil((endTime - startTime) / (1000 * 60 * 60 * 24)));
+          userStats[nameKey].days += Math.max(1, Math.ceil((endTime - startTime) / (1000 * 60 * 60 * 24)));
         }
 
         const startMile = parseFloat(b.startMile);
         const endMile = parseFloat(b.endMile);
         if (!isNaN(startMile) && !isNaN(endMile) && endMile > startMile) {
-          userStats[fullName].km += endMile - startMile;
+          userStats[nameKey].km += endMile - startMile;
         }
       });
 
@@ -913,7 +942,7 @@
       if (summaryBody) {
         summaryBody.innerHTML = rows.length ? rows.map(r => `
           <tr class="dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50">
-            <td class="p-3 font-medium text-purple-600 dark:text-purple-300">${escapeHtml(r.name)}</td>
+            <td class="p-3">${formatUserNameColored(r.name)}</td>
             <td class="p-3 text-center">${r.count.toLocaleString()}</td>
             <td class="p-3 text-center">${r.days.toLocaleString()}</td>
             <td class="p-3 text-center">${Math.round(r.km).toLocaleString()}</td>
@@ -926,6 +955,7 @@
       if(window.chart3) window.chart3.destroy();
 
       const labels = rows.map(r => r.name);
+      const userBarColors = rows.map(r => getColorForUser(r.key));
       const commonOptions = title => ({
         indexAxis: 'y',
         maintainAspectRatio: false,
@@ -936,17 +966,17 @@
 
       window.chart1 = new Chart(document.getElementById('userBookingChart'), {
         type: 'bar',
-        data: { labels, datasets: [{ data: rows.map(r => r.count), backgroundColor: '#8b5cf6', borderRadius: 8 }] },
+        data: { labels, datasets: [{ data: rows.map(r => r.count), backgroundColor: userBarColors, borderRadius: 8 }] },
         options: commonOptions('จำนวนครั้งที่จองแยกตามรายชื่อ')
       });
       window.chart2 = new Chart(document.getElementById('userDaysChart'), {
         type: 'bar',
-        data: { labels, datasets: [{ data: rows.map(r => r.days), backgroundColor: '#0ea5e9', borderRadius: 8 }] },
+        data: { labels, datasets: [{ data: rows.map(r => r.days), backgroundColor: userBarColors, borderRadius: 8 }] },
         options: commonOptions('จำนวนวันใช้งานแยกตามรายชื่อ')
       });
       window.chart3 = new Chart(document.getElementById('userKmChart'), {
         type: 'bar',
-        data: { labels, datasets: [{ data: rows.map(r => Math.round(r.km)), backgroundColor: '#22c55e', borderRadius: 8 }] },
+        data: { labels, datasets: [{ data: rows.map(r => Math.round(r.km)), backgroundColor: userBarColors, borderRadius: 8 }] },
         options: commonOptions('กิโลเมตรใช้งานแยกตามรายชื่อ')
       });
       isChartsRendered = true;
@@ -1104,12 +1134,12 @@
         datesSet: function(info) { applyCalendarScrollMode(info.view.type); },
         displayEventTime: false, 
         events: bookings.map(b => {
-          const fullName = getBookingFullName(b);
-          const color = getColorForUser(fullName);
+          const displayName = getBookingDisplayName(b);
+          const color = getColorForUser(b);
           const dest = (b.dest && String(b.dest).trim()) ? String(b.dest).trim() : '-';
           return {
             id: b.id,
-            title: `${fullName} → ${dest}`,
+            title: `${displayName} → ${dest}`,
             start: toCalendarDateTime(b.start),
             end: toCalendarDateTime(b.end),
             backgroundColor: color,
@@ -1122,8 +1152,8 @@
           const b = appData.bookings.find(x => x.id === info.event.id);
           if (!b) return;
           hasViewedCalendarBookingDetail = true;
-          const fullName = getBookingFullName(b);
-          const color = getColorForUser(fullName);
+          const displayName = getBookingDisplayName(b);
+          const color = getColorForUser(b);
           const destText = escapeHtml(b.dest || '-');
           const hasReturnInfo = (b.endMile && String(b.endMile).trim() !== '' && parseFloat(b.endMile) > 0) || (b.parkingSpot && String(b.parkingSpot).trim() !== '');
           const returnInfoHtml = hasReturnInfo ? `
@@ -1138,11 +1168,11 @@
           document.getElementById('cal-details').innerHTML = `
             <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-700/60 mb-4 border border-slate-200 dark:border-slate-600" style="border-left: 4px solid ${color}">
               <p class="text-xs text-slate-500 dark:text-slate-400 mb-2">ใครไปไหน</p>
-              <p class="text-base leading-relaxed">${formatUserNameColored(fullName)} <span class="text-slate-400 mx-1">→</span> <strong class="text-purple-600 dark:text-purple-400">${destText}</strong></p>
+              <p class="text-base leading-relaxed">${formatUserNameColored(b)} <span class="text-slate-400 mx-1">→</span> <strong class="text-purple-600 dark:text-purple-400">${destText}</strong></p>
               <p class="text-sm text-slate-600 dark:text-slate-300 mt-2">ทะเบียน <strong>${escapeHtml(b.plate)}</strong></p>
             </div>
             <p><strong>แผนก:</strong> ${escapeHtml(b.dept || '-')}</p>
-            <p><strong>ผู้ขับขี่:</strong> ${formatUserNameColored(b.driver || getBookingFullName(b))}</p>
+            <p><strong>ผู้ขับขี่:</strong> ${formatUserNameColored(b.driver || b)}</p>
             <div class="bg-slate-50 dark:bg-slate-700 p-3 rounded-xl mt-3 space-y-2 text-slate-700 dark:text-slate-300">
               <p><strong>🕒 เริ่ม:</strong> <br>${formatThaiDateTime(b.start)}</p>
               <p><strong>🏁 สิ้นสุด:</strong> <br>${formatThaiDateTime(b.end)}</p>
