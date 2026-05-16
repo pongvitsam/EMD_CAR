@@ -1,0 +1,2027 @@
+<!DOCTYPE html>
+<html lang="th" class="light">
+<head>
+  <meta charset="UTF-8">
+  <title>🚗 EMD CAR 🚗</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#a855f7">
+  <script src="config.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://cdn.tailwindcss.com">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+  <script src="https://npmcdn.com/flatpickr/dist/l10n/th.js"></script>
+  
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class', 
+      theme: {
+        extend: {
+          animation: { 'marquee': 'marquee 15s linear infinite' },
+          keyframes: { marquee: { '0%': { transform: 'translateX(100%)' }, '100%': { transform: 'translateX(-100%)' } } }
+        }
+      }
+    }
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+  <noscript><link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600&display=swap" rel="stylesheet"></noscript>
+  
+  <style>
+    body { font-family: 'Kanit', sans-serif; display: flex; flex-direction: column; min-height: 100vh; transition: background-color 0.3s, color 0.3s; }
+    main { flex: 1; }
+    .toast-enter { transform: translateY(0); opacity: 1; }
+    .toast-leave { transform: translateY(100%); opacity: 0; }
+    .tab-active { border-bottom: 4px solid #a855f7; color: #9333ea; font-weight: 600; }
+    .dark .tab-active { border-bottom-color: #c084fc; color: #d8b4fe; }
+    
+    .fc { --fc-border-color: #f1f5f9; --fc-button-bg-color: #a855f7; --fc-button-border-color: #a855f7; font-family: 'Kanit', sans-serif; }
+    .dark .fc { --fc-border-color: #334155; --fc-page-bg-color: #1e293b; --fc-neutral-bg-color: #0f172a; color: #e2e8f0; }
+    .fc-theme-standard .fc-scrollgrid { border-radius: 1.5rem; overflow: hidden; border: 1px solid #e2e8f0; }
+    .dark .fc-theme-standard .fc-scrollgrid { border-color: #475569; }
+    .fc-theme-standard th { padding: 12px 0; background: #faf5ff; color: #7e22ce; }
+    .dark .fc-theme-standard th { background: #334155; color: #e2e8f0; }
+    .fc-daygrid-day-frame { border-radius: 0.75rem; margin: 4px; border: 1px solid transparent; min-height: 100px; }
+    .fc-day-today .fc-daygrid-day-frame { background-color: #f3e8ff !important; }
+    .dark .fc-day-today .fc-daygrid-day-frame { background-color: #4c1d95 !important; }
+    .fc-event { border-radius: 999px !important; padding: 4px 10px !important; font-size: 0.8rem; border: none !important; cursor: pointer; color: #ffffff !important; text-shadow: 0px 1px 2px rgba(0,0,0,0.4); }
+    .fc-button { border-radius: 999px !important; padding: 0.5rem 1.25rem !important; }
+    
+    .fc-list-event .fc-list-event-title,
+    .fc-list-event .fc-list-event-title a,
+    .fc-list-event .fc-list-event-time { color: #475569 !important; }
+    .dark .fc-list-event .fc-list-event-title,
+    .dark .fc-list-event .fc-list-event-title a,
+    .dark .fc-list-event .fc-list-event-time { color: #f8fafc !important; }
+    .fc-list-day-cushion { background-color: #f8fafc !important; }
+    .dark .fc-list-day-cushion { background-color: #334155 !important; }
+    .skeleton { animation: pulse 1.2s ease-in-out infinite; background: linear-gradient(90deg, #e2e8f0, #f1f5f9, #e2e8f0); background-size: 200% 100%; }
+    .dark .skeleton { background: linear-gradient(90deg, #334155, #475569, #334155); background-size: 200% 100%; }
+    @keyframes pulse { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+    @keyframes dangerBlink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.25; }
+    }
+    .danger-blink { animation: dangerBlink 1s ease-in-out infinite; }
+    @media (max-width: 767px) {
+      .fc .fc-toolbar { gap: 8px; flex-wrap: wrap; }
+      .fc .fc-toolbar-title { font-size: 1rem; }
+    }
+    @media (min-width: 1600px) {
+      main.max-w-7xl { max-width: 96rem; }
+      #car-list { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+    }
+    .calendar-panel {
+      height: calc(100vh - 240px);
+      min-height: 500px;
+      max-height: 760px;
+    }
+    @media (max-width: 1024px) {
+      .calendar-panel {
+        height: calc(100vh - 270px);
+        min-height: 460px;
+      }
+    }
+  </style>
+</head>
+<body class="bg-[#fbf5ff] text-slate-700 dark:bg-slate-900 dark:text-slate-200">
+  <div id="app-loading" class="fixed inset-0 z-[100] flex items-center justify-center bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm">
+    <div class="text-center">
+      <div class="mx-auto h-10 w-10 rounded-full border-4 border-purple-200 border-t-purple-600 animate-spin"></div>
+      <p class="mt-3 text-sm text-slate-500 dark:text-slate-300">กำลังโหลดข้อมูล...</p>
+    </div>
+  </div>
+
+  <div id="announcement-banner" class="hidden bg-yellow-400 dark:bg-yellow-600 text-yellow-900 dark:text-yellow-50 px-4 py-2 text-sm font-medium w-full overflow-hidden whitespace-nowrap">
+    <div class="inline-block animate-marquee" id="banner-text-content"></div>
+  </div>
+
+  <nav class="bg-purple-400 dark:bg-purple-900 text-white shadow-md sticky top-0 z-40 transition-colors">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex flex-col md:flex-row justify-between items-center gap-2">
+      <h1 class="text-xl md:text-2xl font-semibold">⚡️EMD CAR🚗🍃</h1>
+      <div class="space-x-2 flex items-center flex-wrap justify-center gap-y-2">
+        <button onclick="toggleDarkMode()" class="text-xl px-2 py-1 rounded-full hover:bg-white/20 transition">🌗</button>
+        <span id="current-user-display" class="hidden md:inline text-sm bg-purple-500 dark:bg-purple-700 px-3 py-1 rounded-full mr-2"></span>
+        <button id="btn-login" onclick="window.promptLogin()" class="bg-slate-600 hover:bg-slate-700 px-4 py-2 rounded-full text-sm font-medium transition shadow">🔐 Admin</button>
+        <button id="btn-settings" onclick="window.openAdminSettings()" class="hidden bg-blue-500 hover:bg-blue-600 px-4 py-2 rounded-full text-sm font-medium transition shadow">⚙️ ตั้งค่าระบบ</button>
+        <button id="btn-logout" onclick="window.logoutAdmin()" class="hidden bg-red-500 hover:bg-red-600 px-4 py-2 rounded-full text-sm font-medium transition shadow">🚪 ออกจากระบบ</button>
+        <button id="btn-add-car" onclick="window.openVehicleModal()" class="hidden bg-white/20 hover:bg-white/30 px-4 py-2 rounded-full text-sm font-medium transition">+ เพิ่มรถใหม่</button>
+        <button onclick="window.openBookingModal()" class="bg-white text-purple-600 dark:bg-purple-100 dark:text-purple-800 hover:bg-purple-50 px-4 py-2 rounded-full text-sm font-bold shadow transition">📝 จองรถ</button>
+      </div>
+    </div>
+    <div class="bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-300 flex justify-center space-x-6 pt-2 px-4 overflow-x-auto shadow-sm transition-colors">
+      <button onclick="switchTab('dashboard')" id="tab-dashboard" class="pb-2 px-2 hover:text-purple-600 transition tab-active whitespace-nowrap">📊 Dashboard</button>
+      <button onclick="switchTab('calendar')" id="tab-calendar" class="pb-2 px-2 hover:text-purple-600 transition whitespace-nowrap">📅 ปฏิทิน</button>
+      <button onclick="switchTab('search')" id="tab-search" class="pb-2 px-2 hover:text-purple-600 transition whitespace-nowrap">🔍 ค้นหาประวัติ</button>
+      <button onclick="switchTab('names')" id="tab-names" class="hidden pb-2 px-2 hover:text-purple-600 transition whitespace-nowrap">👥 รายชื่อ/แผนก</button>
+      <button onclick="switchTab('logs')" id="tab-logs" class="hidden pb-2 px-2 hover:text-purple-600 transition whitespace-nowrap">⚙️ Logs</button>
+    </div>
+  </nav>
+
+  <main class="max-w-7xl mx-auto px-4 py-8 w-full">
+    
+    <div id="view-dashboard" class="space-y-8 block">
+      <h2 class="text-2xl font-semibold text-purple-500 dark:text-purple-400 border-b-2 border-purple-100 dark:border-purple-800 pb-2">🚙 รถในโครงการและสถานะปัจจุบัน</h2>
+      <div id="car-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"></div>
+
+      <h2 class="text-2xl font-semibold text-purple-500 dark:text-purple-400 border-b-2 border-purple-100 dark:border-purple-800 pb-2 mt-8">📊 ภาพรวมระบบ</h2>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6" id="dashboard-stats"></div>
+      
+      <div id="view-charts" class="hidden">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 border-b-2 border-purple-100 dark:border-purple-800 pb-3 mt-8">
+          <h2 class="text-2xl font-semibold text-purple-500 dark:text-purple-400">📈 สถิติการใช้งานรายเดือน (Admin Only)</h2>
+          <select id="stats-month" onchange="window.changeStatsMonth(this.value)" class="px-4 py-2 rounded-xl border border-purple-200 outline-none bg-white text-purple-700 dark:bg-slate-700 dark:text-purple-300 dark:border-slate-600 shadow-sm"></select>
+        </div>
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-4">
+          <div class="bg-white dark:bg-slate-800 p-4 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 h-80"><canvas id="userBookingChart"></canvas></div>
+          <div class="bg-white dark:bg-slate-800 p-4 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 h-80"><canvas id="userDaysChart"></canvas></div>
+          <div class="bg-white dark:bg-slate-800 p-4 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 h-80"><canvas id="userKmChart"></canvas></div>
+        </div>
+        <div class="overflow-x-auto bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 mt-4">
+          <table class="w-full text-left text-sm whitespace-nowrap">
+            <thead class="bg-purple-50 dark:bg-slate-700 text-purple-700 dark:text-purple-300"><tr><th class="p-3">ผู้ใช้งาน</th><th class="p-3 text-center">จำนวนครั้ง</th><th class="p-3 text-center">จำนวนวัน</th><th class="p-3 text-center">กิโลเมตร</th></tr></thead>
+            <tbody id="user-stats-summary" class="divide-y divide-slate-100 dark:divide-slate-700"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div id="view-calendar" class="hidden space-y-6">
+      <h2 class="text-2xl font-semibold text-purple-500 dark:text-purple-400 border-b-2 border-purple-100 dark:border-purple-800 pb-2">📅 ตารางการใช้รถ</h2>
+      <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <div class="lg:col-span-3 bg-white dark:bg-slate-800 p-6 rounded-[2rem] shadow-sm border border-slate-100 dark:border-slate-700 calendar-panel overflow-x-auto overflow-y-hidden">
+          <div id="calendar" class="h-full min-w-[600px]"></div>
+        </div>
+        <div class="lg:col-span-1 bg-white dark:bg-slate-800 p-6 rounded-[2rem] shadow-sm border border-slate-100 dark:border-slate-700 calendar-panel overflow-y-auto">
+          <h3 class="text-xl font-semibold text-purple-500 dark:text-purple-400 mb-4 border-b-2 border-purple-100 dark:border-purple-800 pb-2">📋 รายละเอียดการจอง</h3>
+          <div id="cal-details" class="text-slate-600 dark:text-slate-300 text-sm space-y-3">
+            <p class="text-slate-400 dark:text-slate-500 text-center mt-10">👈 คลิกที่แถบสีในปฏิทินเพื่อดูรายละเอียด</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="view-search" class="hidden space-y-6">
+      <h2 class="text-2xl font-semibold text-purple-500 dark:text-purple-400 border-b-2 border-purple-100 dark:border-purple-800 pb-2">🔍 ค้นหาประวัติการใช้รถ (Export Report)</h2>
+      
+      <div class="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 space-y-4">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div><label class="block text-sm font-medium mb-1">ทะเบียนรถ</label><select id="search-plate" class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600 bg-white"><option value="">-- ทั้งหมด --</option></select></div>
+          <div><label class="block text-sm font-medium mb-1">แผนก</label><select id="search-dept" class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600 bg-white"><option value="">-- ทั้งหมด --</option></select></div>
+          <div><label class="block text-sm font-medium mb-1">ชื่อผู้ใช้งาน</label><input type="text" id="search-name" placeholder="ค้นหาด้วยชื่อ..." class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600 bg-white"></div>
+          <div><label class="block text-sm font-medium mb-1">เลือกตามเดือน</label><select id="search-month" onchange="window.setMonthRange()" class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600 bg-white"><option value="">-- เลือกเดือน (พ.ศ.) --</option></select></div>
+        </div>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+          <div><label class="block text-sm font-medium mb-1">ตั้งแต่วันที่</label><input type="date" id="search-start" class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600 bg-white"></div>
+          <div><label class="block text-sm font-medium mb-1">ถึงวันที่</label><input type="date" id="search-end" class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600 bg-white"></div>
+          <div class="lg:col-span-2 flex gap-2 w-full">
+            <button onclick="searchBookings()" class="flex-1 bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-lg transition shadow font-medium">🔍 ค้นหา</button>
+            <button onclick="window.clearSearchFilters()" class="flex-1 bg-slate-400 hover:bg-slate-500 text-white px-4 py-2 rounded-lg transition shadow font-medium">🔄 ล้างค่า</button>
+            <button id="btn-export" onclick="window.exportCSV()" class="hidden flex-1 bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg transition shadow font-medium">📥 Export CSV</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="overflow-x-auto bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700">
+        <table class="w-full text-left text-sm whitespace-nowrap">
+          <thead class="bg-purple-50 dark:bg-slate-700 text-purple-700 dark:text-purple-300"><tr><th class="p-3">ทะเบียนรถ</th><th class="p-3">ผู้ใช้งาน (แผนก)</th><th class="p-3">จุดหมาย</th><th class="p-3">เวลาเริ่ม</th><th class="p-3">เวลาสิ้นสุด</th><th class="p-3 text-center">ระยะทาง (km)</th></tr></thead>
+          <tbody id="search-results" class="divide-y divide-slate-100 dark:divide-slate-700">
+             <tr><td colspan="6" class="p-6 text-center text-slate-400">กรุณากด "ค้นหา" เพื่อดูข้อมูล</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="view-logs" class="hidden space-y-6">
+      <h2 class="text-2xl font-semibold text-purple-500 dark:text-purple-400 border-b-2 border-purple-100 dark:border-purple-800 pb-2">⚙️ ประวัติระบบ (Logs)</h2>
+      <input type="text" id="log-filter" oninput="filterLogs()" placeholder="ค้นหา Logs..." class="w-full md:w-1/3 px-4 py-2 rounded-xl border dark:bg-slate-700 dark:border-slate-600 outline-none focus:ring-2 focus:ring-purple-300">
+      <div class="overflow-x-auto bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 h-[600px]">
+        <table class="w-full text-left text-sm whitespace-nowrap">
+          <thead class="bg-slate-50 dark:bg-slate-700 text-slate-600 dark:text-slate-300 sticky top-0"><tr><th class="p-3">เวลา</th><th class="p-3">อีเมล</th><th class="p-3">Action</th><th class="p-3">เป้าหมาย</th><th class="p-3">รายละเอียด</th><th class="p-3">เหตุผล</th></tr></thead>
+          <tbody id="log-results" class="divide-y divide-slate-100 dark:divide-slate-700"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="view-names" class="hidden space-y-6">
+      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 border-b-2 border-purple-100 dark:border-purple-800 pb-3">
+        <h2 class="text-2xl font-semibold text-purple-500 dark:text-purple-400">👥 จัดการรายชื่อ/แผนก</h2>
+        <button onclick="window.openManagedNameModal()" class="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-xl shadow font-medium">+ เพิ่มรายชื่อ</button>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="md:col-span-2 bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">
+          <label class="block text-sm font-medium mb-1">ค้นหารายชื่อหรือแผนก</label>
+          <input type="text" id="name-manager-filter" oninput="renderNameManager()" placeholder="พิมพ์เพื่อค้นหา..." class="w-full px-4 py-2 rounded-xl border outline-none dark:bg-slate-700 dark:border-slate-600">
+        </div>
+        <div class="bg-purple-50 dark:bg-purple-900/20 p-4 rounded-2xl border border-purple-100 dark:border-purple-800/40 shadow-sm">
+          <p class="text-sm text-slate-500 dark:text-slate-300">จำนวนรายชื่อ</p>
+          <p id="name-manager-count" class="text-3xl font-bold text-purple-600 dark:text-purple-300">0</p>
+        </div>
+      </div>
+      <div class="overflow-x-auto bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700">
+        <table class="w-full text-left text-sm whitespace-nowrap">
+          <thead class="bg-purple-50 dark:bg-slate-700 text-purple-700 dark:text-purple-300"><tr><th class="p-3">ชื่อ-นามสกุล</th><th class="p-3">แผนก</th><th class="p-3 text-right">จัดการ</th></tr></thead>
+          <tbody id="name-manager-results" class="divide-y divide-slate-100 dark:divide-slate-700">
+            <tr><td colspan="3" class="p-6 text-center text-slate-400">กรุณาเข้าสู่ระบบ Admin</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </main>
+
+  <footer class="w-full text-center py-6 text-slate-400 dark:text-slate-500 text-sm font-medium mt-auto transition-colors">
+    Organized by Sammy หล่อสุด 😎
+  </footer>
+
+  <div id="booking-modal" class="fixed inset-0 bg-slate-900/60 hidden items-center justify-center z-50 px-4">
+    <div class="bg-white dark:bg-slate-800 rounded-3xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl relative border-t-4 border-purple-400">
+      <button onclick="window.closeModal('booking-modal')" class="absolute top-4 right-4 text-slate-400 hover:text-purple-500 text-2xl">&times;</button>
+      <h3 class="text-xl font-semibold text-purple-500 dark:text-purple-400 mb-6 text-center" id="booking-modal-title">ฟอร์มจองรถ</h3>
+      
+      <form id="booking-form" onsubmit="window.submitBooking(event)" class="space-y-4">
+        <input type="hidden" id="bk-id"><input type="hidden" id="bk-original-email">
+        
+        <div class="bg-orange-50 dark:bg-orange-900/20 p-4 rounded-xl border border-orange-200 dark:border-orange-800/30">
+          <h4 class="text-sm font-semibold text-orange-700 dark:text-orange-400 mb-2">🗓️ 1. เลือกช่วงเวลาที่ต้องการใช้รถ</h4>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div><label class="block text-xs font-medium mb-1">เวลาเริ่ม</label>
+              <input type="text" id="bk-start" required placeholder="เลือก วัน/เดือน/ปี เวลา" class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600 bg-white">
+            </div>
+            <div><label class="block text-xs font-medium mb-1">เวลาสิ้นสุด</label>
+              <input type="text" id="bk-end" required placeholder="เลือก วัน/เดือน/ปี เวลา" class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600 bg-white">
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-purple-50 dark:bg-purple-900/20 p-4 rounded-xl space-y-4 border border-purple-100 dark:border-purple-800/30">
+          <h4 class="text-sm font-semibold text-purple-700 dark:text-purple-400 mb-2">🚗 2. เลือกรถที่ว่าง</h4>
+          <div>
+            <select id="bk-plate" onchange="window.updateCarImage()" required class="w-full px-3 py-2 rounded-lg border border-purple-200 outline-none dark:bg-slate-700 dark:border-slate-600">
+              <option value="">-- กรุณาระบุเวลาด้านบนเพื่อค้นหารถ --</option>
+            </select>
+          </div>
+          <img id="bk-car-img" src="" class="hidden w-full h-40 object-cover rounded-xl shadow-sm border border-purple-200 dark:border-slate-600 bg-white">
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium mb-1 flex items-center justify-between">
+              <span>ผู้จอง (ชื่อ นามสกุล)</span>
+              <button type="button" id="bk-add-other-name-btn" onclick="window.addOtherName()" class="text-xs px-2 py-1 rounded-lg bg-purple-100 text-purple-700 hover:bg-purple-200 dark:bg-purple-900/40 dark:text-purple-300">+ เพิ่มชื่ออื่น</button>
+            </label>
+            <input type="text" id="bk-user" list="user-list" oninput="window.userSelected()" required class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600" placeholder="สมชาย ใจดี"><datalist id="user-list"></datalist>
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1 flex justify-between">
+              <span>แผนก</span>
+              <label class="inline-flex items-center space-x-1 cursor-pointer">
+                <input type="checkbox" id="bk-not-emd" onchange="window.toggleDept()" class="form-checkbox h-3 w-3 text-purple-600 rounded">
+                <span class="text-xs text-slate-500 dark:text-slate-400">ไม่ใช่ กธพ</span>
+              </label>
+            </label>
+            <input type="text" id="bk-dept" list="dept-list" required class="w-full px-3 py-2 rounded-lg border bg-slate-50 outline-none dark:bg-slate-700 dark:border-slate-600"><datalist id="dept-list"></datalist>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div><label class="block text-sm font-medium mb-1">จุดหมาย</label><input type="text" id="bk-dest" required class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600"></div>
+          <div><label class="block text-sm font-medium mb-1">ผู้ขับขี่</label><input type="text" id="bk-driver" list="user-list" required class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600"></div>
+        </div>
+
+        <div class="bg-slate-50 dark:bg-slate-700 p-4 rounded-xl space-y-4 border border-slate-200 dark:border-slate-600 mt-4">
+          <h4 class="text-sm font-semibold text-slate-500 dark:text-slate-300">🔧 คืนรถ / อัปเดตข้อมูล</h4>
+          <div class="grid grid-cols-2 gap-4">
+            <div><label class="block text-sm font-medium mb-1">ไมล์ก่อนใช้</label><input type="number" id="bk-start-mile" class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-600 dark:border-slate-500"></div>
+            <div><label class="block text-sm font-medium mb-1">ไมล์หลังใช้</label><input type="number" id="bk-end-mile" class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-600 dark:border-slate-500"></div>
+          </div>
+          <div><label class="block text-sm font-medium mb-1 text-purple-700 dark:text-purple-300">📍 ระบุชั้น/ช่องจอดรถ</label><input type="text" id="bk-parking" class="w-full px-3 py-2 rounded-lg border outline-none bg-white dark:bg-slate-600 dark:border-slate-500"></div>
+        </div>
+        <button type="submit" id="bk-submit-btn" class="w-full bg-purple-500 hover:bg-purple-600 disabled:bg-slate-400 text-white font-medium py-3 rounded-xl mt-4 transition">บันทึกข้อมูล</button>
+        <button type="button" id="bk-delete-btn" onclick="window.deleteBookingAction()" class="hidden w-full bg-red-500 hover:bg-red-600 text-white font-medium py-3 rounded-xl mt-2 transition">🗑️ ลบการจองนี้</button>
+      </form>
+    </div>
+  </div>
+
+  <div id="vehicle-modal" class="fixed inset-0 bg-slate-900/60 hidden items-center justify-center z-50 px-4">
+    <div class="bg-white dark:bg-slate-800 rounded-3xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl relative border-t-4 border-purple-400">
+      <button onclick="window.closeModal('vehicle-modal')" class="absolute top-4 right-4 text-slate-400 hover:text-purple-500 text-2xl">&times;</button>
+      <h3 class="text-xl font-semibold text-purple-500 dark:text-purple-400 mb-6 text-center" id="vh-modal-title">อัปเดตข้อมูลรถ</h3>
+      <form id="vehicle-form" onsubmit="window.submitVehicle(event)" class="space-y-4">
+        <input type="hidden" id="vh-id"><input type="hidden" id="vh-existing-img"><input type="hidden" id="vh-img-base64">
+        
+        <div class="grid grid-cols-2 gap-4">
+          <div><label class="block text-sm font-medium mb-1">ทะเบียนรถ</label><input type="text" id="vh-plate" required class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600"></div>
+          <div><label class="block text-sm font-medium mb-1">ประเภท</label><select id="vh-type" class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600"><option value="ICE">รถน้ำมัน (ICE)</option><option value="EV">รถไฟฟ้า (EV)</option></select></div>
+        </div>
+        
+        <div id="img-upload-div">
+          <label class="block text-sm font-medium mb-1">อัปโหลดรูปรถ (เฉพาะ Admin)</label>
+          <input type="file" accept="image/*" onchange="window.handleImageSelect(event)" class="w-full px-3 py-2 rounded-lg border text-sm dark:bg-slate-700 dark:border-slate-600">
+          <p class="text-xs text-purple-500 mt-1" id="img-status"></p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 bg-orange-50 dark:bg-orange-900/20 p-4 rounded-xl border border-orange-100 dark:border-orange-800/30">
+          <div class="flex flex-col justify-end"><label class="block text-sm font-medium text-orange-700 dark:text-orange-400 mb-1">ระยะ Service</label><input type="number" id="vh-service-mile" required class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600"></div>
+          <div class="flex flex-col justify-end"><label class="block text-sm font-medium text-orange-700 dark:text-orange-400 mb-1">วัน พ.ร.บ. หมด</label><input type="text" id="vh-act" required placeholder="วว/ดด/ปปปป" class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600 bg-white"></div>
+          <div class="flex flex-col justify-end"><label class="block text-sm font-medium text-blue-700 dark:text-blue-400 mb-1">วันคืนรถ (หมดสัญญา)</label><input type="text" id="vh-lease" placeholder="วว/ดด/ปปปป" class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600 bg-white"></div>
+        </div>
+        <div>
+           <label class="block text-sm font-medium mb-1 text-slate-500">ไมล์ล่าสุด</label>
+           <input type="number" id="vh-current-mile" class="w-full px-3 py-2 rounded-lg border outline-none text-slate-500 bg-slate-100 dark:bg-slate-700 dark:border-slate-600" readonly>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+           <div>
+             <label class="block text-sm font-medium mb-1 text-slate-500">สถานะรถ</label>
+             <select id="vh-is-active" class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600 font-bold">
+               <option value="ACTIVE" class="text-green-600">🟢 เปิดใช้งานปกติ</option>
+               <option value="DISABLED" class="text-orange-600">🔴 ปิดใช้งาน / งดจอง</option>
+               <option value="HIDDEN" class="text-slate-500">👻 ซ่อนรถ (เฉพาะ Admin เห็น)</option>
+             </select>
+           </div>
+           <div>
+             <label class="block text-sm font-medium mb-1 text-blue-600 dark:text-blue-400">📌 หมายเหตุ / เหตุผลการปิด</label>
+             <input type="text" id="vh-remarks" placeholder="เช่น แอร์ไม่เย็น, ส่งซ่อมศูนย์..." class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600">
+           </div>
+        </div>
+
+        <button type="submit" id="vh-submit-btn" class="w-full bg-purple-500 hover:bg-purple-600 text-white font-medium py-3 rounded-xl mt-4 transition">บันทึกข้อมูลรถ</button>
+        <button type="button" id="vh-delete-btn" onclick="window.deleteVehicleAction()" class="hidden w-full bg-red-500 hover:bg-red-600 text-white font-medium py-3 rounded-xl mt-2 transition">🗑️ ลบรถคันนี้ออกจากระบบ</button>
+      </form>
+    </div>
+  </div>
+
+  <div id="settings-modal" class="fixed inset-0 bg-slate-900/60 hidden items-center justify-center z-50 px-4">
+    <div class="bg-white dark:bg-slate-800 rounded-3xl p-6 w-full max-w-md shadow-2xl relative border-t-4 border-blue-500">
+      <button onclick="window.closeModal('settings-modal')" class="absolute top-4 right-4 text-slate-400 hover:text-blue-500 text-2xl">&times;</button>
+      <h3 class="text-xl font-semibold text-blue-600 dark:text-blue-400 mb-6 text-center">⚙️ ตั้งค่าระบบ Admin</h3>
+      <form id="settings-form" onsubmit="window.saveSettings(event)" class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium mb-1">สถานะข้อความประกาศ (Banner)</label>
+          <select id="st-banner-status" class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600">
+            <option value="ON">เปิดใช้งาน (ON)</option>
+            <option value="OFF">ปิด (OFF)</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">ข้อความประกาศที่วิ่งด้านบน</label>
+          <textarea id="st-banner-text" rows="3" class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600"></textarea>
+        </div>
+        <p class="text-xs text-slate-400 mt-2">* หากต้องการเปลี่ยน Username/Password ให้ไปแก้ที่ชีต "Settings" โดยตรงในรูปแบบ Hash</p>
+        <button type="submit" id="st-submit-btn" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-medium py-3 rounded-xl mt-4 transition">บันทึกการตั้งค่า</button>
+      </form>
+    </div>
+  </div>
+
+  <div id="toast" class="fixed bottom-5 right-5 px-6 py-3 rounded-xl shadow-xl transition-all duration-300 toast-leave z-50 flex items-center gap-3 bg-green-500 text-white"><span id="toast-icon">✅</span><span id="toast-msg" class="font-medium">Message</span></div>
+
+  <script src="js/api-client.js"></script>
+  <script>
+    const EMD_CHART_SRC = 'https://cdn.jsdelivr.net/npm/chart.js';
+    const EMD_FC_SRC = 'https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js';
+    const scriptLoaders = {};
+
+    function loadScriptOnce(src) {
+      if (scriptLoaders[src]) return scriptLoaders[src];
+      if (src.indexOf('chart.js') !== -1 && window.Chart) return Promise.resolve();
+      if (src.indexOf('fullcalendar') !== -1 && window.FullCalendar) return Promise.resolve();
+      scriptLoaders[src] = new Promise(function (resolve, reject) {
+        const s = document.createElement('script');
+        s.src = src;
+        s.async = true;
+        s.onload = function () { resolve(); };
+        s.onerror = function () { reject(new Error('โหลดสคริปต์ไม่สำเร็จ')); };
+        document.head.appendChild(s);
+      });
+      return scriptLoaders[src];
+    }
+
+    function ensureChartJs() { return loadScriptOnce(EMD_CHART_SRC); }
+    function ensureFullCalendar() { return loadScriptOnce(EMD_FC_SRC); }
+
+    let calendar;
+    let appData = { vehicles: [], bookings: [], names: [], logs: [], settings: {}, currentUserEmail: '' };
+    let isAdmin = false;
+    let adminToken = '';
+    let nameManagerRows = [];
+    let isCalendarInitialized = false;
+    let isChartsRendered = false;
+    let dashboardSelectedMonth = '';
+    let statsSelectedMonth = '';
+    let dashboardDeptChartInstance = null;
+    let hasViewedCalendarBookingDetail = false;
+    const APP_CACHE_KEY = 'emdcar_appdata_v2';
+    const APP_CACHE_STALE_MS = 30 * 60 * 1000;
+    const APP_CACHE_MAX_MS = 24 * 60 * 60 * 1000;
+    let loadDataInflight = null;
+    let loadDataSeq = 0;
+    const escapeHtml = (value) => String(value || '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+    const parseTimeSafe = (val) => {
+      if (!val) return 0;
+      let s = String(val).trim();
+      // เช็คว่าถ้าเป็น ISO string แบบสมบูรณ์แล้ว ให้ข้ามได้เลย
+      if (s.endsWith('Z') || s.match(/([+-]\d{2}:\d{2})$/)) {
+          let d = new Date(s);
+          if (!isNaN(d.getTime())) return d.getTime();
+      }
+      // แปลงรูปแบบให้รองรับ Safari และจัดระเบียบเวลา Local Time เสมอ
+      let cleanStr = s.replace('T', ' ').replace(/-/g, '/');
+      if (cleanStr.length === 16) cleanStr += ':00'; 
+      
+      let d = new Date(cleanStr);
+      if (!isNaN(d.getTime())) return d.getTime();
+      return new Date(s).getTime() || 0;
+    };
+    const TH_BUDDHIST_LOCALE = 'th-TH-u-ca-buddhist';
+    const formatThaiDate = (value) => {
+      const d = value instanceof Date ? value : new Date(value);
+      if (!d || isNaN(d.getTime())) return '-';
+      return d.toLocaleDateString(TH_BUDDHIST_LOCALE, { day: '2-digit', month: '2-digit', year: 'numeric' });
+    };
+    const formatThaiTime = (value) => {
+      const d = value instanceof Date ? value : new Date(value);
+      if (!d || isNaN(d.getTime())) return '-';
+      return d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', hour12: false });
+    };
+    const formatThaiDateTime = (value) => {
+      const d = value instanceof Date ? value : new Date(value);
+      if (!d || isNaN(d.getTime())) return '-';
+      return formatThaiDate(d) + ' ' + formatThaiTime(d);
+    };
+    const formatThaiMonthYearBE = (monthKey) => {
+      const thaiMonths = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน', 'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
+      const parts = String(monthKey || '').split('-');
+      const y = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10);
+      if (!y || !m || m < 1 || m > 12) return monthKey || '';
+      return thaiMonths[m - 1] + ' ' + String(y + 543);
+    };
+    const toCalendarDateTime = (dStr) => {
+      if (!dStr) return '';
+      const d = new Date(dStr);
+      if (isNaN(d.getTime())) return dStr;
+      const pad = n => n < 10 ? '0' + n : n;
+      return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:00`;
+    };
+    function refreshCalendarEvents(bookings) {
+      if (!calendar) return;
+      calendar.removeAllEvents();
+      const nextEvents = bookings.map(b => {
+        const fullName = getBookingFullName(b);
+        const color = getColorForUser(fullName);
+        const dest = (b.dest && String(b.dest).trim()) ? String(b.dest).trim() : '-';
+        return {
+          id: b.id,
+          title: `${fullName} → ${dest}`,
+          start: toCalendarDateTime(b.start),
+          end: toCalendarDateTime(b.end),
+          backgroundColor: color,
+          borderColor: color,
+          textColor: '#ffffff',
+          display: 'block'
+        };
+      });
+      calendar.addEventSource(nextEvents);
+      setTimeout(() => calendar.updateSize(), 50);
+    }
+    window.filteredBookingsForExport = [];
+    function getCalendarInitialDetailHtml() {
+      if (!hasViewedCalendarBookingDetail) {
+        return `
+          <div class="mt-6 p-4 rounded-xl border border-red-300 bg-red-50 dark:bg-red-900/20 dark:border-red-800 danger-blink">
+            <p class="text-red-700 dark:text-red-300 text-center font-semibold">กรุณาอัพเดท จุดจอดรถ และระยะทางก่อน/หลังใช้</p>
+          </div>
+        `;
+      }
+      return '<p class="text-slate-400 dark:text-slate-500 text-center mt-10">👈 คลิกที่แถบสีในปฏิทินเพื่อดูรายละเอียด</p>';
+    }
+    function resetCalendarDetailHint() {
+      const detailEl = document.getElementById('cal-details');
+      if (detailEl) detailEl.innerHTML = getCalendarInitialDetailHtml();
+    }
+
+    function toggleDarkMode() {
+      document.documentElement.classList.toggle('dark');
+      if (calendar) setTimeout(() => calendar.render(), 100); 
+    }
+
+    const userColors = ['#dc2626', '#ea580c', '#d97706', '#65a30d', '#16a34a', '#0d9488', '#2563eb', '#4f46e5', '#7c3aed', '#db2777', '#c026d6', '#0284c7'];
+    function normalizeUserNameKey(name) {
+      return String(name || '').trim().replace(/\s+/g, ' ');
+    }
+    function getBookingFullName(b) {
+      if (!b) return '';
+      return normalizeUserNameKey((b.name || '') + ' ' + (b.surname || ''));
+    }
+    function getColorForUser(name) {
+      const key = normalizeUserNameKey(name);
+      if (!key) return userColors[0];
+      let hash = 0;
+      for (let i = 0; i < key.length; i++) hash = key.charCodeAt(i) + ((hash << 5) - hash);
+      return userColors[Math.abs(hash) % userColors.length];
+    }
+    function formatUserNameColored(nameOrBooking) {
+      const full = typeof nameOrBooking === 'object' ? getBookingFullName(nameOrBooking) : normalizeUserNameKey(nameOrBooking);
+      if (!full) return '-';
+      const color = getColorForUser(full);
+      return '<span style="color:' + color + '" class="font-semibold">' + escapeHtml(full) + '</span>';
+    }
+    function normalizeDeptKey(dept) {
+      let s = String(dept || '').trim();
+      if (!s) return 'ไม่ระบุแผนก';
+      return s.replace(/\.+$/, '');
+    }
+    function formatDurationSince(fromMs, nowMs) {
+      const diff = nowMs - fromMs;
+      if (!fromMs || diff < 0) return 'ว่าง';
+      const hours = Math.floor(diff / (1000 * 60 * 60));
+      const days = Math.floor(hours / 24);
+      if (days >= 1) return 'ว่าง ' + days + ' วัน';
+      if (hours >= 1) return 'ว่าง ' + hours + ' ชม.';
+      const mins = Math.max(1, Math.floor(diff / (1000 * 60)));
+      return 'ว่าง ' + mins + ' นาที';
+    }
+    function isBookingActiveNow(b, nowTime) {
+      return parseTimeSafe(b.start) <= nowTime && parseTimeSafe(b.end) >= nowTime && (!b.endMile || parseFloat(b.endMile) == 0);
+    }
+    function getCarIdleLabel(plate, nowTime) {
+      const plateNorm = String(plate || '').trim();
+      let lastFreeAt = 0;
+      appData.bookings.forEach(b => {
+        if (String(b.plate).trim() !== plateNorm) return;
+        if (isBookingActiveNow(b, nowTime)) return;
+        const end = parseTimeSafe(b.end);
+        if (end > 0 && end <= nowTime) lastFreeAt = Math.max(lastFreeAt, end);
+      });
+      if (!lastFreeAt) return 'ว่าง (ไม่มีประวัติคืนในระบบ)';
+      return formatDurationSince(lastFreeAt, nowTime);
+    }
+
+    window.onload = function() {
+      showSkeletonState();
+      ensureChartJs();
+      loadData();
+    };
+
+    function switchTab(tabId) {
+      if(tabId === 'logs' && !isAdmin) return;
+      if(tabId === 'names' && !isAdmin) return;
+      ['dashboard', 'calendar', 'search', 'logs', 'names'].forEach(id => {
+        document.getElementById('view-' + id).classList.add('hidden');
+        document.getElementById('tab-' + id).classList.remove('tab-active');
+      });
+      document.getElementById('view-' + tabId).classList.remove('hidden');
+      document.getElementById('tab-' + tabId).classList.add('tab-active');
+      if (tabId === 'calendar') {
+        resetCalendarDetailHint();
+        if (!isCalendarInitialized) {
+          ensureFullCalendar().then(function () {
+            setupCalendar(appData.bookings);
+            isCalendarInitialized = true;
+            if (calendar) setTimeout(function () { calendar.render(); }, 100);
+          });
+        } else if (calendar) {
+          setTimeout(function () { calendar.render(); }, 100);
+        }
+      } else if (tabId === 'names') {
+        refreshNameManager();
+      } else if (tabId === 'logs' && isAdmin) {
+        loadLogsIfNeeded();
+      }
+    }
+
+    function loadLogsIfNeeded() {
+      if (appData.logs && appData.logs.length > 0) return;
+      apiCall('getAppLogs').then(function (res) {
+        if (!res || !res.logs) return;
+        appData.logs = res.logs;
+        renderLogs(res.logs);
+        writeCache(appData);
+      }).catch(function (err) {
+        console.error('loadLogsIfNeeded', err);
+      });
+    }
+
+    function loadData(options) {
+      options = options || {};
+      const includeLogs = options.full === true;
+      const silent = options.silent === true;
+      const stale = readCache(true);
+      const requestKey = includeLogs ? 'full' : 'core';
+
+      if (stale) {
+        initApp(stale, true);
+        hideLoading();
+      } else if (!silent) {
+        showSkeletonState();
+      }
+
+      if (loadDataInflight && loadDataInflight.key === requestKey) {
+        return loadDataInflight.promise;
+      }
+
+      const seq = ++loadDataSeq;
+      const fetchPromise = apiCall('getAppData', [includeLogs]);
+      const tracked = fetchPromise.then(function (data) {
+        if (seq !== loadDataSeq) return data;
+        if (!data || !Array.isArray(data.vehicles)) {
+          throw new Error('ข้อมูลจากเซิร์ฟเวอร์ไม่สมบูรณ์');
+        }
+        initApp(data, false);
+        return data;
+      }).catch(function (err) {
+        if (!stale) {
+          hideLoading();
+          Swal.fire('ผิดพลาด', err.message || 'โหลดข้อมูลไม่สำเร็จ', 'error');
+        }
+        throw err;
+      }).finally(function () {
+        if (loadDataInflight && loadDataInflight.promise === tracked) {
+          loadDataInflight = null;
+        }
+      });
+
+      loadDataInflight = { key: requestKey, promise: tracked };
+      return tracked;
+    }
+
+    function reloadAfterMutation() {
+      loadData({ full: isAdmin, silent: true });
+    }
+
+    function initApp(data, fromCache) {
+      fromCache = (typeof fromCache === 'undefined') ? false : fromCache;
+      appData = data || { vehicles: [], bookings: [], names: [], logs: [], settings: {}, currentUserEmail: '' };
+      appData.vehicles = appData.vehicles || [];
+      appData.bookings = appData.bookings || [];
+      appData.names = appData.names || [];
+      appData.logs = appData.logs || [];
+      appData.settings = appData.settings || {};
+      if (appData.currentUserEmail) document.getElementById('current-user-display').innerText = '👤 ' + appData.currentUserEmail;
+      
+      const bannerEl = document.getElementById('announcement-banner');
+      if(appData.settings.bannerStatus === 'ON' && appData.settings.bannerText) {
+        document.getElementById('banner-text-content').innerText = appData.settings.bannerText;
+        bannerEl.classList.remove('hidden');
+      } else { bannerEl.classList.add('hidden'); }
+
+      renderDashboard();
+      renderCars(appData.vehicles);
+      setupFormOptions(appData.names, appData.vehicles);
+      populateSearchMonthOptions(appData.bookings);
+      renderLogs(appData.logs);
+      if (isCalendarInitialized) {
+        refreshCalendarEvents(appData.bookings);
+      } else if (document.getElementById('view-calendar').classList.contains('hidden') === false) {
+        ensureFullCalendar().then(function () {
+          setupCalendar(appData.bookings);
+          isCalendarInitialized = true;
+        });
+      }
+      if (isAdmin) renderCharts();
+      if (!fromCache) writeCache(appData);
+      hideLoading();
+    }
+
+    window.promptLogin = async function() {
+      const { value: formValues } = await Swal.fire({
+        title: 'ผู้ดูแลระบบ (Admin)',
+        html: '<input id="swal-user" class="swal2-input" placeholder="Username"><input id="swal-pass" type="password" class="swal2-input" placeholder="Password">',
+        focusConfirm: false, confirmButtonText: 'เข้าสู่ระบบ', confirmButtonColor: '#a855f7', showLoaderOnConfirm: true,
+        preConfirm: () => {
+          const user = document.getElementById('swal-user').value;
+          const pass = document.getElementById('swal-pass').value;
+          return new Promise((resolve, reject) => {
+            apiCall('verifyAdminLogin', [user, pass]).then(res => resolve(res)).catch(reject);
+          });
+        }
+      });
+
+      if (formValues && formValues.success) {
+        isAdmin = true;
+        adminToken = formValues.token || '';
+        document.getElementById('btn-login').classList.add('hidden');
+        document.getElementById('btn-logout').classList.remove('hidden');
+        document.getElementById('btn-settings').classList.remove('hidden');
+        document.getElementById('btn-add-car').classList.remove('hidden');
+        document.getElementById('tab-logs').classList.remove('hidden');
+        document.getElementById('tab-names').classList.remove('hidden');
+        document.getElementById('btn-export').classList.remove('hidden'); 
+        document.getElementById('view-charts').classList.remove('hidden'); 
+        renderCars(appData.vehicles); 
+        if (!isChartsRendered) renderCharts();
+        loadLogsIfNeeded();
+        loadData({ full: true, silent: true });
+        refreshNameManager();
+        Swal.fire({ icon: 'success', title: 'สำเร็จ', text: 'เข้าสู่ระบบ Admin แล้ว', timer: 1500, showConfirmButton: false });
+      } else if (formValues && !formValues.success) {
+        Swal.fire({ icon: 'error', title: 'ข้อผิดพลาด', text: formValues.msg || 'ข้อมูลไม่ถูกต้อง', confirmButtonColor: '#a855f7' });
+      }
+    };
+
+    window.logoutAdmin = function() {
+      isAdmin = false;
+      adminToken = '';
+      nameManagerRows = [];
+      document.getElementById('btn-login').classList.remove('hidden');
+      document.getElementById('btn-logout').classList.add('hidden');
+      document.getElementById('btn-settings').classList.add('hidden');
+      document.getElementById('btn-add-car').classList.add('hidden');
+      document.getElementById('tab-logs').classList.add('hidden');
+      document.getElementById('tab-names').classList.add('hidden');
+      document.getElementById('btn-export').classList.add('hidden'); 
+      document.getElementById('view-charts').classList.add('hidden'); 
+      renderCars(appData.vehicles); 
+      switchTab('dashboard');
+    }
+
+    window.openAdminSettings = function() {
+      document.getElementById('st-banner-status').value = appData.settings.bannerStatus || 'OFF';
+      document.getElementById('st-banner-text').value = appData.settings.bannerText || '';
+      document.getElementById('settings-modal').style.display = 'flex';
+    };
+
+    window.saveSettings = function(e) {
+      e.preventDefault();
+      const btn = document.getElementById('st-submit-btn'); btn.innerText = 'กำลังบันทึก...'; btn.disabled = true;
+      const obj = { status: document.getElementById('st-banner-status').value, text: document.getElementById('st-banner-text').value };
+      apiCall('saveAdminSettings', [obj]).then(res => {
+        showToast(res.msg, res.success); window.closeModal('settings-modal');
+        reloadAfterMutation(); 
+      }).catch(function () {}).finally(function () {
+        btn.innerText = 'บันทึกการตั้งค่า'; btn.disabled = false;
+      });
+    };
+
+    function renderDashboard() {
+      const now = new Date();
+      let activeCarsCount = 0; let availablePlates = [];
+      const nowTime = now.getTime();
+      const buildDashboardMonthOptions = () => {
+        const monthSet = new Set();
+        appData.bookings.forEach(b => {
+          const d = new Date(b.start);
+          if (!isNaN(d.getTime())) {
+            monthSet.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+          }
+        });
+        const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        monthSet.add(currentMonthKey);
+        return Array.from(monthSet).sort((a, b) => b.localeCompare(a));
+      };
+      const monthOptions = buildDashboardMonthOptions();
+
+      if (!dashboardSelectedMonth) {
+        dashboardSelectedMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      }
+      if (!monthOptions.includes(dashboardSelectedMonth)) {
+        dashboardSelectedMonth = monthOptions[0];
+      }
+      const selectedMonth = dashboardSelectedMonth;
+      const [selectedYear, selectedMonthNum] = selectedMonth.split('-').map(Number);
+
+      const bookingsThisMonthList = appData.bookings.filter(b => {
+        const d = new Date(b.start);
+        return d.getMonth() === (selectedMonthNum - 1) && d.getFullYear() === selectedYear;
+      });
+      const bookingsThisMonth = bookingsThisMonthList.length;
+      const deptCounts = {};
+      const deptLabels = {};
+      bookingsThisMonthList.forEach(b => {
+        const rawDept = (b.dept && String(b.dept).trim()) ? String(b.dept).trim() : 'ไม่ระบุแผนก';
+        const deptKey = normalizeDeptKey(rawDept);
+        deptCounts[deptKey] = (deptCounts[deptKey] || 0) + 1;
+        if (!deptLabels[deptKey] || rawDept.length > deptLabels[deptKey].length) deptLabels[deptKey] = rawDept;
+      });
+      const sortedDeptRows = Object.entries(deptCounts)
+        .map(([key, count]) => [deptLabels[key] || key, count])
+        .sort((a, b) => b[1] - a[1]);
+      const topRows = sortedDeptRows.slice(0, 6);
+      if (sortedDeptRows.length > 6) {
+        const otherTotal = sortedDeptRows.slice(6).reduce((sum, row) => sum + row[1], 0);
+        if (otherTotal > 0) topRows.push(['อื่นๆ', otherTotal]);
+      }
+
+      appData.vehicles.forEach(car => {
+        if(car.status !== 'ACTIVE') return; 
+        const isBookedNow = appData.bookings.some(b => b.plate === car.plate && isBookingActiveNow(b, nowTime));
+        if (isBookedNow) {
+          activeCarsCount++;
+        } else {
+          availablePlates.push({ plate: car.plate, idleLabel: getCarIdleLabel(car.plate, nowTime) });
+        }
+      });
+      let platesHtml = availablePlates.length > 0 ? availablePlates.map(p => `<span class="inline-flex flex-col items-center bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 px-3 py-2 rounded-xl text-sm font-semibold leading-tight"><span>${escapeHtml(p.plate)}</span><span class="text-xs font-normal opacity-90 mt-0.5">${escapeHtml(p.idleLabel)}</span></span>`).join(' ') : `<span class="text-sm text-slate-400">ไม่มีรถว่าง</span>`;
+      document.getElementById('dashboard-stats').innerHTML = `
+        <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col items-center"><p class="text-slate-500 dark:text-slate-400 text-sm">กำลังใช้งานในขณะนี้</p><p class="text-5xl font-bold text-orange-500 mt-2">${activeCarsCount}</p></div>
+        <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col items-center"><p class="text-slate-500 dark:text-slate-400 text-sm mb-3">รถว่าง ณ ขณะนี้ จำนวน (${availablePlates.length} คัน)</p><div class="flex flex-wrap gap-2 justify-center">${platesHtml}</div></div>
+        <div class="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm">
+          <div class="flex justify-between items-center gap-3 mb-2">
+            <p class="text-slate-500 dark:text-slate-400 text-sm">จำนวนครั้งการจองแต่ละแผนก (${bookingsThisMonth} ครั้ง)</p>
+            <select id="dashboard-month" onchange="window.changeDashboardMonth(this.value)" class="text-xs px-3 py-2 rounded-xl border border-purple-200 outline-none bg-purple-50 text-purple-700 dark:bg-slate-700 dark:text-purple-300 dark:border-slate-600 shadow-sm">
+              ${monthOptions.map(m => `<option value="${m}" ${m === selectedMonth ? 'selected' : ''}>${formatThaiMonthYearBE(m)}</option>`).join('')}
+            </select>
+          </div>
+          <div class="h-36">
+            <canvas id="dashboardDeptChart"></canvas>
+          </div>
+        </div>
+      `;
+
+      const chartCanvas = document.getElementById('dashboardDeptChart');
+      if (dashboardDeptChartInstance && typeof dashboardDeptChartInstance.destroy === 'function') {
+        dashboardDeptChartInstance.destroy();
+        dashboardDeptChartInstance = null;
+      }
+      if (chartCanvas) {
+        if (topRows.length === 0) {
+          const ctx = chartCanvas.getContext('2d');
+          if (ctx) {
+            ctx.clearRect(0, 0, chartCanvas.width, chartCanvas.height);
+            ctx.font = '14px Kanit, sans-serif';
+            ctx.fillStyle = '#94a3b8';
+            ctx.textAlign = 'center';
+            ctx.fillText('ยังไม่มีรายการจองในเดือนนี้', chartCanvas.width / 2, 60);
+          }
+        } else {
+          ensureChartJs().then(function () {
+            dashboardDeptChartInstance = new Chart(chartCanvas, {
+              type: 'bar',
+              data: {
+                labels: topRows.map(r => r[0]),
+                datasets: [{
+                  data: topRows.map(r => r[1]),
+                  backgroundColor: '#8b5cf6',
+                  borderRadius: 8,
+                  barThickness: 14
+                }]
+              },
+              options: {
+                indexAxis: 'y',
+                maintainAspectRatio: false,
+                responsive: true,
+                plugins: { legend: { display: false } },
+                scales: {
+                  x: { beginAtZero: true, ticks: { precision: 0 } },
+                  y: { ticks: { autoSkip: false } }
+                }
+              }
+            });
+          });
+        }
+      }
+    }
+
+    window.changeDashboardMonth = function(monthValue) {
+      if (!monthValue) return;
+      dashboardSelectedMonth = monthValue;
+      renderDashboard();
+    };
+
+    function buildBookingMonthOptions() {
+      const now = new Date();
+      const monthSet = new Set([`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`]);
+      appData.bookings.forEach(b => {
+        const d = new Date(b.start);
+        if (!isNaN(d.getTime())) monthSet.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+      });
+      return Array.from(monthSet).sort((a, b) => b.localeCompare(a));
+    }
+
+    function renderCharts() {
+      if (!isAdmin) return;
+      ensureChartJs().then(function () {
+      const monthOptions = buildBookingMonthOptions();
+      if (!statsSelectedMonth || !monthOptions.includes(statsSelectedMonth)) statsSelectedMonth = monthOptions[0];
+      const statsMonthSelect = document.getElementById('stats-month');
+      if (statsMonthSelect) {
+        statsMonthSelect.innerHTML = monthOptions.map(m => `<option value="${m}" ${m === statsSelectedMonth ? 'selected' : ''}>${formatThaiMonthYearBE(m)}</option>`).join('');
+      }
+
+      const [selectedYear, selectedMonthNum] = statsSelectedMonth.split('-').map(Number);
+      const userStats = {};
+      appData.bookings.forEach(b => {
+        const d = new Date(b.start);
+        if (isNaN(d.getTime()) || d.getFullYear() !== selectedYear || d.getMonth() !== selectedMonthNum - 1) return;
+        const fullName = `${b.name || ''} ${b.surname || ''}`.trim();
+        if (!fullName) return;
+        if (!userStats[fullName]) userStats[fullName] = { name: fullName, count: 0, days: 0, km: 0 };
+        userStats[fullName].count++;
+
+        const startTime = parseTimeSafe(b.start);
+        const endTime = parseTimeSafe(b.end);
+        if (startTime && endTime && endTime > startTime) {
+          userStats[fullName].days += Math.max(1, Math.ceil((endTime - startTime) / (1000 * 60 * 60 * 24)));
+        }
+
+        const startMile = parseFloat(b.startMile);
+        const endMile = parseFloat(b.endMile);
+        if (!isNaN(startMile) && !isNaN(endMile) && endMile > startMile) {
+          userStats[fullName].km += endMile - startMile;
+        }
+      });
+
+      const rows = Object.values(userStats).sort((a, b) => b.count - a.count || b.km - a.km || a.name.localeCompare(b.name));
+      const summaryBody = document.getElementById('user-stats-summary');
+      if (summaryBody) {
+        summaryBody.innerHTML = rows.length ? rows.map(r => `
+          <tr class="dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50">
+            <td class="p-3 font-medium text-purple-600 dark:text-purple-300">${escapeHtml(r.name)}</td>
+            <td class="p-3 text-center">${r.count.toLocaleString()}</td>
+            <td class="p-3 text-center">${r.days.toLocaleString()}</td>
+            <td class="p-3 text-center">${Math.round(r.km).toLocaleString()}</td>
+          </tr>
+        `).join('') : '<tr><td colspan="4" class="p-6 text-center text-slate-400">ไม่มีรายการจองในเดือนนี้</td></tr>';
+      }
+
+      if(window.chart1) window.chart1.destroy();
+      if(window.chart2) window.chart2.destroy();
+      if(window.chart3) window.chart3.destroy();
+
+      const labels = rows.map(r => r.name);
+      const commonOptions = title => ({
+        indexAxis: 'y',
+        maintainAspectRatio: false,
+        responsive: true,
+        plugins: { legend: { display: false }, title: { display: true, text: title } },
+        scales: { x: { beginAtZero: true, ticks: { precision: 0 } }, y: { ticks: { autoSkip: false } } }
+      });
+
+      window.chart1 = new Chart(document.getElementById('userBookingChart'), {
+        type: 'bar',
+        data: { labels, datasets: [{ data: rows.map(r => r.count), backgroundColor: '#8b5cf6', borderRadius: 8 }] },
+        options: commonOptions('จำนวนครั้งที่จองแยกตามรายชื่อ')
+      });
+      window.chart2 = new Chart(document.getElementById('userDaysChart'), {
+        type: 'bar',
+        data: { labels, datasets: [{ data: rows.map(r => r.days), backgroundColor: '#0ea5e9', borderRadius: 8 }] },
+        options: commonOptions('จำนวนวันใช้งานแยกตามรายชื่อ')
+      });
+      window.chart3 = new Chart(document.getElementById('userKmChart'), {
+        type: 'bar',
+        data: { labels, datasets: [{ data: rows.map(r => Math.round(r.km)), backgroundColor: '#22c55e', borderRadius: 8 }] },
+        options: commonOptions('กิโลเมตรใช้งานแยกตามรายชื่อ')
+      });
+      isChartsRendered = true;
+      });
+    }
+
+    window.changeStatsMonth = function(monthValue) {
+      if (!monthValue) return;
+      statsSelectedMonth = monthValue;
+      renderCharts();
+    };
+
+    function renderCars(vehicles) {
+      const container = document.getElementById('car-list');
+      let cardsHtml = '';
+      const now = new Date();
+      const nowTime = now.getTime(); // ประกาศรอบเดียวตรงนี้
+
+      vehicles.forEach(car => {
+        if (car.status === 'HIDDEN' && !isAdmin) return;
+        
+        // 1. เช็คว่ากำลังใช้งานอยู่หรือไม่ (ถึงเวลาจองแล้ว และยังไม่คืนรถ)
+        const currentBooking = appData.bookings.find(b => b.plate === car.plate && isBookingActiveNow(b, nowTime));
+
+        // 2. เช็คว่ามีการจองล่วงหน้าหรือไม่ (เอาเฉพาะคิวที่เวลายังมาไม่ถึง เรียงตามคิวที่ใกล้ที่สุด)
+        const upcomingBookings = appData.bookings.filter(b =>
+          b.plate === car.plate &&
+          parseTimeSafe(b.start) > nowTime &&
+          (!b.endMile || parseFloat(b.endMile) == 0)
+        ).sort((a, b) => parseTimeSafe(a.start) - parseTimeSafe(b.start));
+
+        // ดึงคิวแรกสุดที่กำลังจะมาถึง
+        const nextBooking = upcomingBookings.length > 0 ? upcomingBookings[0] : null;
+
+        let statusHtml = '';
+        let imgFilter = '';
+        let borderClass = "border-slate-100 dark:border-slate-700";
+
+        if (car.status === 'HIDDEN') {
+          statusHtml = `<div class="bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 p-3 rounded-xl mb-3 border border-slate-300 dark:border-slate-600"><p class="font-bold text-sm">👻 ถูกซ่อนอยู่ (เฉพาะ Admin เห็น)</p></div>`;
+          imgFilter = 'grayscale opacity-30';
+          borderClass = "border-slate-300 border-dashed border-2 opacity-70";
+        } else if (car.status === 'DISABLED') {
+          statusHtml = `<div class="bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 p-3 rounded-xl mb-3"><p class="font-bold text-sm">🔴 งดให้บริการ / ปิดจอง</p></div>`;
+          imgFilter = 'grayscale opacity-70';
+          borderClass = "border-red-300 dark:border-red-800 border-2 shadow-red-100 dark:shadow-red-900/20";
+        } else if (currentBooking) {
+          // สถานะ: กำลังใช้งาน
+          const tripDest = escapeHtml(currentBooking.dest || '-');
+          statusHtml = `<div class="bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-400 p-3 rounded-xl mb-3"><p class="font-bold text-sm">🚗 กำลังใช้งาน</p><p class="text-sm mt-1">${formatUserNameColored(currentBooking)} → <strong>${tripDest}</strong></p></div>`;
+          borderClass = "border-orange-300 dark:border-orange-800 border-2";
+        } else if (nextBooking) {
+          // สถานะ: ว่างตอนนี้ แต่มีคิวรอนำรถออก
+          const nextDate = new Date(parseTimeSafe(nextBooking.start));
+          const timeStr = formatThaiTime(nextDate);
+          const isToday = nextDate.toDateString() === now.toDateString();
+          const displayTime = isToday ? `วันนี้ ${timeStr} น.` : `${formatThaiDate(nextDate)} ${timeStr} น.`;
+          
+          const nextDest = escapeHtml(nextBooking.dest || '-');
+          statusHtml = `<div class="bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 p-3 rounded-xl mb-3"><p class="font-bold text-sm">⏳ รอนำรถออก (ถูกจองแล้ว)</p><p class="text-sm mt-1">คิวถัดไป: ${displayTime}</p><p class="text-xs mt-1">${formatUserNameColored(nextBooking)} → <strong>${nextDest}</strong></p></div>`;
+          borderClass = "border-blue-300 dark:border-blue-800 border-2";
+        } else {
+          const idleLabel = getCarIdleLabel(car.plate, nowTime);
+          statusHtml = `<div class="bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 p-3 rounded-xl mb-3"><p class="font-bold text-sm">🟢 ว่าง (${escapeHtml(idleLabel)})</p><p class="text-sm mt-1 truncate">จุดจอด: ${escapeHtml(car.parkingSpot || '-')}</p></div>`;
+        }
+
+        let actAlert = '';
+        if(car.actExpiry) {
+          const daysLeft = (new Date(car.actExpiry) - now) / (1000 * 60 * 60 * 24);
+          if(daysLeft <= 30 && daysLeft >= 0) actAlert = `<p class="text-xs text-orange-600 bg-orange-100 px-2 py-1 rounded mt-1 shadow">⚠️ พ.ร.บ. หมดใน ${Math.ceil(daysLeft)} วัน</p>`;
+          else if (daysLeft < 0) actAlert = `<p class="text-xs text-white bg-red-500 px-2 py-1 rounded mt-1 font-bold shadow">❌ พ.ร.บ. หมดอายุแล้ว!</p>`;
+        }
+
+        let serviceHtml = `<p class="text-sm text-slate-500 dark:text-slate-400 mb-1">ไมล์ล่าสุด: 
+            <button onclick="window.promptEditMileage('${car.id}', '${car.plate}', ${car.currentMile})" class="font-bold text-purple-600 bg-purple-100 hover:bg-purple-200 dark:text-purple-300 dark:bg-purple-900/40 px-2 py-0.5 rounded cursor-pointer transition shadow-sm">
+              ${car.currentMile.toLocaleString()} ✏️
+            </button> / ${car.serviceMile.toLocaleString()}
+          </p>`;
+
+        if (car.serviceMile > 0 && car.status === 'ACTIVE') {
+          const diff = car.serviceMile - car.currentMile;
+          if (diff <= 0) {
+            serviceHtml += `<div class="mt-1 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded text-center">🚨 เลยระยะ Service แล้ว!</div>`;
+            borderClass = "border-red-500 border-2 shadow-red-100 shadow-md dark:shadow-red-900/20";
+          } else if (diff <= 1000) {
+            serviceHtml += `<div class="mt-1 bg-orange-400 text-white text-xs font-bold px-2 py-1 rounded text-center">⚠️ ใกล้ครบ Service (เหลือ ${diff.toLocaleString()} km)</div>`;
+            if(borderClass === "border-slate-100 dark:border-slate-700") borderClass = "border-orange-400 border-2";
+          }
+        }
+
+        let leaseHtml = '';
+        if (currentBooking) {
+          const returnDate = new Date(parseTimeSafe(currentBooking.end));
+          if (!isNaN(returnDate.getTime())) {
+            const diffDays = (returnDate - now) / (1000 * 60 * 60 * 24);
+            let returnAlert = '';
+            if (diffDays >= 0 && diffDays <= 1) {
+              returnAlert = `<span class="text-orange-600 bg-orange-100 px-1 rounded font-bold ml-1">ใกล้ถึงเวลา</span>`;
+            } else if (diffDays < 0) {
+              returnAlert = `<span class="text-white bg-red-500 px-1 rounded font-bold ml-1">เกินกำหนด</span>`;
+            }
+            leaseHtml = `<p class="text-xs text-blue-600 dark:text-blue-400 font-medium mt-1">📅 คืนรถ: ${formatThaiDateTime(returnDate)} น. ${returnAlert}</p>`;
+          }
+        }
+
+        let remarksHtml = car.remarks ? `<div class="mt-2 text-xs text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/20 p-2 rounded-lg border border-blue-100 dark:border-blue-800">📌 <b>หมายเหตุ:</b> ${car.remarks}</div>` : '';
+        if (car.status !== 'ACTIVE' && car.remarks) {
+            remarksHtml = `<div class="mt-2 text-xs text-red-700 dark:text-red-300 bg-red-100 dark:bg-red-900/30 p-2 rounded-lg border border-red-200 dark:border-red-800 font-bold">⚠️ เหตุผล: ${car.remarks}</div>`;
+        }
+
+        let settingBtn = '<button onclick="window.openVehicleModal(\'' + car.id + '\')" class="absolute top-2 right-2 bg-white/95 hover:bg-white text-purple-600 px-3 py-1 rounded-full shadow-md text-xs font-bold border border-purple-200 z-10 transition">อัปเดตข้อมูล</button>';
+
+        let carImageSrc = car.img;
+        if (!carImageSrc) carImageSrc = 'https://via.placeholder.com/400x200';
+        cardsHtml += '<div class="bg-white dark:bg-slate-800 rounded-3xl overflow-hidden shadow-sm ' + borderClass + ' flex flex-col relative transition-colors">' +
+          settingBtn +
+          '<div class="relative bg-slate-100 dark:bg-slate-700">' +
+            '<img src="' + carImageSrc + '" loading="lazy" decoding="async" class="w-full h-48 object-cover transition duration-300 ' + imgFilter + '">' +
+            '<div class="absolute bottom-0 w-full p-2 bg-gradient-to-t from-black/60 to-transparent">' + actAlert + '</div>' +
+          '</div>' +
+          '<div class="p-5 flex-1 flex flex-col">' +
+            '<h3 class="text-xl font-semibold text-purple-900 dark:text-purple-300 mb-3">' + car.plate + ' <span class="text-xs font-normal text-slate-400">(' + car.type + ')</span></h3>' +
+            statusHtml +
+            '<div class="mt-auto">' + serviceHtml + leaseHtml + remarksHtml + '</div>' +
+          '</div>' +
+        '</div>';
+      });
+      container.innerHTML = cardsHtml || '<div class="col-span-full text-center text-slate-400">ไม่พบรถในระบบ</div>';
+    }
+
+   function setupCalendar(bookings) {
+      if(calendar) calendar.destroy();
+      
+      calendar = new FullCalendar.Calendar(document.getElementById('calendar'), {
+        initialView: window.innerWidth < 768 ? 'listMonth' : 'dayGridMonth', 
+        headerToolbar: { left: 'prev,next', center: 'title', right: 'dayGridMonth,listMonth' },
+        locale: 'th', 
+        height: '100%',
+        dayMaxEventRows: 3,
+        displayEventTime: false, 
+        events: bookings.map(b => {
+          const fullName = getBookingFullName(b);
+          const color = getColorForUser(fullName);
+          const dest = (b.dest && String(b.dest).trim()) ? String(b.dest).trim() : '-';
+          return {
+            id: b.id,
+            title: `${fullName} → ${dest}`,
+            start: toCalendarDateTime(b.start),
+            end: toCalendarDateTime(b.end),
+            backgroundColor: color,
+            borderColor: color,
+            textColor: '#ffffff',
+            display: 'block'
+          };
+        }),
+        eventClick: info => {
+          const b = appData.bookings.find(x => x.id === info.event.id);
+          if (!b) return;
+          hasViewedCalendarBookingDetail = true;
+          const fullName = getBookingFullName(b);
+          const color = getColorForUser(fullName);
+          const destText = escapeHtml(b.dest || '-');
+          
+          const hasReturnInfo = (b.endMile && String(b.endMile).trim() !== '' && parseFloat(b.endMile) > 0) || (b.parkingSpot && String(b.parkingSpot).trim() !== '');
+          const returnInfoHtml = hasReturnInfo ? `
+            <div class="bg-emerald-50 dark:bg-emerald-900/20 p-3 rounded-xl mt-3 space-y-1 border border-emerald-100 dark:border-emerald-800/40">
+              <p><strong>🔧 คืนรถ / อัปเดตข้อมูล</strong></p>
+              <p><strong>ไมล์ก่อนใช้:</strong> ${b.startMile || '-'}</p>
+              <p><strong>ไมล์หลังใช้:</strong> ${b.endMile || '-'}</p>
+              <p><strong>จุดจอดหลังใช้งาน:</strong> ${b.parkingSpot || '-'}</p>
+            </div>
+          ` : '';
+
+          document.getElementById('cal-details').innerHTML = `
+            <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-700/60 mb-4 border border-slate-200 dark:border-slate-600" style="border-left: 4px solid ${color}">
+              <p class="text-xs text-slate-500 dark:text-slate-400 mb-2">ใครไปไหน</p>
+              <p class="text-base leading-relaxed">${formatUserNameColored(fullName)} <span class="text-slate-400 mx-1">→</span> <strong class="text-purple-600 dark:text-purple-400">${destText}</strong></p>
+              <p class="text-sm text-slate-600 dark:text-slate-300 mt-2">ทะเบียน <strong>${escapeHtml(b.plate)}</strong></p>
+            </div>
+            <p><strong>แผนก:</strong> ${escapeHtml(b.dept || '-')}</p>
+            <p><strong>ผู้ขับขี่:</strong> ${formatUserNameColored(b.driver || getBookingFullName(b))}</p>
+            <div class="bg-slate-50 dark:bg-slate-700 p-3 rounded-xl mt-3 space-y-2 text-slate-700 dark:text-slate-300">
+              <p><strong>🕒 เริ่ม:</strong> <br>${formatThaiDateTime(b.start)}</p>
+              <p><strong>🏁 สิ้นสุด:</strong> <br>${formatThaiDateTime(b.end)}</p>
+            </div>
+            ${returnInfoHtml}
+            <button onclick="window.openBookingModal('${b.id}')" class="mt-6 w-full bg-purple-500 hover:bg-purple-600 text-white font-medium py-3 rounded-xl shadow-md transition flex justify-center items-center">
+              ✏️ แก้ไข / คืนรถ / ยกเลิก
+            </button>
+          `;
+        }
+      });
+      calendar.render();
+    }
+
+    function searchBookings() {
+      const plateFilter = document.getElementById('search-plate').value;
+      const deptFilter = document.getElementById('search-dept').value;
+      const nameFilter = document.getElementById('search-name').value.toLowerCase();
+      
+      const sDateStr = document.getElementById('search-start').value;
+      const eDateStr = document.getElementById('search-end').value;
+      
+      const sDate = sDateStr ? new Date(sDateStr + 'T00:00:00') : null;
+      const eDate = eDateStr ? new Date(eDateStr + 'T23:59:59') : null;
+
+      const tbody = document.getElementById('search-results');
+      tbody.innerHTML = '';
+      
+      const results = appData.bookings.filter(b => {
+        if (plateFilter && b.plate !== plateFilter) return false;
+        if (deptFilter && b.dept !== deptFilter) return false;
+        const fullName = ((b.name || '') + ' ' + (b.surname || '')).toLowerCase();
+        if (nameFilter && !fullName.includes(nameFilter)) return false;
+        
+        const d = new Date(b.start);
+        if (sDate && d < sDate) return false;
+        if (eDate && d > eDate) return false;
+        
+        return true;
+      });
+
+      window.filteredBookingsForExport = results; 
+
+      if(results.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-slate-500">❌ ไม่พบข้อมูลที่ตรงกับเงื่อนไขการค้นหา</td></tr>`;
+        return;
+      }
+
+      results.forEach(b => {
+        let dist = (b.endMile && b.startMile) ? (b.endMile - b.startMile) : '-';
+        tbody.innerHTML += `<tr class="dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50"><td class="p-3 font-semibold text-purple-600 dark:text-purple-400">${escapeHtml(b.plate)}</td><td class="p-3">${formatUserNameColored(b)} <span class="text-xs text-slate-400">(${escapeHtml(b.dept || '-')})</span></td><td class="p-3">${escapeHtml(b.dest || '-')}</td><td class="p-3">${formatThaiDateTime(b.start)}</td><td class="p-3">${formatThaiDateTime(b.end)}</td><td class="p-3 text-center">${dist}</td></tr>`;
+      });
+    }
+
+    window.exportCSV = function() {
+      let dataToExport = window.filteredBookingsForExport || [];
+      if (dataToExport.length === 0) {
+        showToast('ไม่มีข้อมูลสำหรับ Export กรุณากดค้นหาก่อน', false);
+        return;
+      }
+
+      let csvContent = "data:text/csv;charset=utf-8,\uFEFFBooking_ID,ทะเบียนรถ,ผู้ใช้งาน,แผนก,เริ่ม,สิ้นสุด,จุดหมาย,ไมล์ก่อนใช้,ไมล์หลังใช้,ระยะทาง(km)\n";
+      
+      dataToExport.forEach(b => {
+        let dist = (b.endMile && b.startMile) ? (b.endMile - b.startMile) : 0;
+        let startM = b.startMile || 0;
+        let endM = b.endMile || 0;
+        csvContent += `"${b.id}","${b.plate}","${(b.name||'')} ${(b.surname||'')}","${b.dept}","${formatThaiDateTime(b.start)}","${formatThaiDateTime(b.end)}","${b.dest}",${startM},${endM},${dist}\n`;
+      });
+      
+      const link = document.createElement("a"); 
+      link.setAttribute("href", encodeURI(csvContent)); 
+      link.setAttribute("download", `EMDCAR_Report_${new Date().toISOString().split('T')[0]}.csv`);
+      document.body.appendChild(link); link.click(); document.body.removeChild(link);
+    };
+
+    window.setMonthRange = function() {
+      const monthVal = document.getElementById('search-month').value; 
+      if (!monthVal) return;
+      const [year, month] = monthVal.split('-');
+      
+      const firstDay = new Date(year, month - 1, 1);
+      const lastDay = new Date(year, month, 0);
+      
+      const fpStart = document.getElementById('search-start')._flatpickr;
+      const fpEnd = document.getElementById('search-end')._flatpickr;
+      
+      if(fpStart && fpEnd) {
+        fpStart.setDate(firstDay);
+        fpEnd.setDate(lastDay);
+      }
+      searchBookings();
+    };
+
+    window.clearSearchFilters = function() {
+      document.getElementById('search-plate').value = '';
+      document.getElementById('search-dept').value = '';
+      document.getElementById('search-name').value = '';
+      document.getElementById('search-month').value = '';
+      
+      const fpStart = document.getElementById('search-start')._flatpickr;
+      const fpEnd = document.getElementById('search-end')._flatpickr;
+      if(fpStart) fpStart.clear();
+      if(fpEnd) fpEnd.clear();
+
+      searchBookings();
+    };
+
+    window.setupFormOptions = (names, vehicles) => {
+      document.getElementById('user-list').innerHTML = names.map(n => `<option value="${escapeHtml(n.fullName)}">`).join('');
+      const depts = [...new Set(names.map(n => n.dept).filter(Boolean))];
+      document.getElementById('dept-list').innerHTML = depts.map(d => `<option value="${escapeHtml(d)}">`).join('');
+      
+      document.getElementById('search-plate').innerHTML = '<option value="">-- ทั้งหมด --</option>' + vehicles.map(v => `<option value="${escapeHtml(v.plate)}">${escapeHtml(v.plate)}</option>`).join('');
+      document.getElementById('search-dept').innerHTML = '<option value="">-- ทั้งหมด --</option>' + depts.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+    };
+
+    function applyNameRows(rows) {
+      nameManagerRows = rows || [];
+      appData.names = nameManagerRows.map(r => ({ fullName: r.fullName || '', dept: r.dept || '' }));
+      setupFormOptions(appData.names, appData.vehicles);
+      renderNameManager();
+    }
+
+    function refreshNameManager() {
+      if (!isAdmin || !adminToken) return;
+      const tbody = document.getElementById('name-manager-results');
+      if (tbody) tbody.innerHTML = '<tr><td colspan="3" class="p-6 text-center text-slate-400">กำลังโหลดรายชื่อ...</td></tr>';
+      apiCall('getNameManagementData', [], adminToken).then(res => {
+        if (!res.success) {
+          if (tbody) tbody.innerHTML = `<tr><td colspan="3" class="p-6 text-center text-red-500">${escapeHtml(res.msg || 'โหลดข้อมูลไม่สำเร็จ')}</td></tr>`;
+          return;
+        }
+        applyNameRows(res.rows || []);
+      }).catch(function (err) {
+        if (tbody) tbody.innerHTML = `<tr><td colspan="3" class="p-6 text-center text-red-500">${escapeHtml(err.message || 'โหลดข้อมูลไม่สำเร็จ')}</td></tr>`;
+      });
+    }
+
+    function renderNameManager() {
+      const tbody = document.getElementById('name-manager-results');
+      const countEl = document.getElementById('name-manager-count');
+      if (!tbody || !countEl) return;
+      const q = (document.getElementById('name-manager-filter')?.value || '').toLowerCase().trim();
+      const rows = nameManagerRows.filter(r => {
+        const text = `${r.fullName || ''} ${r.dept || ''}`.toLowerCase();
+        return !q || text.includes(q);
+      });
+      countEl.innerText = String(nameManagerRows.length);
+      if (!isAdmin) {
+        tbody.innerHTML = '<tr><td colspan="3" class="p-6 text-center text-slate-400">กรุณาเข้าสู่ระบบ Admin</td></tr>';
+        return;
+      }
+      if (rows.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="3" class="p-6 text-center text-slate-400">ไม่พบรายชื่อ</td></tr>';
+        return;
+      }
+      tbody.innerHTML = rows.map(r => `
+        <tr class="dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50">
+          <td class="p-3 font-medium text-slate-700 dark:text-slate-200">${escapeHtml(r.fullName || '-')}</td>
+          <td class="p-3">${escapeHtml(r.dept || '-')}</td>
+          <td class="p-3 text-right space-x-2">
+            <button onclick="window.openManagedNameModal(${r.row})" class="px-3 py-1 rounded-lg bg-blue-500 hover:bg-blue-600 text-white text-xs">แก้ไข</button>
+            <button onclick="window.deleteManagedNameAction(${r.row})" class="px-3 py-1 rounded-lg bg-red-500 hover:bg-red-600 text-white text-xs">ลบ</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    window.openManagedNameModal = async function(row) {
+      if (!isAdmin || !adminToken) return;
+      const item = nameManagerRows.find(r => r.row === row) || { row: 0, fullName: '', dept: '' };
+      const { value: formValues, isConfirmed } = await Swal.fire({
+        title: item.row ? 'แก้ไขรายชื่อ/แผนก' : 'เพิ่มรายชื่อ/แผนก',
+        html: '<input id="swal-managed-name" class="swal2-input" placeholder="ชื่อ นามสกุล"><input id="swal-managed-dept" class="swal2-input" placeholder="แผนก">',
+        focusConfirm: false,
+        showCancelButton: true,
+        confirmButtonText: 'บันทึก',
+        cancelButtonText: 'ยกเลิก',
+        confirmButtonColor: '#a855f7',
+        didOpen: () => {
+          document.getElementById('swal-managed-name').value = item.fullName || '';
+          document.getElementById('swal-managed-dept').value = item.dept || '';
+        },
+        preConfirm: () => {
+          const fullName = document.getElementById('swal-managed-name').value.trim();
+          const dept = document.getElementById('swal-managed-dept').value.trim();
+          if (!fullName) {
+            Swal.showValidationMessage('กรุณาระบุชื่อ-นามสกุล');
+            return false;
+          }
+          if (!dept) {
+            Swal.showValidationMessage('กรุณาระบุแผนก');
+            return false;
+          }
+          return { row: item.row || 0, fullName, dept };
+        }
+      });
+      if (!isConfirmed || !formValues) return;
+
+      Swal.fire({ title: 'กำลังบันทึก...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+      apiCall('saveManagedName', [formValues], adminToken).then(res => {
+        Swal.close();
+        if (!res.success) {
+          Swal.fire('ผิดพลาด', res.msg, 'error');
+          return;
+        }
+        applyNameRows(res.rows || []);
+        showToast(res.msg, true);
+      }).catch(function (err) {
+        Swal.close();
+        Swal.fire('ผิดพลาด', err.message || 'บันทึกไม่สำเร็จ', 'error');
+      });
+    };
+
+    window.deleteManagedNameAction = async function(row) {
+      if (!isAdmin || !adminToken) return;
+      const item = nameManagerRows.find(r => r.row === row);
+      if (!item) return;
+      const { isConfirmed } = await Swal.fire({
+        title: 'ยืนยันการลบรายชื่อ?',
+        text: `${item.fullName || '-'} (${item.dept || '-'})`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#ef4444',
+        confirmButtonText: 'ลบ',
+        cancelButtonText: 'ยกเลิก'
+      });
+      if (!isConfirmed) return;
+
+      Swal.fire({ title: 'กำลังลบ...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+      apiCall('deleteManagedName', [row], adminToken).then(res => {
+        Swal.close();
+        if (!res.success) {
+          Swal.fire('ผิดพลาด', res.msg, 'error');
+          return;
+        }
+        applyNameRows(res.rows || []);
+        showToast(res.msg, true);
+      }).catch(function (err) {
+        Swal.close();
+        Swal.fire('ผิดพลาด', err.message || 'ลบไม่สำเร็จ', 'error');
+      });
+    };
+
+    function populateSearchMonthOptions(bookings) {
+      const monthSet = new Set();
+      bookings.forEach(b => {
+        const d = new Date(b.start);
+        if (!isNaN(d.getTime())) monthSet.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+      });
+      const monthOptions = Array.from(monthSet).sort((a, b) => b.localeCompare(a));
+      const monthSelect = document.getElementById('search-month');
+      const previous = monthSelect ? monthSelect.value : '';
+      if (!monthSelect) return;
+      monthSelect.innerHTML = '<option value="">-- เลือกเดือน (พ.ศ.) --</option>' + monthOptions.map(m => `<option value="${m}">${formatThaiMonthYearBE(m)}</option>`).join('');
+      if (previous && monthOptions.includes(previous)) monthSelect.value = previous;
+    }
+
+    function renderLogs(logs) { window.allLogs = logs; filterLogs(); }
+    function filterLogs() {
+      const q = document.getElementById('log-filter').value.toLowerCase();
+      document.getElementById('log-results').innerHTML = window.allLogs.filter(l => Object.values(l).join(' ').toLowerCase().includes(q))
+        .map(l => `<tr class="dark:text-slate-300"><td class="p-3">${formatThaiDateTime(l.timestamp)}</td><td class="p-3">${l.email}</td><td class="p-3">${l.action}</td><td class="p-3">${l.target}</td><td class="p-3">${l.detail}</td><td class="p-3">${l.reason}</td></tr>`).join('');
+    }
+
+    window.closeModal = id => document.getElementById(id).style.display = 'none';
+
+    window.promptEditMileage = async function(id, plate, currentMile) {
+      const { value: newMile } = await Swal.fire({
+        title: `แก้เลขไมล์: ${plate}`,
+        text: 'แก้ไขไมล์ล่าสุดในกรณีที่กรอกผิด',
+        input: 'number',
+        inputValue: currentMile,
+        showCancelButton: true,
+        confirmButtonText: 'บันทึก',
+        cancelButtonText: 'ยกเลิก',
+        confirmButtonColor: '#a855f7',
+        inputValidator: (value) => {
+          if (!value || value < 0) return 'กรุณาระบุเลขไมล์ให้ถูกต้อง!'
+        }
+      });
+
+      if (newMile) {
+        Swal.fire({ title: 'กำลังบันทึก...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+        apiCall('quickUpdateMileage', [id, plate, parseFloat(newMile)]).then(res => {
+          showToast(res.msg, res.success);
+          if (res.success) reloadAfterMutation(); 
+        }).catch(function (err) {
+          Swal.close();
+          Swal.fire('ผิดพลาด', err.message || 'อัปเดตไมล์ไม่สำเร็จ', 'error');
+        });
+      }
+    };
+
+    window.updateCarImage = function() {
+      const car = appData.vehicles.find(v => v.plate === document.getElementById('bk-plate').value);
+      const img = document.getElementById('bk-car-img');
+      if (car && car.img) { img.src = car.img; img.classList.remove('hidden'); } else img.classList.add('hidden');
+    };
+
+    window.filterAvailableCars = function() {
+      const startEl = document.getElementById('bk-start').value;
+      const endEl = document.getElementById('bk-end').value;
+      const plateSelect = document.getElementById('bk-plate');
+      const currentId = document.getElementById('bk-id').value; 
+      const submitBtn = document.getElementById('bk-submit-btn');
+
+      let prevSelected = plateSelect.value;
+      if (!prevSelected && window.currentEditingBooking) {
+        prevSelected = window.currentEditingBooking.plate;
+      }
+
+      if (!startEl || !endEl) {
+         plateSelect.innerHTML = '<option value="">-- กรุณาระบุเวลาด้านบนเพื่อค้นหารถ --</option>';
+         submitBtn.disabled = true; return;
+      }
+      
+      const sTime = parseTimeSafe(startEl);
+      const eTime = parseTimeSafe(endEl);
+
+      if (sTime >= eTime) {
+         plateSelect.innerHTML = '<option value="">-- ⚠️ เวลาเริ่ม-สิ้นสุดไม่ถูกต้อง --</option>';
+         submitBtn.disabled = true; return;
+      }
+
+      let availableVehicles = appData.vehicles.filter(car => {
+         if(car.status !== 'ACTIVE') return false; 
+         const isOverlap = appData.bookings.some(b => {
+            if (String(b.plate).trim() !== String(car.plate).trim() || String(b.id).trim() === String(currentId).trim()) return false;
+            
+            // ✨ แก้ไขจุดสำคัญ: ถ้ารถคันนี้ถูกคืนแล้ว (มีเลขไมล์จบ > 0) ให้ถือว่าคิวนี้สิ้นสุดแล้ว ให้คนอื่นจองต่อได้เลย
+            if (b.endMile && parseFloat(b.endMile) > 0) return false;
+
+            const bStart = parseTimeSafe(b.start);
+            const bEnd = parseTimeSafe(b.end);
+            return (sTime < bEnd && eTime > bStart);
+         });
+         return !isOverlap;
+      });
+
+      if (availableVehicles.length === 0) {
+         plateSelect.innerHTML = '<option value="">❌ ไม่มีรถว่างในช่วงเวลานี้</option>';
+         submitBtn.disabled = true;
+      } else {
+         plateSelect.innerHTML = '<option value="">-- เลือกรถที่ว่าง --</option>' + availableVehicles.map(v => `<option value="${v.plate}">${v.plate}</option>`).join('');
+         submitBtn.disabled = false;
+         if (prevSelected && availableVehicles.some(v => v.plate === prevSelected)) {
+             plateSelect.value = prevSelected;
+         }
+      }
+      window.updateCarImage();
+    };
+
+    window.toggleDept = function(keepUserValue) {
+      const cb = document.getElementById('bk-not-emd');
+      const deptInput = document.getElementById('bk-dept');
+      const userInput = document.getElementById('bk-user');
+      if(cb.checked) {
+        deptInput.value = 'ไม่ใช่ กธพ';
+        deptInput.readOnly = true;
+        deptInput.classList.add('bg-slate-100', 'dark:bg-slate-600');
+        userInput.removeAttribute('list');
+        userInput.setAttribute('autocomplete', 'off');
+        userInput.placeholder = 'กรอกชื่อ-นามสกุลเอง';
+        if (!keepUserValue) userInput.value = '';
+      }
+      else {
+        if(deptInput.value === 'ไม่ใช่ กธพ') deptInput.value = '';
+        deptInput.readOnly = false;
+        deptInput.classList.remove('bg-slate-100', 'dark:bg-slate-600');
+        userInput.setAttribute('list', 'user-list');
+        userInput.removeAttribute('autocomplete');
+        userInput.placeholder = 'สมชาย ใจดี';
+      }
+    };
+
+    window.addOtherName = async function() {
+      if (document.getElementById('bk-not-emd').checked) {
+        Swal.fire({ icon: 'info', title: 'กรอกเองได้เลย', text: 'กรณีไม่ใช่ กธพ จะไม่เพิ่มชื่อเข้า dropdown รายชื่อ', confirmButtonColor: '#a855f7' });
+        document.getElementById('bk-user').focus();
+        return;
+      }
+
+      const userEl = document.getElementById('bk-user');
+      const deptEl = document.getElementById('bk-dept');
+      const currentName = userEl.value.trim();
+      const currentDept = deptEl.value.trim();
+      const { value: formValues, isConfirmed } = await Swal.fire({
+        title: 'เพิ่มรายชื่อใน dropdown',
+        html: '<input id="swal-new-name" class="swal2-input" placeholder="ชื่อ นามสกุล"><input id="swal-new-dept" class="swal2-input" placeholder="แผนก">',
+        focusConfirm: false,
+        showCancelButton: true,
+        confirmButtonText: 'เพิ่มรายชื่อ',
+        cancelButtonText: 'ยกเลิก',
+        confirmButtonColor: '#a855f7',
+        didOpen: () => {
+          document.getElementById('swal-new-name').value = currentName;
+          document.getElementById('swal-new-dept').value = currentDept;
+        },
+        preConfirm: () => {
+          const fullName = document.getElementById('swal-new-name').value.trim();
+          const dept = document.getElementById('swal-new-dept').value.trim();
+          if (!fullName) {
+            Swal.showValidationMessage('กรุณาระบุชื่อ-นามสกุล');
+            return false;
+          }
+          if (!dept) {
+            Swal.showValidationMessage('กรุณาระบุแผนก');
+            return false;
+          }
+          return { fullName, dept };
+        }
+      });
+
+      if (!isConfirmed || !formValues) return;
+
+      Swal.fire({ title: 'กำลังเพิ่มรายชื่อ...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+      apiCall('saveNameOption', [formValues]).then(res => {
+        Swal.close();
+        if (!res.success) {
+          Swal.fire('ผิดพลาด', res.msg, 'error');
+          return;
+        }
+
+        if (!appData.names.some(n => n.fullName === res.fullName && n.dept === res.dept)) {
+          appData.names.push({ fullName: res.fullName, dept: res.dept });
+        }
+        setupFormOptions(appData.names, appData.vehicles);
+        userEl.value = res.fullName;
+        deptEl.value = res.dept;
+        document.getElementById('bk-driver').value = res.fullName;
+        showToast(res.msg, true);
+        userEl.focus();
+      }).catch(function (err) {
+        Swal.close();
+        Swal.fire('ผิดพลาด', err.message || 'เพิ่มรายชื่อไม่สำเร็จ', 'error');
+      });
+    };
+
+    window.openBookingModal = function(id) {
+      id = (typeof id === 'undefined') ? null : id;
+      document.getElementById('booking-form').reset(); 
+      document.getElementById('bk-id').value = '';
+      document.getElementById('bk-car-img').classList.add('hidden');
+      document.getElementById('bk-delete-btn').classList.add('hidden');
+      document.getElementById('bk-not-emd').checked = false; 
+      
+      window.currentEditingBooking = null;
+      document.getElementById('bk-parking').value = '';
+
+      window.toggleDept();
+      document.getElementById('bk-plate').innerHTML = '<option value="">-- กรุณาระบุเวลาด้านบนเพื่อค้นหารถ --</option>';
+      document.getElementById('bk-submit-btn').disabled = true;
+
+      const fpStart = document.getElementById('bk-start')._flatpickr;
+      const fpEnd = document.getElementById('bk-end')._flatpickr;
+      if(fpStart) fpStart.clear();
+      if(fpEnd) fpEnd.clear();
+
+      if (id) {
+        document.getElementById('bk-delete-btn').classList.remove('hidden');
+        const bk = appData.bookings.find(b => b.id === id);
+        if(bk) {
+          window.currentEditingBooking = bk;
+
+          document.getElementById('bk-id').value = bk.id || '';
+          document.getElementById('bk-dept').value = bk.dept || '';
+          document.getElementById('bk-dest').value = bk.dest || '';
+          document.getElementById('bk-driver').value = bk.driver || '';
+          document.getElementById('bk-start-mile').value = bk.startMile || '';
+          document.getElementById('bk-end-mile').value = bk.endMile || '';
+          const carData = appData.vehicles.find(v => String(v.plate).trim() === String(bk.plate).trim());
+          document.getElementById('bk-parking').value = bk.parkingSpot || (carData ? (carData.parkingSpot || '') : '');
+          
+          if(fpStart && bk.start) fpStart.setDate(bk.start);
+          if(fpEnd && bk.end) fpEnd.setDate(bk.end);
+
+          document.getElementById('bk-user').value = (bk.name || '') + ' ' + (bk.surname || ''); 
+          document.getElementById('bk-original-email').value = bk.userEmail || '';
+          
+          if(bk.dept === 'ไม่ใช่ กธพ') { 
+            document.getElementById('bk-not-emd').checked = true; 
+            window.toggleDept(true); 
+          }
+          
+          window.filterAvailableCars();
+          document.getElementById('bk-plate').value = bk.plate; 
+          window.updateCarImage();
+        }
+      }
+      document.getElementById('booking-modal').style.display = 'flex';
+    };
+
+    window.deleteBookingAction = async function() {
+      const id = document.getElementById('bk-id').value;
+      if(!id) return;
+      const { isConfirmed } = await Swal.fire({ title: 'ยืนยันการลบ?', text: "คุณต้องการลบข้อมูลการจองนี้ใช่หรือไม่?", icon: 'warning', showCancelButton: true, confirmButtonColor: '#ef4444', confirmButtonText: 'ลบเลย', cancelButtonText: 'ยกเลิก' });
+      if(isConfirmed) {
+        const btn = document.getElementById('bk-delete-btn'); btn.innerText = 'กำลังลบ...'; btn.disabled = true;
+        apiCall('deleteBooking', [id]).then(res => {
+          showToast(res.msg, res.success);
+          if(res.success) { window.closeModal('booking-modal'); reloadAfterMutation(); resetCalendarDetailHint(); }
+        }).catch(function (err) {
+          Swal.fire('ผิดพลาด', err.message || 'ลบการจองไม่สำเร็จ', 'error');
+        }).finally(function () {
+          btn.innerText = '🗑️ ลบการจองนี้'; btn.disabled = false;
+        });
+      }
+    };
+
+    window.openVehicleModal = function(id) {
+      id = (typeof id === 'undefined') ? null : id;
+      if(!isAdmin && !id) return; 
+      
+      document.getElementById('vehicle-form').reset();
+      document.getElementById('vh-id').value = '';
+      document.getElementById('vh-delete-btn').classList.add('hidden');
+      
+      const isReadonly = !isAdmin;
+      document.getElementById('vh-plate').readOnly = isReadonly;
+      document.getElementById('vh-type').disabled = isReadonly;
+      document.getElementById('vh-is-active').disabled = isReadonly; 
+      document.getElementById('img-upload-div').style.display = isReadonly ? 'none' : 'block';
+
+      if(isReadonly) {
+          document.getElementById('vh-plate').classList.add('bg-slate-100', 'text-slate-500', 'dark:bg-slate-600');
+          document.getElementById('vh-type').classList.add('bg-slate-100', 'text-slate-500', 'dark:bg-slate-600');
+          document.getElementById('vh-is-active').classList.add('bg-slate-100', 'text-slate-500', 'dark:bg-slate-600');
+      } else {
+          document.getElementById('vh-plate').classList.remove('bg-slate-100', 'text-slate-500', 'dark:bg-slate-600');
+          document.getElementById('vh-type').classList.remove('bg-slate-100', 'text-slate-500', 'dark:bg-slate-600');
+          document.getElementById('vh-is-active').classList.remove('bg-slate-100', 'text-slate-500', 'dark:bg-slate-600');
+      }
+
+      const fpAct = document.getElementById('vh-act')._flatpickr;
+      const fpLease = document.getElementById('vh-lease')._flatpickr;
+      if(fpAct) fpAct.clear();
+      if(fpLease) fpLease.clear();
+
+      if(id) {
+        // ✨ โค้ดตรงนี้แหละที่หายไป ผมเติมกลับมาให้แล้วครับ
+        const v = appData.vehicles.find(x => x.id === id);
+        if(v) {
+          document.getElementById('vh-id').value = v.id || '';
+          document.getElementById('vh-plate').value = v.plate || '';
+          document.getElementById('vh-type').value = v.type || 'ICE';
+          document.getElementById('vh-service-mile').value = v.serviceMile || '';
+          document.getElementById('vh-current-mile').value = v.currentMile || '';
+          document.getElementById('vh-remarks').value = v.remarks || '';
+          document.getElementById('vh-existing-img').value = v.img || ''; 
+          document.getElementById('vh-is-active').value = v.status || 'ACTIVE';
+          
+          if(v.actExpiry && fpAct) {
+            fpAct.setDate(new Date(v.actExpiry));
+            if (fpAct.altInput) fpAct.altInput.value = formatThaiDate(new Date(v.actExpiry));
+          }
+          if(v.leaseExpiry && fpLease) {
+            fpLease.setDate(new Date(v.leaseExpiry));
+            if (fpLease.altInput) fpLease.altInput.value = formatThaiDate(new Date(v.leaseExpiry));
+          }
+          
+          if(isAdmin) document.getElementById('vh-delete-btn').classList.remove('hidden');
+        }
+      } else {
+        document.getElementById('vh-is-active').value = "ACTIVE";
+      }
+      document.getElementById('vehicle-modal').style.display = 'flex';
+    };
+
+    window.handleImageSelect = e => {
+      const file = e.target.files[0]; if(!file) return;
+      const r = new FileReader(); r.onload = ev => { document.getElementById('vh-img-base64').value = ev.target.result; document.getElementById('img-status').innerText = '✅ เตรียมไฟล์สำเร็จ'; }; r.readAsDataURL(file);
+    };
+
+    window.userSelected = () => {
+      const user = appData.names.find(u => u.fullName === document.getElementById('bk-user').value.trim());
+      if(user) { if(!document.getElementById('bk-not-emd').checked) document.getElementById('bk-dept').value = user.dept; }
+      document.getElementById('bk-driver').value = document.getElementById('bk-user').value;
+    };
+
+    window.showToast = (msg, succ = true) => {
+      const t = document.getElementById('toast'); document.getElementById('toast-icon').innerText = succ ? '✅' : '❌'; document.getElementById('toast-msg').innerText = msg;
+      t.className = `fixed bottom-5 right-5 px-6 py-3 rounded-xl shadow-xl transition-all duration-300 z-50 flex items-center gap-3 text-white toast-enter ${succ ? 'bg-green-500' : 'bg-red-500'}`;
+      setTimeout(() => t.classList.replace('toast-enter', 'toast-leave'), 4000);
+    };
+
+    function writeCache(data) {
+      try {
+        localStorage.setItem(APP_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: data }));
+      } catch (e) {}
+    }
+
+    function readCache(allowStale) {
+      try {
+        const raw = localStorage.getItem(APP_CACHE_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (!parsed || !parsed.data) return null;
+        const age = Date.now() - (parsed.ts || 0);
+        if (allowStale) {
+          if (age > APP_CACHE_MAX_MS) return null;
+        } else if (age > APP_CACHE_STALE_MS) {
+          return null;
+        }
+        return parsed.data;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function showSkeletonState() {
+      const stats = document.getElementById('dashboard-stats');
+      stats.innerHTML = '<div class="h-28 rounded-3xl skeleton"></div><div class="h-28 rounded-3xl skeleton"></div><div class="h-28 rounded-3xl skeleton"></div>';
+      const list = document.getElementById('car-list');
+      list.innerHTML = '<div class="h-72 rounded-3xl skeleton"></div><div class="h-72 rounded-3xl skeleton"></div><div class="h-72 rounded-3xl skeleton"></div><div class="h-72 rounded-3xl skeleton"></div>';
+    }
+
+    function hideLoading() {
+      const loader = document.getElementById('app-loading');
+      if (loader) loader.style.display = 'none';
+    }
+
+   window.submitBooking = async function(e) {
+      e.preventDefault();
+      const plate = document.getElementById('bk-plate').value;
+      const currId = document.getElementById('bk-id').value;
+      const origEmail = document.getElementById('bk-original-email').value;
+      
+      let reason = ""; 
+      let needsReason = false;
+
+      if (currId && origEmail && origEmail !== appData.currentUserEmail && !isAdmin) {
+        if (window.currentEditingBooking) {
+          const bk = window.currentEditingBooking;
+          const oldUser = ((bk.name || '') + ' ' + (bk.surname || '')).trim();
+
+          const safeTime = (d) => {
+            if (!d) return 0;
+            let s = String(d);
+            if (s.length === 16 && s.includes('T')) s += ':00';
+            return new Date(s).getTime();
+          };
+
+          const startChanged = safeTime(document.getElementById('bk-start').value) !== safeTime(bk.start);
+          const endChanged = safeTime(document.getElementById('bk-end').value) !== safeTime(bk.end);
+
+          const isMainDataChanged = 
+            document.getElementById('bk-plate').value !== bk.plate ||
+            document.getElementById('bk-user').value.trim() !== oldUser ||
+            document.getElementById('bk-dept').value !== bk.dept ||
+            document.getElementById('bk-dest').value !== bk.dest ||
+            document.getElementById('bk-driver').value !== bk.driver ||
+            startChanged || 
+            endChanged;
+
+          if (isMainDataChanged) {
+            needsReason = true;
+          }
+        }
+      }
+
+      if (needsReason) {
+        const { value: t, isConfirmed } = await Swal.fire({ 
+          title: 'ระบุเหตุผลการแก้ไข', 
+          text: 'เนื่องจากคุณกำลังแก้ไขข้อมูลหลักที่ไม่ใช่ของคุณ',
+          input: 'text', 
+          inputValidator: v => !v && 'กรุณาระบุเหตุผลเพื่อบันทึกในระบบ', 
+          showCancelButton: true,
+          confirmButtonColor: '#a855f7'
+        });
+        if (!isConfirmed) return; 
+        reason = t;
+      }
+
+      const btn = document.getElementById('bk-submit-btn'); 
+      btn.innerText = 'กำลังบันทึก...'; 
+      btn.disabled = true;
+
+      const obj = { 
+        id: currId, 
+        plate, 
+        user: document.getElementById('bk-user').value, 
+        dept: document.getElementById('bk-dept').value, 
+        dest: document.getElementById('bk-dest').value, 
+        driver: document.getElementById('bk-driver').value, 
+        start: document.getElementById('bk-start').value, 
+        end: document.getElementById('bk-end').value, 
+        startMile: document.getElementById('bk-start-mile').value, 
+        endMile: document.getElementById('bk-end-mile').value, 
+        parkingSpot: document.getElementById('bk-parking').value, 
+        originalEmail: origEmail || appData.currentUserEmail, 
+        editReason: reason 
+      };
+
+      apiCall('saveBooking', [obj]).then(res => {
+        if(res.success) { 
+          showToast(res.msg); 
+          window.closeModal('booking-modal'); 
+          reloadAfterMutation(); 
+          resetCalendarDetailHint();
+        } else {
+          Swal.fire('ผิดพลาด', res.msg, 'error');
+        }
+      }).catch(function (err) {
+        Swal.fire('ผิดพลาด', err.message || 'บันทึกการจองไม่สำเร็จ', 'error');
+      }).finally(function () {
+        btn.innerText = 'บันทึกข้อมูล'; 
+        btn.disabled = false;
+      });
+    };
+
+    window.submitVehicle = function(e) {
+      e.preventDefault(); 
+      const btn = document.getElementById('vh-submit-btn'); btn.innerText = 'กำลังบันทึก...'; btn.disabled = true;
+      const obj = { 
+        id: document.getElementById('vh-id').value, 
+        plate: document.getElementById('vh-plate').value, 
+        type: document.getElementById('vh-type').value, 
+        actExpiry: document.getElementById('vh-act').value, 
+        serviceMile: document.getElementById('vh-service-mile').value, 
+        currentMile: document.getElementById('vh-current-mile').value, 
+        existingImg: document.getElementById('vh-existing-img').value, 
+        imageBase64: document.getElementById('vh-img-base64').value,
+        remarks: document.getElementById('vh-remarks').value,
+        status: document.getElementById('vh-is-active').value,
+        leaseExpiry: document.getElementById('vh-lease').value 
+      };
+      apiCall('saveVehicle', [obj]).then(res => { 
+        showToast(res.msg, res.success); 
+        if (res.success) { window.closeModal('vehicle-modal'); reloadAfterMutation(); }
+        else Swal.fire('ผิดพลาด', res.msg, 'error');
+      }).catch(function (err) {
+        Swal.fire('ผิดพลาด', err.message || 'บันทึกข้อมูลรถไม่สำเร็จ', 'error');
+      }).finally(function () {
+        btn.innerText = 'บันทึกข้อมูลรถ'; btn.disabled = false; 
+      });
+    };
+
+    window.deleteVehicleAction = async function() {
+      const id = document.getElementById('vh-id').value;
+      if(!id) return;
+      
+      const result = await Swal.fire({ 
+        title: 'ตัวเลือกการลบรถ', 
+        html: "<p class='mb-4'>คุณต้องการจัดการรถคันนี้อย่างไร?</p>" +
+              "<ul class='text-left text-sm text-slate-600 mb-2'><li><b>ซ่อนรถ:</b> รูปรถจะหายไปจากหน้าเว็บ แต่ประวัติการจองยังอยู่ในตาราง</li><li><b>ลบถาวร:</b> ลบรถและประวัติการจองทั้งหมดทิ้งออกจากระบบ (กู้ไม่ได้)</li></ul>", 
+        icon: 'warning', 
+        showDenyButton: true,
+        showCancelButton: true, 
+        confirmButtonColor: '#dc2626', 
+        denyButtonColor: '#64748b',
+        confirmButtonText: 'ลบข้อมูลถาวร!', 
+        denyButtonText: 'แค่ซ่อนรถ (เก็บประวัติ)',
+        cancelButtonText: 'ยกเลิก' 
+      });
+
+      if (result.isConfirmed) {
+        executeDelete(id, 'HARD');
+      } else if (result.isDenied) {
+        executeDelete(id, 'SOFT');
+      }
+
+      function executeDelete(carId, mode) {
+        const btn = document.getElementById('vh-delete-btn'); btn.innerText = 'กำลังจัดการ...'; btn.disabled = true;
+        apiCall('deleteVehicle', [carId, mode]).then(res => {
+          showToast(res.msg, res.success);
+          if(res.success) { window.closeModal('vehicle-modal'); reloadAfterMutation(); }
+        }).catch(function (err) {
+          Swal.fire('ผิดพลาด', err.message || 'ลบรถไม่สำเร็จ', 'error');
+        }).finally(function () {
+          btn.innerText = '🗑️ ลบรถคันนี้ออกจากระบบ'; btn.disabled = false;
+        });
+      }
+    };
+
+    document.addEventListener('DOMContentLoaded', function() {
+      const formatDateToBuddhistText = (dateObj) => {
+        if (!dateObj || isNaN(dateObj.getTime())) return '';
+        const dd = String(dateObj.getDate()).padStart(2, '0');
+        const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+        const yyyyBe = dateObj.getFullYear() + 543;
+        return `${dd}/${mm}/${yyyyBe}`;
+      };
+      const formatDateTimeToBuddhistText = (dateObj) => {
+        if (!dateObj || isNaN(dateObj.getTime())) return '';
+        const hh = String(dateObj.getHours()).padStart(2, '0');
+        const min = String(dateObj.getMinutes()).padStart(2, '0');
+        return `${formatDateToBuddhistText(dateObj)} ${hh}:${min}`;
+      };
+      const syncBuddhistAltInput = (selectedDates, dateStr, instance) => {
+        if (!instance || !instance.altInput) return;
+        if (!selectedDates || selectedDates.length === 0) {
+          instance.altInput.value = '';
+          return;
+        }
+        instance.altInput.value = formatDateToBuddhistText(selectedDates[0]);
+      };
+      const syncBuddhistDateTimeAltInput = (selectedDates, dateStr, instance) => {
+        if (!instance || !instance.altInput) return;
+        if (!selectedDates || selectedDates.length === 0) {
+          instance.altInput.value = '';
+          return;
+        }
+        instance.altInput.value = formatDateTimeToBuddhistText(selectedDates[0]);
+      };
+      const syncBuddhistCalendarHeader = (selectedDates, dateStr, instance) => {
+        if (!instance || !instance.currentYearElement) return;
+        const beYear = instance.currentYear + 543;
+        instance.currentYearElement.value = String(beYear);
+        instance.currentYearElement.setAttribute('readonly', 'readonly');
+      };
+      const syncBuddhistDateAll = (selectedDates, dateStr, instance) => {
+        syncBuddhistAltInput(selectedDates, dateStr, instance);
+        syncBuddhistCalendarHeader(selectedDates, dateStr, instance);
+      };
+      const syncBuddhistDateTimeAll = (selectedDates, dateStr, instance) => {
+        syncBuddhistDateTimeAltInput(selectedDates, dateStr, instance);
+        syncBuddhistCalendarHeader(selectedDates, dateStr, instance);
+      };
+
+      const fpTimeOptions = {
+        enableTime: true,
+        dateFormat: "Y-m-dTH:i", 
+        altInput: true,
+        altFormat: "d/m/Y H:i", 
+        time_24hr: true,
+        locale: "th",
+        onChange: function() { window.filterAvailableCars(); },
+        onReady: syncBuddhistDateTimeAll,
+        onValueUpdate: syncBuddhistDateTimeAll,
+        onOpen: syncBuddhistDateTimeAll,
+        onMonthChange: syncBuddhistDateTimeAll,
+        onYearChange: syncBuddhistDateTimeAll
+      };
+      flatpickr("#bk-start", fpTimeOptions);
+      flatpickr("#bk-end", fpTimeOptions);
+
+      const fpDateOptions = {
+        dateFormat: "Y-m-d", 
+        altInput: true,
+        altFormat: "d/m/Y", 
+        locale: "th"
+      };
+      flatpickr("#vh-act", {
+        ...fpDateOptions,
+        onReady: syncBuddhistDateAll,
+        onValueUpdate: syncBuddhistDateAll,
+        onOpen: syncBuddhistDateAll,
+        onMonthChange: syncBuddhistDateAll,
+        onYearChange: syncBuddhistDateAll
+      });
+      flatpickr("#vh-lease", {
+        ...fpDateOptions,
+        onReady: syncBuddhistDateAll,
+        onValueUpdate: syncBuddhistDateAll,
+        onOpen: syncBuddhistDateAll,
+        onMonthChange: syncBuddhistDateAll,
+        onYearChange: syncBuddhistDateAll
+      });
+      flatpickr("#search-start", {
+        ...fpDateOptions,
+        onReady: syncBuddhistDateAll,
+        onValueUpdate: syncBuddhistDateAll,
+        onOpen: syncBuddhistDateAll,
+        onMonthChange: syncBuddhistDateAll,
+        onYearChange: syncBuddhistDateAll
+      });
+      flatpickr("#search-end", {
+        ...fpDateOptions,
+        onReady: syncBuddhistDateAll,
+        onValueUpdate: syncBuddhistDateAll,
+        onOpen: syncBuddhistDateAll,
+        onMonthChange: syncBuddhistDateAll,
+        onYearChange: syncBuddhistDateAll
+      });
+    });
+  </script>
+</body>
+</html>
