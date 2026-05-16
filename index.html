@@ -43,10 +43,26 @@
     .dark .fc-theme-standard .fc-scrollgrid { border-color: #475569; }
     .fc-theme-standard th { padding: 12px 0; background: #faf5ff; color: #7e22ce; }
     .dark .fc-theme-standard th { background: #334155; color: #e2e8f0; }
-    .fc-daygrid-day-frame { border-radius: 0.75rem; margin: 4px; border: 1px solid transparent; min-height: 88px; }
+    .fc-daygrid-day-frame { border-radius: 0.75rem; margin: 2px; border: 1px solid transparent; }
     #calendar.calendar-no-vscroll .fc-scroller,
     #calendar.calendar-no-vscroll .fc-scroller-liquid-absolute {
-      overflow-y: hidden !important;
+      overflow: hidden !important;
+    }
+    #calendar.calendar-no-vscroll .fc-daygrid-day-frame,
+    #calendar.calendar-no-vscroll .fc-daygrid-day-events,
+    #calendar.calendar-no-vscroll .fc-daygrid-day-bottom {
+      overflow: hidden;
+    }
+    #calendar.calendar-no-vscroll .fc-daygrid-event,
+    #calendar.calendar-no-vscroll .fc-event-title {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    #calendar.calendar-no-vscroll .fc-event {
+      font-size: 0.72rem !important;
+      padding: 2px 6px !important;
+      line-height: 1.25;
     }
     #calendar.calendar-allow-vscroll .fc-scroller {
       overflow-y: auto !important;
@@ -1107,7 +1123,7 @@
       const isList = String(viewType || '').indexOf('list') === 0;
       el.classList.toggle('calendar-no-vscroll', !isList);
       el.classList.toggle('calendar-allow-vscroll', isList);
-      if (calendar) calendar.setOption('height', isList ? '100%' : 'auto');
+      if (calendar) calendar.setOption('height', '100%');
     }
 
    function setupCalendar(bookings) {
@@ -1117,13 +1133,18 @@
         initialView: initialView,
         headerToolbar: { left: 'prev,next', center: 'title', right: 'dayGridMonth,listMonth' },
         locale: 'th',
-        height: initialView.indexOf('list') === 0 ? '100%' : 'auto',
+        height: '100%',
         views: {
-          dayGridMonth: { height: 'auto', dayMaxEventRows: 3 },
+          dayGridMonth: {
+            expandRows: true,
+            fixedWeekNumber: true,
+            dayMaxEvents: 2,
+            dayMaxEventRows: 2,
+            moreLinkClick: 'popover'
+          },
           listMonth: { height: '100%' }
         },
         datesSet: function(info) { applyCalendarScrollMode(info.view.type); },
-        dayMaxEventRows: 3,
         displayEventTime: false, 
         events: bookings.map(b => {
           const fullName = getBookingFullName(b);
