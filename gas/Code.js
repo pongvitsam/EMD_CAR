@@ -189,7 +189,7 @@ function dispatchApi_(action, args, token) {
     case 'deleteManagedName': return deleteManagedName(token, args[0]);
     case 'saveNameOption': return saveNameOption(args[0]);
     case 'saveVehicle': return saveVehicle(args[0]);
-    case 'saveVehicleManagement': return saveVehicleManagement(args[0], args[1]);
+    case 'saveVehicleManagement': return saveVehicleManagement(token, args[0]);
     case 'deleteVehicle': return deleteVehicle(args[0], args[1]);
     case 'saveBooking': return saveBooking(args[0]);
     case 'deleteBooking': return deleteBooking(args[0]);
