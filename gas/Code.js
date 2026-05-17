@@ -8,7 +8,8 @@ const LEGACY_APP_DATA_CACHE_KEY = 'APP_DATA_V1';
 const CACHE_TTL_SEC = 120;
 const LOGS_CACHE_TTL_SEC = 90;
 const ADMIN_SESSION_CACHE_PREFIX = 'ADMIN_SESSION_';
-const VEHICLE_HEADERS = ['Vehicle_ID', 'ทะเบียน', 'รูปรถ(URL)', 'ประเภท', 'Email', 'Password', 'ระยะ Service (km)', 'ไมล์ล่าสุด (km)', 'จุดจอดล่าสุด', 'พรบ.หมดอายุ', 'หมายเหตุ', 'สถานะ', 'วันคืนรถ/หมดสัญญา'];
+const VEHICLE_HEADERS = ['Vehicle_ID', 'ทะเบียน', 'รูปรถ(URL)', 'ประเภท', 'Email', 'Password', 'ระยะ Service (km)', 'ไมล์ล่าสุด (km)', 'จุดจอดล่าสุด', 'พรบ.หมดอายุ', 'หมายเหตุ', 'สถานะ', 'วันคืนรถ/หมดสัญญา', 'วันที่เช็คระยะล่าสุด', 'กม.เช็คระยะล่าสุด', 'ผู้นำเข้าเช็คระยะ', 'ระยะกม.ต่อรอบ'];
+const DEFAULT_SERVICE_INTERVAL_KM = 10000;
 
 function getSpreadsheet_() {
   return SpreadsheetApp.openById(SHEET_ID);
@@ -94,7 +95,45 @@ function ensureVehiclesSheet_(ss) {
   if (!leaseHeaderCell.getValue()) {
     leaseHeaderCell.setValue(VEHICLE_HEADERS[12]);
   }
+  for (let c = 14; c <= VEHICLE_HEADERS.length; c++) {
+    const cell = sheet.getRange(1, c);
+    if (!cell.getValue()) cell.setValue(VEHICLE_HEADERS[c - 1]);
+  }
   return sheet;
+}
+
+function vehicleFormField_(form, key, row, colIndex, fallback) {
+  if (form && Object.prototype.hasOwnProperty.call(form, key) && form[key] !== undefined && form[key] !== null && String(form[key]).trim() !== '') {
+    return form[key];
+  }
+  if (row && row[colIndex] !== undefined && row[colIndex] !== null && String(row[colIndex]).trim() !== '') {
+    return row[colIndex];
+  }
+  return fallback;
+}
+
+function buildVehicleRowValues_(form, row, imgUrl, activeStatus) {
+  const safeEmail = vehicleFormField_(form, 'email', row, 4, '');
+  const safePass = vehicleFormField_(form, 'pass', row, 5, '');
+  const intervalKm = parseFloat(vehicleFormField_(form, 'serviceIntervalKm', row, 16, DEFAULT_SERVICE_INTERVAL_KM)) || DEFAULT_SERVICE_INTERVAL_KM;
+  return [
+    vehicleFormField_(form, 'plate', row, 1, ''),
+    imgUrl,
+    vehicleFormField_(form, 'type', row, 3, ''),
+    safeEmail,
+    safePass,
+    vehicleFormField_(form, 'serviceMile', row, 6, 0),
+    vehicleFormField_(form, 'currentMile', row, 7, 0),
+    vehicleFormField_(form, 'parkingSpot', row, 8, ''),
+    vehicleFormField_(form, 'actExpiry', row, 9, ''),
+    vehicleFormField_(form, 'remarks', row, 10, ''),
+    activeStatus,
+    vehicleFormField_(form, 'leaseExpiry', row, 12, ''),
+    vehicleFormField_(form, 'serviceLastDate', row, 13, ''),
+    vehicleFormField_(form, 'serviceLastKm', row, 14, ''),
+    vehicleFormField_(form, 'serviceLastBy', row, 15, ''),
+    intervalKm
+  ];
 }
 
 function doGet(e) {
@@ -150,6 +189,7 @@ function dispatchApi_(action, args, token) {
     case 'deleteManagedName': return deleteManagedName(token, args[0]);
     case 'saveNameOption': return saveNameOption(args[0]);
     case 'saveVehicle': return saveVehicle(args[0]);
+    case 'saveVehicleManagement': return saveVehicleManagement(args[0], args[1]);
     case 'deleteVehicle': return deleteVehicle(args[0], args[1]);
     case 'saveBooking': return saveBooking(args[0]);
     case 'deleteBooking': return deleteBooking(args[0]);
@@ -182,7 +222,11 @@ function buildAppPayload_(ss, includeLogs) {
     serviceMile: parseFloat(r[6]) || 0, currentMile: parseFloat(r[7]) || 0,
     parkingSpot: r[8] || '', actExpiry: r[9], remarks: r[10] || '',
     status: r[11] || 'ACTIVE',
-    leaseExpiry: r[12] || ''
+    leaseExpiry: r[12] || '',
+    serviceLastDate: r[13] || '',
+    serviceLastKm: parseFloat(r[14]) || 0,
+    serviceLastBy: r[15] || '',
+    serviceIntervalKm: parseFloat(r[16]) || DEFAULT_SERVICE_INTERVAL_KM
   }));
 
   const bDataVal = getSheetOrThrow_(ss, 'Bookings').getDataRange().getValues();
@@ -373,37 +417,47 @@ function uploadImageToDrive(base64Data, filename) {
   } catch(e) { throw new Error("Drive Error: " + e.message); }
 }
 
+function saveVehicleManagement(token, form) {
+  requireAdminSession_(token);
+  return saveVehicle(form);
+}
+
 function saveVehicle(form) {
   try {
     const ss = getSpreadsheet_();
+    setupDatabase();
     const sheet = getSheetOrThrow_(ss, 'Vehicles');
     const logSheet = getSheetOrThrow_(ss, 'Logs');
     const actionEmail = Session.getActiveUser().getEmail() || 'Unknown User';
     
     let imgUrl = form.existingImg;
     if (form.imageBase64 && form.imageBase64.trim() !== '') {
-      imgUrl = uploadImageToDrive(form.imageBase64, form.plate + "_image_" + new Date().getTime());
+      imgUrl = uploadImageToDrive(form.imageBase64, (form.plate || 'vehicle') + "_image_" + new Date().getTime());
     }
 
-    const activeStatus = form.status || 'ACTIVE';
+    const activeStatus = vehicleFormField_(form, 'status', null, 0, 'ACTIVE');
 
     if (form.id) {
       const data = sheet.getDataRange().getValues();
       for (let i = 1; i < data.length; i++) {
         if (data[i][0] == form.id) {
-          const safeEmail = form.email || data[i][4] || '';
-          const safePass = form.pass || data[i][5] || '';
-          sheet.getRange(i + 1, 2, 1, 12).setValues([[form.plate, imgUrl, form.type, safeEmail, safePass, form.serviceMile, form.currentMile, data[i][8], form.actExpiry, form.remarks, activeStatus, form.leaseExpiry]]);
+          const row = data[i];
+          if (!imgUrl) imgUrl = row[2] || '';
+          const values = buildVehicleRowValues_(form, row, imgUrl, activeStatus);
+          sheet.getRange(i + 1, 2, 1, values.length).setValues([values]);
           clearAppCache_();
-          logSheet.appendRow([new Date(), actionEmail, 'UPDATE_VEHICLE', form.plate, `อัปเดตข้อมูลรถ/สถานะ (${activeStatus})`, form.editReason || '-']);
+          const plate = values[0] || row[1];
+          const detail = form.managementAction ? String(form.managementAction) : `อัปเดตข้อมูลรถ/สถานะ (${activeStatus})`;
+          logSheet.appendRow([new Date(), actionEmail, 'UPDATE_VEHICLE', plate, detail, form.editReason || '-']);
           return {success: true, msg: 'อัปเดตข้อมูลรถเรียบร้อยครับ'};
         }
       }
     } else {
       const newId = 'V_' + new Date().getTime();
-      sheet.appendRow([newId, form.plate, imgUrl, form.type, form.email, form.pass, form.serviceMile, form.currentMile, '', form.actExpiry, form.remarks, activeStatus, form.leaseExpiry]);
+      const values = buildVehicleRowValues_(form, [], imgUrl || '', activeStatus);
+      sheet.appendRow([newId].concat(values));
       clearAppCache_();
-      logSheet.appendRow([new Date(), actionEmail, 'ADD_VEHICLE', form.plate, 'เพิ่มรถใหม่เข้าระบบ', '-']);
+      logSheet.appendRow([new Date(), actionEmail, 'ADD_VEHICLE', values[0], 'เพิ่มรถใหม่เข้าระบบ', '-']);
       return {success: true, msg: 'เพิ่มรถเข้าระบบเรียบร้อยครับ'};
     }
   } catch (error) { return {success: false, msg: error.message}; }

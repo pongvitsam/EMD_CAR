@@ -198,6 +198,7 @@
       <button onclick="switchTab('dashboard')" id="tab-dashboard" class="pb-2 px-2 hover:text-purple-600 transition tab-active whitespace-nowrap">📊 Dashboard</button>
       <button onclick="switchTab('calendar')" id="tab-calendar" class="pb-2 px-2 hover:text-purple-600 transition whitespace-nowrap">📅 ปฏิทิน</button>
       <button onclick="switchTab('search')" id="tab-search" class="pb-2 px-2 hover:text-purple-600 transition whitespace-nowrap">🔍 ค้นหาประวัติ</button>
+            <button onclick="switchTab('vehicles')" id="tab-vehicles" class="hidden pb-2 px-2 hover:text-purple-600 transition whitespace-nowrap">🛠️ จัดการรถ</button>
       <button onclick="switchTab('names')" id="tab-names" class="hidden pb-2 px-2 hover:text-purple-600 transition whitespace-nowrap">👥 รายชื่อ/แผนก</button>
       <button onclick="switchTab('logs')" id="tab-logs" class="hidden pb-2 px-2 hover:text-purple-600 transition whitespace-nowrap">⚙️ Logs</button>
     </div>
@@ -291,6 +292,17 @@
           <thead class="bg-slate-50 dark:bg-slate-700 text-slate-600 dark:text-slate-300 sticky top-0"><tr><th class="p-3">เวลา</th><th class="p-3">อีเมล</th><th class="p-3">Action</th><th class="p-3">เป้าหมาย</th><th class="p-3">รายละเอียด</th><th class="p-3">เหตุผล</th></tr></thead>
           <tbody id="log-results" class="divide-y divide-slate-100 dark:divide-slate-700"></tbody>
         </table>
+      </div>
+    </div>
+
+
+    <div id="view-vehicles" class="hidden space-y-6">
+      <div class="border-b-2 border-purple-100 dark:border-purple-800 pb-3">
+        <h2 class="text-2xl font-semibold text-purple-500 dark:text-purple-400">🛠️ จัดการยานพาหนะ</h2>
+        <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">ตั้งกม.ครบรอบเช็คระยะล่วงหน้า บันทึกเข้าศูนย์ และแก้ไขหมายเหตุบนหน้าแรก</p>
+      </div>
+      <div id="vehicle-manager-list" class="space-y-4">
+        <p class="text-center text-slate-400 py-8">กรุณาเข้าสู่ระบบ Admin</p>
       </div>
     </div>
 
@@ -909,10 +921,194 @@
       showLegacyMigrationGate();
     };
 
+
+    function estimateKmPerDayForPlate(plate) {
+      const plateNorm = String(plate || '').trim();
+      const now = Date.now();
+      const fromMs = now - 30 * 24 * 60 * 60 * 1000;
+      let totalKm = 0;
+      appData.bookings.forEach(b => {
+        if (String(b.plate).trim() !== plateNorm) return;
+        const start = parseTimeSafe(b.start);
+        const sm = parseFloat(b.startMile);
+        const em = parseFloat(b.endMile);
+        if (!start || start < fromMs || !(em > sm)) return;
+        totalKm += em - sm;
+      });
+      if (totalKm <= 0) return null;
+      return totalKm / 30;
+    }
+    function getVehicleServiceInfo(car) {
+      const dueKm = parseFloat(car.serviceMile) || 0;
+      const currentKm = parseFloat(car.currentMile) || 0;
+      const intervalKm = parseFloat(car.serviceIntervalKm) || 10000;
+      const lastKm = parseFloat(car.serviceLastKm) || 0;
+      const remaining = dueKm > 0 ? dueKm - currentKm : null;
+      const isOverdue = dueKm > 0 && currentKm >= dueKm;
+      const isWarning = dueKm > 0 && remaining > 0 && remaining <= 1000;
+      let estimatedNextDate = null;
+      if (dueKm > 0 && remaining > 0) {
+        const kmPerDay = estimateKmPerDayForPlate(car.plate);
+        if (kmPerDay && kmPerDay > 0) {
+          const days = Math.ceil(remaining / kmPerDay);
+          const d = new Date();
+          d.setHours(0, 0, 0, 0);
+          d.setDate(d.getDate() + days);
+          estimatedNextDate = d;
+        }
+      }
+      const nextRoundKm = lastKm > 0 ? lastKm + intervalKm : (dueKm > 0 ? dueKm : null);
+      return { dueKm, currentKm, intervalKm, lastKm, remaining, isOverdue, isWarning, estimatedNextDate, nextRoundKm };
+    }
+    function initVehicleManagerDatePickers(root) {
+      if (!root || !window.flatpickr || !window.syncBuddhistDateAll) return;
+      root.querySelectorAll('.vmgr-service-date').forEach(function (el) {
+        if (el._flatpickr) return;
+        flatpickr(el, {
+          dateFormat: 'Y-m-d',
+          altInput: true,
+          altFormat: 'd/m/Y',
+          locale: 'th',
+          onReady: window.syncBuddhistDateAll,
+          onValueUpdate: window.syncBuddhistDateAll,
+          onOpen: window.syncBuddhistDateAll,
+          onMonthChange: window.syncBuddhistDateAll,
+          onYearChange: window.syncBuddhistDateAll
+        });
+      });
+    }
+    function renderVehicleManager() {
+      const wrap = document.getElementById('vehicle-manager-list');
+      if (!wrap) return;
+      if (!isAdmin) {
+        wrap.innerHTML = '<p class="text-center text-slate-400 py-8">กรุณาเข้าสู่ระบบ Admin</p>';
+        return;
+      }
+      const cars = appData.vehicles.filter(c => c.status !== 'HIDDEN').slice().sort((a, b) => String(a.plate).localeCompare(String(b.plate), 'th'));
+      if (!cars.length) {
+        wrap.innerHTML = '<p class="text-center text-slate-400 py-8">ไม่พบรถในระบบ</p>';
+        return;
+      }
+      wrap.innerHTML = cars.map(function (car) {
+        const info = getVehicleServiceInfo(car);
+        const statusBadge = info.isOverdue
+          ? '<span class="text-xs font-bold text-white bg-red-500 px-2 py-1 rounded">เลยกำหนดเช็คระยะ</span>'
+          : (info.isWarning ? '<span class="text-xs font-bold text-white bg-orange-500 px-2 py-1 rounded">ใกล้ครบเช็คระยะ</span>' : '<span class="text-xs text-green-700 bg-green-100 px-2 py-1 rounded">ปกติ</span>');
+        const lastSvc = car.serviceLastDate
+          ? formatThaiDate(car.serviceLastDate) + ' ที่ ' + (info.lastKm || 0).toLocaleString() + ' กม.' + (car.serviceLastBy ? ' โดย ' + escapeHtml(car.serviceLastBy) : '')
+          : 'ยังไม่เคยบันทึกเข้าศูนย์';
+        const estLine = info.estimatedNextDate && !info.isOverdue
+          ? '<p class="text-xs text-blue-700 dark:text-blue-300">ประมาณถึงรอบปัจจุบัน: <b>' + formatThaiDate(info.estimatedNextDate) + '</b> (เหลือ ' + Math.max(0, info.remaining).toLocaleString() + ' กม.)</p>'
+          : (info.isOverdue ? '<p class="text-xs text-red-600 font-semibold">เลยกำหนดแล้ว ' + Math.abs(info.remaining).toLocaleString() + ' กม. — ยังแสดงรอบเดิมจนกว่าจะบันทึกเข้าศูนย์</p>' : '');
+        const nextRound = info.nextRoundKm
+          ? '<p class="text-xs text-purple-700 dark:text-purple-300">รอบถัดไป (หลังเช็คล่าสุด + ระยะ): <b>' + info.nextRoundKm.toLocaleString() + ' กม.</b></p>'
+          : '';
+        return '<div class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 p-5 shadow-sm" data-vehicle-id="' + escapeHtml(car.id) + '">' +
+          '<div class="flex flex-wrap items-start justify-between gap-2 mb-3">' +
+          '<div><h3 class="text-lg font-semibold text-purple-700 dark:text-purple-300">' + escapeHtml(car.plate) + ' <span class="text-xs font-normal text-slate-400">(' + escapeHtml(car.type) + ')</span></h3>' +
+          '<p class="text-sm text-slate-500">ไมล์ล่าสุด <b class="text-purple-600">' + info.currentKm.toLocaleString() + '</b> กม.</p></div>' + statusBadge + '</div>' +
+          '<div class="grid grid-cols-1 lg:grid-cols-2 gap-4 text-sm">' +
+          '<div class="bg-orange-50 dark:bg-orange-900/20 rounded-xl p-4 border border-orange-100 dark:border-orange-800/40 space-y-3">' +
+          '<p class="font-semibold text-orange-800 dark:text-orange-300">📅 ตั้งค่ารอบเช็คระยะ (ล่วงหน้า)</p>' +
+          '<label class="block text-xs">กม.ครบรอบปัจจุบัน</label><input type="number" class="vmgr-due-km w-full px-3 py-2 rounded-lg border dark:bg-slate-700 dark:border-slate-600" value="' + (info.dueKm || '') + '">' +
+          '<label class="block text-xs">ระยะกม.ต่อรอบ (หลังเข้าศูนย์)</label><input type="number" class="vmgr-interval-km w-full px-3 py-2 rounded-lg border dark:bg-slate-700 dark:border-slate-600" value="' + info.intervalKm + '">' +
+          '<button type="button" onclick="window.saveVehiclePlan(\'' + car.id + '\')" class="w-full bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium py-2 rounded-lg">บันทึกแผนรอบ</button>' +
+          '<p class="text-xs text-slate-600 dark:text-slate-300">เช็คล่าสุด: ' + lastSvc + '</p>' + estLine + nextRound +
+          '</div>' +
+          '<div class="bg-emerald-50 dark:bg-emerald-900/20 rounded-xl p-4 border border-emerald-100 dark:border-emerald-800/40 space-y-3">' +
+          '<p class="font-semibold text-emerald-800 dark:text-emerald-300">🔧 บันทึกเข้าศูนย์เช็คระยะ</p>' +
+          '<label class="block text-xs">วันที่นำรถเข้าเช็คระยะ</label><input type="text" class="vmgr-service-date w-full px-3 py-2 rounded-lg border dark:bg-slate-700 dark:border-slate-600" placeholder="เลือกวันที่ (พ.ศ.)">' +
+          '<label class="block text-xs">กม.เมื่อนำรถเข้าเช็คระยะ</label><input type="number" class="vmgr-service-km w-full px-3 py-2 rounded-lg border dark:bg-slate-700 dark:border-slate-600" value="' + info.currentKm + '">' +
+          '<label class="block text-xs">ผู้นำรถเข้าเช็คระยะ</label><input type="text" class="vmgr-service-by w-full px-3 py-2 rounded-lg border dark:bg-slate-700 dark:border-slate-600" list="user-list" value="">' +
+          '<label class="block text-xs">กม.ครบรอบถัดไป (ว่าง = กม.เข้าศูนย์ + ระยะต่อรอบ)</label><input type="number" class="vmgr-next-due-km w-full px-3 py-2 rounded-lg border dark:bg-slate-700 dark:border-slate-600" placeholder="อัตโนมัติ">' +
+          '<button type="button" onclick="window.saveVehicleServiceRecord(\'' + car.id + '\')" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium py-2 rounded-lg">บันทึกเข้าศูนย์ + ตั้งรอบใหม่</button>' +
+          '</div></div>' +
+          '<div class="mt-4"><label class="block text-sm font-medium text-blue-700 dark:text-blue-300 mb-1">📌 หมายเหตุ (แสดงหน้าแรก)</label>' +
+          '<div class="flex gap-2"><input type="text" class="vmgr-remarks flex-1 px-3 py-2 rounded-lg border dark:bg-slate-700 dark:border-slate-600" value="' + escapeHtml(car.remarks || '') + '">' +
+          '<button type="button" onclick="window.saveVehicleRemarks(\'' + car.id + '\')" class="shrink-0 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium">บันทึก</button></div></div>' +
+          '</div>';
+      }).join('');
+      wrap.innerHTML = wrap.innerHTML.split('</div>').join('</div>').split('<motion>').join('<div>')
+      cars.forEach(function (car) {
+        const card = wrap.querySelector('[data-vehicle-id="' + car.id + '"]');
+        if (!card) return;
+        const dateEl = card.querySelector('.vmgr-service-date');
+        if (dateEl && car.serviceLastDate) dateEl.value = String(car.serviceLastDate).substring(0, 10);
+        const byEl = card.querySelector('.vmgr-service-by');
+        if (byEl && car.serviceLastBy) byEl.value = car.serviceLastBy;
+      });
+      initVehicleManagerDatePickers(wrap);
+    }
+    function getVehicleManagerCard(vehicleId) {
+      return document.querySelector('[data-vehicle-id="' + vehicleId + '"]');
+    }
+    window.saveVehiclePlan = function (vehicleId) {
+      if (!isAdmin || !adminToken) return;
+      const card = getVehicleManagerCard(vehicleId);
+      const car = appData.vehicles.find(v => v.id === vehicleId);
+      if (!card || !car) return;
+      google.script.run.withSuccessHandler(function (res) {
+        showToast(res.msg, res.success);
+        if (res.success) loadData();
+      }).withFailureHandler(function (err) {
+        Swal.fire('ผิดพลาด', err.message || '', 'error');
+      }).saveVehicleManagement(adminToken, {
+        id: vehicleId, plate: car.plate,
+        serviceMile: card.querySelector('.vmgr-due-km').value,
+        serviceIntervalKm: card.querySelector('.vmgr-interval-km').value,
+        managementAction: 'ตั้งแผนเช็คระยะ'
+      });
+    };
+    window.saveVehicleServiceRecord = function (vehicleId) {
+      if (!isAdmin || !adminToken) return;
+      const card = getVehicleManagerCard(vehicleId);
+      const car = appData.vehicles.find(v => v.id === vehicleId);
+      if (!card || !car) return;
+      const svcDate = card.querySelector('.vmgr-service-date').value;
+      const svcKm = parseFloat(card.querySelector('.vmgr-service-km').value);
+      const svcBy = card.querySelector('.vmgr-service-by').value.trim();
+      const intervalKm = parseFloat(card.querySelector('.vmgr-interval-km').value) || parseFloat(car.serviceIntervalKm) || 10000;
+      let nextDue = card.querySelector('.vmgr-next-due-km').value;
+      if (!svcDate || isNaN(svcKm)) {
+        Swal.fire('กรุณากรอกข้อมูล', 'ระบุวันที่และกม.เมื่อนำรถเข้าเช็คระยะ', 'warning');
+        return;
+      }
+      if (!nextDue) nextDue = String(Math.round(svcKm + intervalKm));
+      google.script.run.withSuccessHandler(function (res) {
+        showToast(res.msg, res.success);
+        if (res.success) loadData();
+      }).withFailureHandler(function (err) {
+        Swal.fire('ผิดพลาด', err.message || '', 'error');
+      }).saveVehicleManagement(adminToken, {
+        id: vehicleId, plate: car.plate,
+        serviceLastDate: svcDate, serviceLastKm: svcKm, serviceLastBy: svcBy,
+        serviceMile: nextDue, serviceIntervalKm: intervalKm,
+        managementAction: 'บันทึกเข้าศูนย์เช็คระยะ'
+      });
+    };
+    window.saveVehicleRemarks = function (vehicleId) {
+      if (!isAdmin || !adminToken) return;
+      const card = getVehicleManagerCard(vehicleId);
+      const car = appData.vehicles.find(v => v.id === vehicleId);
+      if (!card || !car) return;
+      google.script.run.withSuccessHandler(function (res) {
+        showToast(res.msg, res.success);
+        if (res.success) loadData();
+      }).withFailureHandler(function (err) {
+        Swal.fire('ผิดพลาด', err.message || '', 'error');
+      }).saveVehicleManagement(adminToken, {
+        id: vehicleId, plate: car.plate,
+        remarks: card.querySelector('.vmgr-remarks').value,
+        managementAction: 'แก้ไขหมายเหตุรถ'
+      });
+    };
+
+
     function switchTab(tabId) {
       if(tabId === 'logs' && !isAdmin) return;
+      if(tabId === 'vehicles' && !isAdmin) return;
       if(tabId === 'names' && !isAdmin) return;
-      ['dashboard', 'calendar', 'search', 'logs', 'names'].forEach(id => {
+      ['dashboard', 'calendar', 'search', 'logs', 'names', 'vehicles'].forEach(id => {
         document.getElementById('view-' + id).classList.add('hidden');
         document.getElementById('tab-' + id).classList.remove('tab-active');
       });
@@ -925,6 +1121,8 @@
           isCalendarInitialized = true;
         }
         if (calendar) setTimeout(() => calendar.render(), 100);
+      } else if (tabId === 'vehicles') {
+        renderVehicleManager();
       } else if (tabId === 'names') {
         refreshNameManager();
       }
@@ -995,6 +1193,7 @@
         document.getElementById('btn-add-car').classList.remove('hidden');
         document.getElementById('tab-logs').classList.remove('hidden');
         document.getElementById('tab-names').classList.remove('hidden');
+        document.getElementById('tab-vehicles').classList.remove('hidden');
         document.getElementById('btn-export').classList.remove('hidden'); 
         document.getElementById('view-charts').classList.remove('hidden'); 
         renderCars(appData.vehicles); 
@@ -1014,6 +1213,7 @@
       document.getElementById('btn-add-car').classList.add('hidden');
       document.getElementById('tab-logs').classList.add('hidden');
       document.getElementById('tab-names').classList.add('hidden');
+      document.getElementById('tab-vehicles').classList.add('hidden');
       document.getElementById('btn-export').classList.add('hidden'); 
       document.getElementById('view-charts').classList.add('hidden'); 
       renderCars(appData.vehicles); 
@@ -1321,13 +1521,19 @@
             </button> / ${car.serviceMile.toLocaleString()}
           </p>`;
 
+        const svcInfo = getVehicleServiceInfo(car);
+        if (car.serviceLastDate) {
+          serviceHtml += `<p class="text-xs text-slate-500 mt-1">เช็คล่าสุด: ${formatThaiDate(car.serviceLastDate)} (${(svcInfo.lastKm || 0).toLocaleString()} กม.)</p>`;
+        }
+        if (svcInfo.estimatedNextDate && !svcInfo.isOverdue && car.status === 'ACTIVE') {
+          serviceHtml += `<p class="text-xs text-blue-600 dark:text-blue-400 mt-0.5">ประมาณครบรอบ: ${formatThaiDate(svcInfo.estimatedNextDate)}</p>`;
+        }
         if (car.serviceMile > 0 && car.status === 'ACTIVE') {
-          const diff = car.serviceMile - car.currentMile;
-          if (diff <= 0) {
+          if (svcInfo.isOverdue) {
             serviceHtml += `<div class="mt-1 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded text-center">🚨 เลยระยะ Service แล้ว!</div>`;
             borderClass = "border-red-500 border-2 shadow-red-100 shadow-md dark:shadow-red-900/20";
-          } else if (diff <= 1000) {
-            serviceHtml += `<div class="mt-1 bg-orange-400 text-white text-xs font-bold px-2 py-1 rounded text-center">⚠️ ใกล้ครบ Service (เหลือ ${diff.toLocaleString()} km)</div>`;
+          } else if (svcInfo.isWarning) {
+            serviceHtml += `<div class="mt-1 bg-orange-400 text-white text-xs font-bold px-2 py-1 rounded text-center">⚠️ ใกล้ครบ Service (เหลือ ${svcInfo.remaining.toLocaleString()} km)</div>`;
             if(borderClass === "border-slate-100 dark:border-slate-700") borderClass = "border-orange-400 border-2";
           }
         }
@@ -2225,6 +2431,7 @@
         syncBuddhistAltInput(selectedDates, dateStr, instance);
         syncBuddhistCalendarHeader(selectedDates, dateStr, instance);
       };
+      window.syncBuddhistDateAll = syncBuddhistDateAll;
       const syncBuddhistDateTimeAll = (selectedDates, dateStr, instance) => {
         syncBuddhistDateTimeAltInput(selectedDates, dateStr, instance);
         syncBuddhistCalendarHeader(selectedDates, dateStr, instance);
