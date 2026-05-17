@@ -136,6 +136,14 @@
     .dashboard-avail-card .avail-picker-title { font-size: .88rem; }
     .dashboard-avail-card .avail-picker-dow { font-size: .68rem; margin-bottom: .2rem; }
     .dashboard-avail-card .avail-picker-day { font-size: .78rem; }
+    @media (min-width: 1280px) {
+      #dashboard-overview { grid-template-columns: repeat(12, minmax(0, 1fr)); }
+      #dashboard-overview .dashboard-avail-card .avail-picker { padding: .5rem .55rem .65rem; }
+      #dashboard-overview .dashboard-avail-card .avail-picker-nav { width: 1.5rem; height: 1.5rem; font-size: .95rem; }
+      #dashboard-overview .dashboard-avail-card .avail-picker-title { font-size: .8rem; }
+      #dashboard-overview .dashboard-avail-card .avail-picker-day { font-size: .72rem; }
+      #dashboard-overview .dashboard-avail-card .avail-picker-dow { font-size: .62rem; }
+    }
   </style>
 </head>
 <body class="bg-[#fbf5ff] text-slate-700 dark:bg-slate-900 dark:text-slate-200">
@@ -179,11 +187,11 @@
       <div id="car-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"></div>
 
       <h2 class="text-2xl font-semibold text-purple-500 dark:text-purple-400 border-b-2 border-purple-100 dark:border-purple-800 pb-2 mt-8">📊 ภาพรวมระบบ</h2>
-      <div id="dashboard-overview" class="grid grid-cols-1 xl:grid-cols-12 gap-4">
-        <div id="dashboard-stat-active" class="xl:col-span-2 min-w-0"></div>
-        <div id="dashboard-availability-wrap" class="xl:col-span-10 min-w-0"></div>
-        <div id="dashboard-stat-available" class="xl:col-span-4 min-w-0"></div>
-        <div id="dashboard-stat-dept" class="xl:col-span-8 min-w-0"></div>
+      <div id="dashboard-overview" class="grid grid-cols-1 xl:grid-cols-12 gap-3 items-stretch min-w-0">
+        <div id="dashboard-stat-active" class="xl:col-span-1 min-w-0"></div>
+        <div id="dashboard-availability-wrap" class="xl:col-span-5 min-w-0"></div>
+        <div id="dashboard-stat-available" class="xl:col-span-2 min-w-0"></div>
+        <div id="dashboard-stat-dept" class="xl:col-span-4 min-w-0"></div>
       </div>
       
       <div id="view-charts" class="hidden">
@@ -825,22 +833,21 @@
       const rangeHint = dashboardAvailMode === 'range'
         ? (dashboardAvailRangeStep === 'end' ? 'คลิกวันสิ้นสุดช่วง' : 'คลิกวันเริ่มต้นช่วง')
         : 'คลิกวันที่ในปฏิทิน';
-      wrap.innerHTML = '<div class="dashboard-avail-card bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm h-full">' +
-        '<div class="flex flex-wrap items-start justify-between gap-2 mb-2">' +
-        '<div><h3 class="text-base font-semibold text-purple-600 dark:text-purple-400">🔎 ตรวจหารถว่าง</h3>' +
-        '<p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">เลือกวันที่ — รถที่ไม่มีการจองทับในช่วงนั้น</p></div>' +
-        '<div class="flex flex-wrap gap-1.5">' +
-        '<button type="button" onclick="window.setDashboardAvailMode(\'single\')" class="px-3 py-1.5 rounded-lg text-xs font-medium transition ' + (dashboardAvailMode === 'single' ? 'bg-purple-500 text-white shadow' : 'bg-purple-50 text-purple-700 dark:bg-slate-700 dark:text-purple-300') + '">วันเดียว</button>' +
-        '<button type="button" onclick="window.setDashboardAvailMode(\'range\')" class="px-3 py-1.5 rounded-lg text-xs font-medium transition ' + (dashboardAvailMode === 'range' ? 'bg-purple-500 text-white shadow' : 'bg-purple-50 text-purple-700 dark:bg-slate-700 dark:text-purple-300') + '">ช่วงวัน</button>' +
+      wrap.innerHTML = '<div class="dashboard-avail-card bg-white dark:bg-slate-800 p-3 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm h-full flex flex-col min-h-0">' +
+        '<div class="flex items-center justify-between gap-1 mb-1 shrink-0">' +
+        '<h3 class="text-sm font-semibold text-purple-600 dark:text-purple-400 whitespace-nowrap">🔎 ตรวจหารถว่าง</h3>' +
+        '<div class="flex gap-1">' +
+        '<button type="button" onclick="window.setDashboardAvailMode(\'single\')" class="px-2 py-1 rounded-md text-[11px] font-medium transition ' + (dashboardAvailMode === 'single' ? 'bg-purple-500 text-white' : 'bg-purple-50 text-purple-700 dark:bg-slate-700 dark:text-purple-300') + '">วันเดียว</button>' +
+        '<button type="button" onclick="window.setDashboardAvailMode(\'range\')" class="px-2 py-1 rounded-md text-[11px] font-medium transition ' + (dashboardAvailMode === 'range' ? 'bg-purple-500 text-white' : 'bg-purple-50 text-purple-700 dark:bg-slate-700 dark:text-purple-300') + '">ช่วงวัน</button>' +
         '</div></div>' +
-        '<div class="flex flex-col sm:flex-row gap-3">' +
-        '<div class="shrink-0 sm:w-[17.5rem]">' + buildAvailCalendarHtml() +
-        '<p class="text-[11px] text-slate-400 mt-1 text-center">' + escapeHtml(rangeHint) + '</p></div>' +
-        '<div class="flex-1 min-w-0 max-h-52 overflow-y-auto">' +
-        (rangeError ? '<p class="text-xs text-red-500 mb-2">' + escapeHtml(rangeError) + '</p>' : '') +
-        '<p class="text-xs text-slate-600 dark:text-slate-300 mb-1">ช่วง: <strong>' + escapeHtml(periodLabel) + '</strong></p>' +
-        '<p class="text-xs text-green-700 dark:text-green-400 font-medium mb-1">รถว่าง ' + availableCars.length + ' / ' + activeCars.length + ' คัน</p>' +
-        '<div class="flex flex-wrap gap-1.5 mb-1">' + availHtml + '</div>' + busyHtml + '</div></div></div>';
+        '<div class="flex flex-col xl:flex-row gap-2 min-h-0 flex-1 overflow-hidden">' +
+        '<div class="shrink-0 mx-auto xl:mx-0">' + buildAvailCalendarHtml() +
+        '<p class="text-[10px] text-slate-400 text-center leading-tight">' + escapeHtml(rangeHint) + '</p></div>' +
+        '<div class="flex-1 min-w-0 overflow-y-auto text-xs">' +
+        (rangeError ? '<p class="text-red-500 mb-1">' + escapeHtml(rangeError) + '</p>' : '') +
+        '<p class="text-slate-600 dark:text-slate-300 mb-0.5">ช่วง: <strong>' + escapeHtml(periodLabel) + '</strong></p>' +
+        '<p class="text-green-700 dark:text-green-400 font-medium mb-0.5">ว่าง ' + availableCars.length + '/' + activeCars.length + '</p>' +
+        '<div class="flex flex-wrap gap-1">' + availHtml + '</div>' + busyHtml + '</div></div></div>';
 
     }
     window.setDashboardAvailMode = function(mode) {
@@ -1106,9 +1113,9 @@
       });
       let platesHtml = availablePlates.length > 0 ? availablePlates.map(p => `<span class="inline-flex flex-col items-center bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 px-2 py-1.5 rounded-lg text-xs font-semibold leading-tight"><span>${escapeHtml(p.plate)}</span><span class="text-xs font-normal opacity-90 mt-0.5">${escapeHtml(p.idleLabel)}</span></span>`).join(' ') : `<span class="text-sm text-slate-400">ไม่มีรถว่าง</span>`;
       document.getElementById('dashboard-stat-active').innerHTML =
-        '<div class="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col items-center justify-center h-full min-h-[6.5rem]"><p class="text-slate-500 dark:text-slate-400 text-xs text-center">กำลังใช้งานในขณะนี้</p><p class="text-3xl font-bold text-orange-500 mt-1">' + activeCarsCount + '</p></div>';
+        '<div class="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col items-center justify-center h-full min-h-[5rem]"><p class="text-slate-500 dark:text-slate-400 text-xs text-center">กำลังใช้งานในขณะนี้</p><p class="text-2xl font-bold text-orange-500 mt-1">' + activeCarsCount + '</p></div>';
       document.getElementById('dashboard-stat-available').innerHTML =
-        '<div class="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm h-full"><p class="text-slate-500 dark:text-slate-400 text-xs mb-2">รถว่าง ณ ขณะนี้ (' + availablePlates.length + ' คัน)</p><div class="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto">' + platesHtml + '</div></div>';
+        '<div class="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm h-full"><p class="text-slate-500 dark:text-slate-400 text-xs mb-2">รถว่าง ณ ขณะนี้ (' + availablePlates.length + ' คัน)</p><div class="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">' + platesHtml + '</div></div>';
       document.getElementById('dashboard-stat-dept').innerHTML =
         '<div class="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm h-full">' +
           '<div class="flex justify-between items-center gap-2 mb-1">' +
@@ -1117,7 +1124,7 @@
               monthOptions.map(m => '<option value="' + m + '" ' + (m === selectedMonth ? 'selected' : '') + '>' + formatThaiMonthYearBE(m) + '</option>').join('') +
             '</select>' +
           '</div>' +
-          '<div class="h-28"><canvas id="dashboardDeptChart"></canvas></div>' +
+          '<div class="h-24"><canvas id="dashboardDeptChart"></canvas></div>' +
         '</div>';
 
       const chartCanvas = document.getElementById('dashboardDeptChart');
