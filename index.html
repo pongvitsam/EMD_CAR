@@ -44,25 +44,31 @@
     .fc-theme-standard th { padding: 12px 0; background: #faf5ff; color: #7e22ce; }
     .dark .fc-theme-standard th { background: #334155; color: #e2e8f0; }
     .fc-daygrid-day-frame { border-radius: 0.75rem; margin: 2px; border: 1px solid transparent; }
-    #calendar.calendar-no-vscroll .fc-scroller,
-    #calendar.calendar-no-vscroll .fc-scroller-liquid-absolute {
-      overflow: hidden !important;
+    #calendar.calendar-month-expand .fc-scroller,
+    #calendar.calendar-month-expand .fc-scroller-liquid-absolute {
+      overflow: visible !important;
     }
-    #calendar.calendar-no-vscroll .fc-daygrid-day-frame,
-    #calendar.calendar-no-vscroll .fc-daygrid-day-events,
-    #calendar.calendar-no-vscroll .fc-daygrid-day-bottom {
-      overflow: hidden;
+    #calendar.calendar-month-expand .fc-daygrid-day-frame {
+      min-height: 5.5rem;
     }
-    #calendar.calendar-no-vscroll .fc-daygrid-event,
-    #calendar.calendar-no-vscroll .fc-event-title {
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+    #calendar.calendar-month-expand .fc-daygrid-day-events {
+      min-height: 1.5rem;
     }
-    #calendar.calendar-no-vscroll .fc-event {
+    #calendar.calendar-month-expand .fc-daygrid-event-harness {
+      margin-top: 1px;
+    }
+    #calendar.calendar-month-expand .fc-daygrid-event,
+    #calendar.calendar-month-expand .fc-event-title {
+      white-space: normal;
+      line-height: 1.2;
+    }
+    #calendar.calendar-month-expand .fc-event {
       font-size: 0.72rem !important;
-      padding: 2px 6px !important;
-      line-height: 1.25;
+      padding: 2px 8px !important;
+    }
+    .calendar-panel.calendar-panel--grow {
+      height: auto;
+      max-height: none;
     }
     #calendar.calendar-allow-vscroll .fc-scroller {
       overflow-y: auto !important;
@@ -73,11 +79,10 @@
     .fc-button { border-radius: 999px !important; padding: 0.5rem 1.25rem !important; }
     
     .fc-list-event .fc-list-event-title,
-    .fc-list-event .fc-list-event-title a,
-    .fc-list-event .fc-list-event-time { color: #475569 !important; }
-    .dark .fc-list-event .fc-list-event-title,
-    .dark .fc-list-event .fc-list-event-title a,
-    .dark .fc-list-event .fc-list-event-time { color: #f8fafc !important; }
+    .fc-list-event .fc-list-event-title a { font-weight: 600; }
+    .fc-list-event .fc-list-event-time { color: #64748b !important; }
+    .dark .fc-list-event .fc-list-event-time { color: #94a3b8 !important; }
+    .fc-list-event .fc-list-event-dot { border-width: 8px; }
     .fc-list-day-cushion { background-color: #f8fafc !important; }
     .dark .fc-list-day-cushion { background-color: #334155 !important; }
     .skeleton { animation: pulse 1.2s ease-in-out infinite; background: linear-gradient(90deg, #e2e8f0, #f1f5f9, #e2e8f0); background-size: 200% 100%; }
@@ -537,26 +542,43 @@
       const pad = n => n < 10 ? '0' + n : n;
       return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:00`;
     };
+    function mapBookingToCalendarEvent(b) {
+      const displayName = getBookingDisplayName(b);
+      const color = getColorForUser(b);
+      const dest = (b.dest && String(b.dest).trim()) ? String(b.dest).trim() : '-';
+      return {
+        id: b.id,
+        title: `${displayName} → ${dest}`,
+        start: toCalendarDateTime(b.start),
+        end: toCalendarDateTime(b.end),
+        backgroundColor: color,
+        borderColor: color,
+        textColor: '#ffffff',
+        display: 'block',
+        extendedProps: { userColor: color }
+      };
+    }
+    function mountCalendarEventStyle(info) {
+      const color = info.event.backgroundColor || (info.event.extendedProps && info.event.extendedProps.userColor);
+      if (!color) return;
+      if (String(info.view.type).indexOf('list') === 0) {
+        const dot = info.el.querySelector('.fc-list-event-dot');
+        if (dot) { dot.style.borderColor = color; dot.style.backgroundColor = color; }
+        const link = info.el.querySelector('.fc-list-event-title a');
+        const title = info.el.querySelector('.fc-list-event-title');
+        if (link) { link.style.color = color; link.style.fontWeight = '600'; }
+        else if (title) { title.style.color = color; title.style.fontWeight = '600'; }
+        info.el.style.borderLeft = '3px solid ' + color;
+      } else {
+        info.el.style.backgroundColor = color;
+        info.el.style.borderColor = color;
+      }
+    }
     function refreshCalendarEvents(bookings) {
       if (!calendar) return;
       calendar.removeAllEvents();
-      const nextEvents = bookings.map(b => {
-        const displayName = getBookingDisplayName(b);
-        const color = getColorForUser(b);
-        const dest = (b.dest && String(b.dest).trim()) ? String(b.dest).trim() : '-';
-        return {
-          id: b.id,
-          title: `${displayName} → ${dest}`,
-          start: toCalendarDateTime(b.start),
-          end: toCalendarDateTime(b.end),
-          backgroundColor: color,
-          borderColor: color,
-          textColor: '#ffffff',
-          display: 'block'
-        };
-      });
-      calendar.addEventSource(nextEvents);
-      setTimeout(() => calendar.updateSize(), 50);
+      calendar.addEventSource(bookings.map(mapBookingToCalendarEvent));
+      setTimeout(() => calendar.updateSize(), 80);
     }
     window.filteredBookingsForExport = [];
     function getCalendarInitialDetailHtml() {
@@ -1395,48 +1417,40 @@
 
     function applyCalendarScrollMode(viewType) {
       const el = document.getElementById('calendar');
+      const panel = el && el.closest('.calendar-panel');
       if (!el) return;
       const isList = String(viewType || '').indexOf('list') === 0;
-      el.classList.toggle('calendar-no-vscroll', !isList);
+      el.classList.toggle('calendar-month-expand', !isList);
       el.classList.toggle('calendar-allow-vscroll', isList);
-      if (calendar) calendar.setOption('height', '100%');
+      if (panel) panel.classList.toggle('calendar-panel--grow', !isList);
+      if (calendar) {
+        calendar.setOption('height', isList ? '100%' : 'auto');
+        setTimeout(() => calendar.updateSize(), 80);
+      }
     }
 
    function setupCalendar(bookings) {
       if(calendar) calendar.destroy();
       const initialView = window.innerWidth < 768 ? 'listMonth' : 'dayGridMonth';
+      const isListInitial = initialView.indexOf('list') === 0;
       calendar = new FullCalendar.Calendar(document.getElementById('calendar'), {
         initialView: initialView,
         headerToolbar: { left: 'prev,next', center: 'title', right: 'dayGridMonth,listMonth' },
         locale: 'th',
-        height: '100%',
+        height: isListInitial ? '100%' : 'auto',
         views: {
           dayGridMonth: {
             expandRows: true,
             fixedWeekNumber: true,
-            dayMaxEvents: 2,
-            dayMaxEventRows: 2,
-            moreLinkClick: 'popover'
+            dayMaxEvents: false,
+            dayMaxEventRows: false
           },
           listMonth: { height: '100%' }
         },
         datesSet: function(info) { applyCalendarScrollMode(info.view.type); },
-        displayEventTime: false, 
-        events: bookings.map(b => {
-          const displayName = getBookingDisplayName(b);
-          const color = getColorForUser(b);
-          const dest = (b.dest && String(b.dest).trim()) ? String(b.dest).trim() : '-';
-          return {
-            id: b.id,
-            title: `${displayName} → ${dest}`,
-            start: toCalendarDateTime(b.start),
-            end: toCalendarDateTime(b.end),
-            backgroundColor: color,
-            borderColor: color,
-            textColor: '#ffffff',
-            display: 'block'
-          };
-        }),
+        displayEventTime: false,
+        eventDidMount: mountCalendarEventStyle,
+        events: bookings.map(mapBookingToCalendarEvent),
         eventClick: info => {
           const b = appData.bookings.find(x => x.id === info.event.id);
           if (!b) return;
