@@ -969,8 +969,18 @@
         const nextDueText = (parseFloat(item.nextDueKm) || 0).toLocaleString();
         const byText = item.serviceBy ? (' โดย ' + escapeHtml(item.serviceBy)) : '';
         return '<p class="text-xs text-slate-600 dark:text-slate-300"><span class="font-medium text-purple-700 dark:text-purple-300">' + label + ':</span> ' +
-          escapeHtml(dateText) + ' | ' + kmText + ' กม. | รอบถัดไป ' + nextDueText + ' กม.' + byText + '</p>';
+          escapeHtml(dateText) + ' | ' + kmText + ' กม. | รอบถัดไป ' + nextDueText + ' กม.' + byText +
+          ' <button type="button" onclick="window.editVehicleServiceHistory(\'' + escapeHtml(car.id) + '\',' + idx + ')" class="ml-1 text-[11px] text-blue-600 hover:text-blue-700 underline">แก้ไข</button></p>';
       }).join('');
+    }
+    function resetVehicleServiceHistoryEditor(card) {
+      if (!card) return;
+      const idxEl = card.querySelector('.vmgr-history-edit-index');
+      const stateEl = card.querySelector('.vmgr-history-edit-state');
+      const btnEl = card.querySelector('.vmgr-service-save-btn');
+      if (idxEl) idxEl.value = '';
+      if (stateEl) stateEl.textContent = '';
+      if (btnEl) btnEl.textContent = 'บันทึกเข้าศูนย์ + ตั้งรอบใหม่';
     }
     function initVehicleManagerDatePickers(root) {
       if (!root || !window.flatpickr || !window.syncBuddhistDateAll) return;
@@ -1034,7 +1044,10 @@
           '<label class="block text-xs">กม.เมื่อนำรถเข้าเช็คระยะ</label><input type="number" class="vmgr-service-km w-full px-3 py-2 rounded-lg border dark:bg-slate-700 dark:border-slate-600" value="' + info.currentKm + '">' +
           '<label class="block text-xs">ผู้นำรถเข้าเช็คระยะ</label><input type="text" class="vmgr-service-by w-full px-3 py-2 rounded-lg border dark:bg-slate-700 dark:border-slate-600" list="user-list" value="">' +
           '<label class="block text-xs">กม.ครบรอบถัดไป (ว่าง = กม.เข้าศูนย์ + ระยะต่อรอบ)</label><input type="number" class="vmgr-next-due-km w-full px-3 py-2 rounded-lg border dark:bg-slate-700 dark:border-slate-600" placeholder="อัตโนมัติ">' +
-          '<button type="button" onclick="window.saveVehicleServiceRecord(\'' + car.id + '\')" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium py-2 rounded-lg">บันทึกเข้าศูนย์ + ตั้งรอบใหม่</button>' +
+          '<input type="hidden" class="vmgr-history-edit-index" value="">' +
+          '<p class="vmgr-history-edit-state text-xs text-blue-700 dark:text-blue-300"></p>' +
+          '<button type="button" onclick="window.saveVehicleServiceRecord(\'' + car.id + '\')" class="vmgr-service-save-btn w-full bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium py-2 rounded-lg">บันทึกเข้าศูนย์ + ตั้งรอบใหม่</button>' +
+          '<button type="button" onclick="window.cancelVehicleServiceHistoryEdit(\'' + car.id + '\')" class="w-full bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-medium py-2 rounded-lg">ยกเลิกการแก้ไขรายการประวัติ</button>' +
           '</div></div>' +
           '<div class="mt-4 bg-purple-50 dark:bg-purple-900/20 rounded-xl p-4 border border-purple-100 dark:border-purple-800/40">' +
           '<p class="text-sm font-semibold text-purple-700 dark:text-purple-300 mb-2">🧾 ประวัติเช็คระยะ</p>' + historyHtml + '</div>' +
@@ -1050,6 +1063,7 @@
         if (dateEl && car.serviceLastDate) dateEl.value = String(car.serviceLastDate).substring(0, 10);
         const byEl = card.querySelector('.vmgr-service-by');
         if (byEl && car.serviceLastBy) byEl.value = car.serviceLastBy;
+        resetVehicleServiceHistoryEditor(card);
       });
       initVehicleManagerDatePickers(wrap);
     }
@@ -1079,6 +1093,7 @@
       const svcDate = card.querySelector('.vmgr-service-date').value;
       const svcKm = parseFloat(card.querySelector('.vmgr-service-km').value);
       const svcBy = card.querySelector('.vmgr-service-by').value.trim();
+      const editIndex = card.querySelector('.vmgr-history-edit-index').value;
       const intervalKm = parseFloat(card.querySelector('.vmgr-interval-km').value) || parseFloat(car.serviceIntervalKm) || 10000;
       let nextDue = card.querySelector('.vmgr-next-due-km').value;
       if (!svcDate || isNaN(svcKm)) {
@@ -1090,11 +1105,43 @@
         id: vehicleId, plate: car.plate,
         serviceLastDate: svcDate, serviceLastKm: svcKm, serviceLastBy: svcBy,
         serviceMile: nextDue, serviceIntervalKm: intervalKm,
+        serviceHistoryEditIndex: editIndex,
         managementAction: 'บันทึกเข้าศูนย์เช็คระยะ'
       }], adminToken).then(function (res) {
         showToast(res.msg, res.success);
         if (res.success) reloadAfterMutation();
       }).catch(function (err) { Swal.fire('ผิดพลาด', err.message || '', 'error'); });
+    };
+    window.editVehicleServiceHistory = function (vehicleId, historyIndex) {
+      const card = getVehicleManagerCard(vehicleId);
+      const car = appData.vehicles.find(v => v.id === vehicleId);
+      if (!card || !car) return;
+      const history = Array.isArray(car.serviceHistory) ? car.serviceHistory : [];
+      const item = history[historyIndex];
+      if (!item) return;
+      const dateEl = card.querySelector('.vmgr-service-date');
+      const kmEl = card.querySelector('.vmgr-service-km');
+      const byEl = card.querySelector('.vmgr-service-by');
+      const nextDueEl = card.querySelector('.vmgr-next-due-km');
+      const intervalEl = card.querySelector('.vmgr-interval-km');
+      const idxEl = card.querySelector('.vmgr-history-edit-index');
+      const stateEl = card.querySelector('.vmgr-history-edit-state');
+      const btnEl = card.querySelector('.vmgr-service-save-btn');
+      if (dateEl) dateEl.value = item.serviceDate || '';
+      if (kmEl) kmEl.value = parseFloat(item.serviceKm) || '';
+      if (byEl) byEl.value = item.serviceBy || '';
+      if (nextDueEl) nextDueEl.value = parseFloat(item.nextDueKm) || '';
+      if (intervalEl && item.intervalKm) intervalEl.value = parseFloat(item.intervalKm) || '';
+      if (idxEl) idxEl.value = String(historyIndex);
+      if (stateEl) stateEl.textContent = 'กำลังแก้ไขรายการประวัติ #' + (historyIndex + 1);
+      if (btnEl) btnEl.textContent = 'บันทึกการแก้ไขประวัติ';
+      const fp = dateEl && dateEl._flatpickr;
+      if (fp && item.serviceDate) fp.setDate(item.serviceDate, true, 'Y-m-d');
+    };
+    window.cancelVehicleServiceHistoryEdit = function (vehicleId) {
+      const card = getVehicleManagerCard(vehicleId);
+      if (!card) return;
+      resetVehicleServiceHistoryEditor(card);
     };
     window.saveVehicleRemarks = function (vehicleId) {
       if (!isAdmin || !adminToken) return;

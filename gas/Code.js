@@ -124,6 +124,18 @@ function parseVehicleServiceHistory_(value) {
   }
 }
 
+function normalizeServiceHistoryItem_(item, fallbackIntervalKm) {
+  const safeInterval = parseFloat(fallbackIntervalKm) || DEFAULT_SERVICE_INTERVAL_KM;
+  return {
+    serviceDate: String(item && item.serviceDate ? item.serviceDate : ''),
+    serviceKm: parseFloat(item && item.serviceKm) || 0,
+    nextDueKm: parseFloat(item && item.nextDueKm) || 0,
+    serviceBy: String(item && item.serviceBy ? item.serviceBy : ''),
+    intervalKm: parseFloat(item && item.intervalKm) || safeInterval,
+    recordedAt: String(item && item.recordedAt ? item.recordedAt : '')
+  };
+}
+
 function buildVehicleRowValues_(form, row, imgUrl, activeStatus) {
   const safeEmail = vehicleFormField_(form, 'email', row, 4, '');
   const safePass = vehicleFormField_(form, 'pass', row, 5, '');
@@ -462,15 +474,32 @@ function saveVehicle(form) {
             && form.serviceLastKm !== undefined
             && form.serviceMile !== undefined;
           if (isServiceRecordUpdate) {
-            const history = parseVehicleServiceHistory_(row[17]);
-            history.unshift({
+            const history = parseVehicleServiceHistory_(row[17]).map(function (item) {
+              return normalizeServiceHistoryItem_(item, form.serviceIntervalKm);
+            });
+            const editIndexRaw = Number(form.serviceHistoryEditIndex);
+            const hasEditIndex = !isNaN(editIndexRaw) && editIndexRaw >= 0 && editIndexRaw < history.length;
+            const editedItem = {
               serviceDate: String(form.serviceLastDate || ''),
               serviceKm: parseFloat(form.serviceLastKm) || 0,
               nextDueKm: parseFloat(form.serviceMile) || 0,
               serviceBy: String(form.serviceLastBy || ''),
               intervalKm: parseFloat(form.serviceIntervalKm) || DEFAULT_SERVICE_INTERVAL_KM,
               recordedAt: new Date().toISOString()
-            });
+            };
+            if (hasEditIndex) {
+              history[editIndexRaw] = editedItem;
+            } else {
+              history.unshift(editedItem);
+            }
+            if (history.length > 0) {
+              const latest = normalizeServiceHistoryItem_(history[0], form.serviceIntervalKm);
+              form.serviceLastDate = latest.serviceDate;
+              form.serviceLastKm = latest.serviceKm;
+              form.serviceLastBy = latest.serviceBy;
+              form.serviceMile = latest.nextDueKm;
+              form.serviceIntervalKm = latest.intervalKm;
+            }
             form.serviceHistoryJson = JSON.stringify(history.slice(0, 30));
           }
           if (!imgUrl) imgUrl = row[2] || '';
