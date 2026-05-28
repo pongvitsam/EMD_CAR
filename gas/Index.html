@@ -1045,7 +1045,6 @@
           '<button type="button" onclick="window.saveVehicleRemarks(\'' + car.id + '\')" class="shrink-0 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium">บันทึก</button></div></div>' +
           '</div>';
       }).join('');
-      wrap.innerHTML = wrap.innerHTML.split('</div>').join('</div>').split('<motion>').join('<div>')
       cars.forEach(function (car) {
         const card = wrap.querySelector('[data-vehicle-id="' + car.id + '"]');
         if (!card) return;
