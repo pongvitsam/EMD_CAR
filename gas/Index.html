@@ -977,6 +977,25 @@
       const nextRoundKm = lastKm > 0 ? lastKm + intervalKm : (dueKm > 0 ? dueKm : null);
       return { dueKm, currentKm, intervalKm, lastKm, remaining, isOverdue, isWarning, estimatedNextDate, nextRoundKm };
     }
+    function formatVehicleServiceHistoryHtml(car) {
+      const history = Array.isArray(car.serviceHistory) ? car.serviceHistory : [];
+      const normalized = history.filter(item => item && item.serviceDate).slice(0, 8);
+      if (!normalized.length) {
+        if (!car.serviceLastDate) return '<p class="text-xs text-slate-400">ยังไม่มีประวัติเข้าศูนย์</p>';
+        const fallbackLine = formatThaiDate(car.serviceLastDate) + ' | ' + (parseFloat(car.serviceLastKm) || 0).toLocaleString() + ' กม.' +
+          ' | รอบถัดไป ' + (parseFloat(car.serviceMile) || 0).toLocaleString() + ' กม.';
+        return '<p class="text-xs text-slate-500">' + escapeHtml(fallbackLine) + '</p>';
+      }
+      return normalized.map(function (item, idx) {
+        const label = idx === 0 ? 'ล่าสุด' : ('ก่อนหน้า ' + idx);
+        const dateText = formatThaiDate(item.serviceDate);
+        const kmText = (parseFloat(item.serviceKm) || 0).toLocaleString();
+        const nextDueText = (parseFloat(item.nextDueKm) || 0).toLocaleString();
+        const byText = item.serviceBy ? (' โดย ' + escapeHtml(item.serviceBy)) : '';
+        return '<p class="text-xs text-slate-600 dark:text-slate-300"><span class="font-medium text-purple-700 dark:text-purple-300">' + label + ':</span> ' +
+          escapeHtml(dateText) + ' | ' + kmText + ' กม. | รอบถัดไป ' + nextDueText + ' กม.' + byText + '</p>';
+      }).join('');
+    }
     function initVehicleManagerDatePickers(root) {
       if (!root || !window.flatpickr || !window.syncBuddhistDateAll) return;
       root.querySelectorAll('.vmgr-service-date').forEach(function (el) {
@@ -1020,6 +1039,7 @@
         const nextRound = info.nextRoundKm
           ? '<p class="text-xs text-purple-700 dark:text-purple-300">รอบถัดไป (หลังเช็คล่าสุด + ระยะ): <b>' + info.nextRoundKm.toLocaleString() + ' กม.</b></p>'
           : '';
+        const historyHtml = formatVehicleServiceHistoryHtml(car);
         return '<div class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 p-5 shadow-sm" data-vehicle-id="' + escapeHtml(car.id) + '">' +
           '<div class="flex flex-wrap items-start justify-between gap-2 mb-3">' +
           '<div><h3 class="text-lg font-semibold text-purple-700 dark:text-purple-300">' + escapeHtml(car.plate) + ' <span class="text-xs font-normal text-slate-400">(' + escapeHtml(car.type) + ')</span></h3>' +
@@ -1040,6 +1060,8 @@
           '<label class="block text-xs">กม.ครบรอบถัดไป (ว่าง = กม.เข้าศูนย์ + ระยะต่อรอบ)</label><input type="number" class="vmgr-next-due-km w-full px-3 py-2 rounded-lg border dark:bg-slate-700 dark:border-slate-600" placeholder="อัตโนมัติ">' +
           '<button type="button" onclick="window.saveVehicleServiceRecord(\'' + car.id + '\')" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium py-2 rounded-lg">บันทึกเข้าศูนย์ + ตั้งรอบใหม่</button>' +
           '</div></div>' +
+          '<div class="mt-4 bg-purple-50 dark:bg-purple-900/20 rounded-xl p-4 border border-purple-100 dark:border-purple-800/40">' +
+          '<p class="text-sm font-semibold text-purple-700 dark:text-purple-300 mb-2">🧾 ประวัติเช็คระยะ</p>' + historyHtml + '</div>' +
           '<div class="mt-4"><label class="block text-sm font-medium text-blue-700 dark:text-blue-300 mb-1">📌 หมายเหตุ (แสดงหน้าแรก)</label>' +
           '<div class="flex gap-2"><input type="text" class="vmgr-remarks flex-1 px-3 py-2 rounded-lg border dark:bg-slate-700 dark:border-slate-600" value="' + escapeHtml(car.remarks || '') + '">' +
           '<button type="button" onclick="window.saveVehicleRemarks(\'' + car.id + '\')" class="shrink-0 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium">บันทึก</button></div></div>' +
