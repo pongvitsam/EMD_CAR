@@ -493,6 +493,11 @@
           <label class="block text-sm font-medium mb-1">ข้อความประกาศที่วิ่งด้านบน</label>
           <textarea id="st-banner-text" rows="3" class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600"></textarea>
         </div>
+        <div class="border-t border-slate-200 dark:border-slate-600 pt-4 mt-2">
+          <label class="block text-sm font-medium mb-1 text-orange-700 dark:text-orange-300">ยกเว้นแจ้งเตือนไมล์ (ไม่เด้งเตือนคนเหล่านี้)</label>
+          <p class="text-xs text-slate-500 mb-2">เลือกจากรายชื่อในระบบ — ใช้กับการแจ้งเตือนคิวที่ยังไม่บันทึกไมล์ภายใน 1 เดือน</p>
+          <div id="st-mileage-exempt-list" class="max-h-52 overflow-y-auto space-y-1 text-sm border border-slate-200 dark:border-slate-600 rounded-xl p-3 bg-slate-50 dark:bg-slate-700/50"></div>
+        </div>
         <p class="text-xs text-slate-400 mt-2">* หากต้องการเปลี่ยน Username/Password ให้ไปแก้ที่ชีต "Settings" โดยตรงในรูปแบบ Hash</p>
         <button type="submit" id="st-submit-btn" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-medium py-3 rounded-xl mt-4 transition">บันทึกการตั้งค่า</button>
       </form>
@@ -1709,16 +1714,53 @@
       switchTab('dashboard');
     }
 
+    function renderMileageExemptCheckboxes() {
+      const wrap = document.getElementById('st-mileage-exempt-list');
+      if (!wrap) return;
+      const exemptSet = new Set((appData.settings && appData.settings.mileageReminderExempt || []).map(function (n) {
+        return normalizeUserNameKey(n);
+      }));
+      const names = (appData.names || []).slice().sort(function (a, b) {
+        return String(a.fullName).localeCompare(String(b.fullName), 'th');
+      });
+      if (!names.length) {
+        wrap.innerHTML = '<p class="text-slate-400 text-center py-2">ยังไม่มีรายชื่อในระบบ</p>';
+        return;
+      }
+      wrap.innerHTML = names.map(function (n) {
+        const full = String(n.fullName || '').trim();
+        const checked = exemptSet.has(normalizeUserNameKey(full)) ? ' checked' : '';
+        const id = 'st-exempt-' + encodeURIComponent(full).replace(/%/g, '_');
+        return '<label class="flex items-center gap-2 py-1 cursor-pointer hover:bg-white/60 dark:hover:bg-slate-600/40 rounded px-1">' +
+          '<input type="checkbox" class="st-mileage-exempt-cb rounded text-orange-500" data-full-name="' + escapeHtml(full) + '" id="' + id + '"' + checked + '>' +
+          '<span>' + escapeHtml(full) + (n.dept ? ' <span class="text-slate-400">(' + escapeHtml(n.dept) + ')</span>' : '') + '</span></label>';
+      }).join('');
+    }
+
+    function collectMileageExemptFromForm() {
+      const list = [];
+      document.querySelectorAll('.st-mileage-exempt-cb:checked').forEach(function (el) {
+        const name = el.getAttribute('data-full-name');
+        if (name) list.push(name);
+      });
+      return list;
+    }
+
     window.openAdminSettings = function() {
       document.getElementById('st-banner-status').value = appData.settings.bannerStatus || 'OFF';
       document.getElementById('st-banner-text').value = appData.settings.bannerText || '';
+      renderMileageExemptCheckboxes();
       document.getElementById('settings-modal').style.display = 'flex';
     };
 
     window.saveSettings = function(e) {
       e.preventDefault();
       const btn = document.getElementById('st-submit-btn'); btn.innerText = 'กำลังบันทึก...'; btn.disabled = true;
-      const obj = { status: document.getElementById('st-banner-status').value, text: document.getElementById('st-banner-text').value };
+      const obj = {
+        status: document.getElementById('st-banner-status').value,
+        text: document.getElementById('st-banner-text').value,
+        mileageReminderExempt: collectMileageExemptFromForm()
+      };
       apiCall('saveAdminSettings', [obj]).then(res => {
         showToast(res.msg, res.success); window.closeModal('settings-modal');
         reloadAfterMutation(); 
@@ -2709,6 +2751,7 @@
     };
 
     const MILEAGE_HOWTO_HTML = '<p class="text-sm text-slate-600 dark:text-slate-300 mt-3 pt-3 border-t border-slate-200 dark:border-slate-600 text-left"><strong>วิธีอัปเดต</strong><br>1. เปิดหน้าปฏิทิน &gt; เลือกวันที่ใช้รถ &gt; อัปเดตเลขไมล์</p>';
+    const MILEAGE_REMINDER_MONTH_MS = 30 * 24 * 60 * 60 * 1000;
     window._mileageSubmitAckKey = '';
     window._mileageNameAlertKey = '';
 
@@ -2717,23 +2760,40 @@
       return new Date(n.getFullYear(), n.getMonth(), n.getDate()).getTime();
     }
 
+    function getMileageReminderSinceMs() {
+      return Date.now() - MILEAGE_REMINDER_MONTH_MS;
+    }
+
     function isMileageReturnComplete(b) {
       const em = parseFloat(b && b.endMile);
       return !isNaN(em) && em > 0;
     }
 
-    function isBookingEndedBeforeToday(b) {
+    function isBookingInMileageReminderWindow(b) {
       const end = parseTimeSafe(b && b.end);
-      return end > 0 && end < getStartOfTodayMs();
+      if (!end) return false;
+      const todayStart = getStartOfTodayMs();
+      const since = getMileageReminderSinceMs();
+      return end < todayStart && end >= since;
+    }
+
+    function isBookerExemptFromMileageReminder(fullName) {
+      const key = normalizeUserNameKey(fullName);
+      if (!key) return false;
+      const exempt = (appData.settings && appData.settings.mileageReminderExempt) || [];
+      return exempt.some(function (name) {
+        return normalizeUserNameKey(name) === key;
+      });
     }
 
     function getPendingMileageBookingsForBooker(fullName, excludeBookingId) {
+      if (isBookerExemptFromMileageReminder(fullName)) return [];
       const key = normalizeUserNameKey(fullName);
       if (!key) return [];
       return appData.bookings.filter(function (b) {
         if (excludeBookingId && String(b.id) === String(excludeBookingId)) return false;
         if (getBookingFullName(b) !== key) return false;
-        if (!isBookingEndedBeforeToday(b)) return false;
+        if (!isBookingInMileageReminderWindow(b)) return false;
         return !isMileageReturnComplete(b);
       }).sort(function (a, b) { return parseTimeSafe(b.end) - parseTimeSafe(a.end); });
     }
@@ -2752,32 +2812,28 @@
       }).join('');
     }
 
-    async function showPendingMileageInfoOnNameSelect(bookings) {
+    function buildPendingMileageAlertHtml(bookings) {
       const dates = buildPendingMileageDateText(bookings);
-      await Swal.fire({
-        icon: 'warning',
-        title: 'ยังไม่ได้อัปเดตเลขไมล์',
-        html: '<p class="text-left">กรุณาอัปเดตเลขไมล์ ก่อน/หลังใช้งานในวันที่ <strong>' + escapeHtml(dates) + '</strong> เพื่อปิดการแจ้งเตือน</p>' +
-          '<ul class="text-sm list-disc pl-5 my-2 text-left">' + formatPendingMileageListHtml(bookings) + '</ul>' + MILEAGE_HOWTO_HTML,
-        confirmButtonText: 'รับทราบ',
-        confirmButtonColor: '#a855f7'
-      });
+      return '<p class="text-left">มีการใช้รถภายใน <strong>1 เดือนที่ผ่านมา</strong> ที่ยังไม่ได้บันทึกไมล์ กรุณาอัปเดตเลขไมล์ ก่อน/หลังใช้งานในวันที่ <strong>' + escapeHtml(dates) + '</strong> เพื่อปิดการแจ้งเตือน</p>' +
+        '<ul class="text-sm list-disc pl-5 my-2 text-left">' + formatPendingMileageListHtml(bookings) + '</ul>';
     }
 
-    async function requirePendingMileageCountdown(bookings) {
+    async function requirePendingMileageCountdown(bookings, options) {
+      options = options || {};
       const ackKey = getPendingMileageAckKey(bookings);
-      if (window._mileageSubmitAckKey === ackKey) return true;
-      const dates = buildPendingMileageDateText(bookings);
+      const ackProp = options.ackProp === 'name' ? '_mileageNameAlertKey' : '_mileageSubmitAckKey';
+      if (window[ackProp] === ackKey) return true;
+      const doneLabel = options.doneLabel || 'จองต่อ';
+      const waitDoneText = options.waitDoneText || 'แล้วจองต่อได้';
       let seconds = 10;
       const result = await Swal.fire({
         icon: 'warning',
         title: 'ยังไม่ได้อัปเดตเลขไมล์',
-        html: '<p class="text-left">กรุณาอัปเดตเลขไมล์ ก่อน/หลังใช้งานในวันที่ <strong>' + escapeHtml(dates) + '</strong> เพื่อปิดการแจ้งเตือน</p>' +
-          '<ul class="text-sm list-disc pl-5 my-2 text-left">' + formatPendingMileageListHtml(bookings) + '</ul>' +
-          '<p id="mile-countdown" class="text-lg font-bold text-red-600 dark:text-red-400 mt-3">รอ ' + seconds + ' วินาที แล้วจองต่อได้...</p>' + MILEAGE_HOWTO_HTML,
-        confirmButtonText: 'จองต่อ (' + seconds + ')',
-        showCancelButton: true,
-        cancelButtonText: 'ยกเลิก',
+        html: buildPendingMileageAlertHtml(bookings) +
+          '<p id="mile-countdown" class="text-lg font-bold text-red-600 dark:text-red-400 mt-3">รอ ' + seconds + ' วินาที ' + waitDoneText + '...</p>' + MILEAGE_HOWTO_HTML,
+        confirmButtonText: doneLabel + ' (' + seconds + ')',
+        showCancelButton: !!options.showCancel,
+        cancelButtonText: options.cancelText || 'ยกเลิก',
         allowOutsideClick: false,
         allowEscapeKey: false,
         confirmButtonColor: '#a855f7',
@@ -2789,10 +2845,10 @@
             seconds -= 1;
             if (el) {
               el.textContent = seconds > 0
-                ? 'รอ ' + seconds + ' วินาที แล้วจองต่อได้...'
-                : 'ดำเนินการจองต่อได้แล้ว';
+                ? 'รอ ' + seconds + ' วินาที ' + waitDoneText + '...'
+                : 'ดำเนินการต่อได้แล้ว';
             }
-            btn.textContent = seconds > 0 ? 'จองต่อ (' + seconds + ')' : 'จองต่อ';
+            btn.textContent = seconds > 0 ? doneLabel + ' (' + seconds + ')' : doneLabel;
             if (seconds <= 0) {
               clearInterval(window._mileageCountdownIv);
               window._mileageCountdownIv = null;
@@ -2808,7 +2864,7 @@
         }
       });
       if (result.isConfirmed) {
-        window._mileageSubmitAckKey = ackKey;
+        window[ackProp] = ackKey;
         return true;
       }
       return false;
@@ -2893,10 +2949,13 @@
       const currId = document.getElementById('bk-id').value;
       const pending = getPendingMileageBookingsForBooker(val, currId);
       if (!pending.length) return;
-      const alertKey = getPendingMileageAckKey(pending);
-      if (window._mileageNameAlertKey === alertKey) return;
-      window._mileageNameAlertKey = alertKey;
-      showPendingMileageInfoOnNameSelect(pending);
+      requirePendingMileageCountdown(pending, {
+        ackProp: 'name',
+        doneLabel: 'รับทราบ',
+        waitDoneText: 'แล้วดำเนินการต่อได้',
+        showCancel: true,
+        cancelText: 'ปิด'
+      });
     };
 
     window.showToast = (msg, succ = true) => {
@@ -2956,7 +3015,12 @@
         const bookerName = document.getElementById('bk-user').value.trim();
         const pending = getPendingMileageBookingsForBooker(bookerName, '');
         if (pending.length) {
-          const allowed = await requirePendingMileageCountdown(pending);
+          const allowed = await requirePendingMileageCountdown(pending, {
+            ackProp: 'submit',
+            doneLabel: 'จองต่อ',
+            waitDoneText: 'แล้วจองต่อได้',
+            showCancel: true
+          });
           if (!allowed) return;
         }
       }

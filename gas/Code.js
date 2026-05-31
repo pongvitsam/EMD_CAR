@@ -256,6 +256,7 @@ function setupDatabase() {
     sSheet.appendRow(['AdminPass', '03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4', 'รหัสผ่าน Admin (Hash SHA-256)']);
     sSheet.appendRow(['BannerStatus', 'ON', 'สถานะ Banner (ON/OFF)']);
     sSheet.appendRow(['BannerText', 'ยินดีต้อนรับสู่ระบบจองรถ EMD CAR!', 'ข้อความแจ้งเตือนที่แสดงวิ่งด้านบน']);
+    sSheet.appendRow(['MileageReminderExempt', '[]', 'รายชื่อยกเว้นแจ้งเตือนไมล์ (JSON array)']);
   }
 }
 
@@ -289,13 +290,27 @@ function buildAppPayload_(ss, includeLogs) {
   if (includeLogs) logs = readLogsFromSheet_(ss);
 
   const sData = getSheetOrThrow_(ss, 'Settings').getDataRange().getValues();
-  let settings = { bannerStatus: 'OFF', bannerText: '' };
+  let settings = { bannerStatus: 'OFF', bannerText: '', mileageReminderExempt: [] };
   for (let i = 1; i < sData.length; i++) {
     if (sData[i][0] === 'BannerStatus') settings.bannerStatus = sData[i][1];
     if (sData[i][0] === 'BannerText') settings.bannerText = sData[i][1];
+    if (sData[i][0] === 'MileageReminderExempt') settings.mileageReminderExempt = parseMileageReminderExempt_(sData[i][1]);
   }
 
   return { vehicles, bookings, names, logs, settings };
+}
+
+function parseMileageReminderExempt_(value) {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(String(value));
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map(function (n) {
+      return String(n || '').trim().replace(/\s+/g, ' ');
+    }).filter(function (n) { return n.length > 0; });
+  } catch (err) {
+    return [];
+  }
 }
 
 function readLogsFromSheet_(ss) {
@@ -409,17 +424,25 @@ function saveAdminSettings(form) {
     const sheet = getSheetOrThrow_(ss, 'Settings');
     const data = sheet.getDataRange().getValues();
     
-    let updatedStatus = false, updatedText = false;
+    let updatedStatus = false, updatedText = false, updatedExempt = false;
+    const exemptJson = form.mileageReminderExempt !== undefined
+      ? JSON.stringify(parseMileageReminderExempt_(form.mileageReminderExempt))
+      : null;
     for(let i=1; i<data.length; i++) {
       if(data[i][0] === 'BannerStatus') { sheet.getRange(i+1, 2).setValue(form.status); updatedStatus = true; }
       if(data[i][0] === 'BannerText') { sheet.getRange(i+1, 2).setValue(form.text); updatedText = true; }
+      if (exemptJson !== null && data[i][0] === 'MileageReminderExempt') {
+        sheet.getRange(i + 1, 2).setValue(exemptJson);
+        updatedExempt = true;
+      }
     }
     
     if(!updatedStatus) sheet.appendRow(['BannerStatus', form.status]);
     if(!updatedText) sheet.appendRow(['BannerText', form.text]);
+    if (exemptJson !== null && !updatedExempt) sheet.appendRow(['MileageReminderExempt', exemptJson]);
     clearAppCache_();
     
-    return { success: true, msg: 'อัปเดตแบนเนอร์เรียบร้อยครับ' };
+    return { success: true, msg: 'บันทึกการตั้งค่าระบบเรียบร้อยครับ' };
   } catch (error) { return { success: false, msg: error.message }; }
 }
 
