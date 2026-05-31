@@ -1047,6 +1047,7 @@
         el.value = Math.round(base + i * interval);
       });
       window.syncVehicleDueFromRound1(vehicleId);
+      window.onServiceRecordRoundChange(vehicleId);
     };
 
     window.syncVehicleDueFromRound1 = function (vehicleId) {
@@ -1063,7 +1064,57 @@
       const dueEl = card.querySelector('.vmgr-due-km');
       const r1 = card.querySelector('.vmgr-round-km[data-round="1"]');
       if (dueEl && r1) r1.value = dueEl.value;
+      window.onServiceRecordRoundChange(vehicleId);
     };
+
+    function getVehicleRoundPlanFromCard(card, car) {
+      const collected = collectVehicleRoundPlanFromCard(card);
+      if (collected.length) {
+        return collected.map(function (km, i) { return { n: i + 1, km: km, isCurrent: i === 0 }; });
+      }
+      const info = getVehicleServiceInfo(car);
+      return buildUpcomingServiceRounds(car, info, 5);
+    }
+
+    function applyServiceRecordRoundToForm(card, car, roundNumber) {
+      if (!card || !car) return;
+      const rounds = getVehicleRoundPlanFromCard(card, car);
+      if (!rounds.length) return;
+      const roundN = parseInt(roundNumber, 10) || 1;
+      const idx = Math.max(0, Math.min(rounds.length - 1, roundN - 1));
+      const round = rounds[idx];
+      const hintEl = card.querySelector('.vmgr-record-round-hint');
+      const dueHidden = card.querySelector('.vmgr-record-round-due');
+      const nextDueEl = card.querySelector('.vmgr-next-due-km');
+      const sel = card.querySelector('.vmgr-record-round');
+      if (sel && String(sel.value) !== String(round.n)) sel.value = String(round.n);
+      if (dueHidden) dueHidden.value = round.km;
+      if (hintEl) {
+        hintEl.textContent = 'บันทึกว่าเข้าเช็คระยะของรอบที่ ' + round.n + ' (กำหนดครบที่ ' + round.km.toLocaleString() + ' กม.)';
+      }
+      const nextRound = rounds[idx + 1];
+      if (nextDueEl && nextRound) nextDueEl.value = nextRound.km;
+    }
+
+    window.onServiceRecordRoundChange = function (vehicleId) {
+      const card = getVehicleManagerCard(vehicleId);
+      const car = appData.vehicles.find(function (v) { return v.id === vehicleId; });
+      if (!card || !car) return;
+      const sel = card.querySelector('.vmgr-record-round');
+      if (!sel) return;
+      applyServiceRecordRoundToForm(card, car, sel.value);
+    };
+
+    function formatServiceRecordRoundSelectHtml(car, info) {
+      const rounds = buildUpcomingServiceRounds(car, info, 5);
+      if (!rounds.length) {
+        return '<option value="1">รอบที่ 1 — ยังไม่ได้ตั้งแผนรอบ</option>';
+      }
+      return rounds.map(function (r) {
+        const label = 'รอบที่ ' + r.n + ' — ครบ ' + r.km.toLocaleString() + ' กม.' + (r.isCurrent ? ' (รอบปัจจุบัน)' : '');
+        return '<option value="' + r.n + '"' + (r.isCurrent ? ' selected' : '') + '>' + label + '</option>';
+      }).join('');
+    }
 
     function formatVehicleMgrStatusBadge(info) {
       const st = getVehicleServiceStatus(info);
@@ -1097,8 +1148,12 @@
       }
       const body = rows.map(function (item, idx) {
         const nextDueVal = Math.round(parseFloat(item.nextDueKm) || 0);
+        const roundLabel = item.roundNumber
+          ? 'รอบที่ ' + item.roundNumber + (item.roundDueKm ? ' (' + (parseFloat(item.roundDueKm) || 0).toLocaleString() + ' กม.)' : '')
+          : '-';
         return '<tr class="border-t border-slate-100 dark:border-slate-700">' +
           '<td class="p-2 whitespace-nowrap">' + escapeHtml(formatThaiDate(item.serviceDate)) + '</td>' +
+          '<td class="p-2 text-slate-600 dark:text-slate-300">' + escapeHtml(roundLabel) + '</td>' +
           '<td class="p-2 text-right">' + (parseFloat(item.serviceKm) || 0).toLocaleString() + '</td>' +
           '<td class="p-2">' + escapeHtml(item.serviceBy || '-') + '</td>' +
           '<td class="p-2 text-right"><input type="number" class="vmgr-hist-next-due w-full max-w-[7rem] ml-auto px-2 py-2 text-right text-base rounded-lg border dark:bg-slate-700 dark:border-slate-600" data-hist-idx="' + idx + '" value="' + nextDueVal + '"></td>' +
@@ -1108,7 +1163,7 @@
           '</tr>';
       }).join('');
       return '<div class="overflow-x-auto"><table class="w-full text-sm text-left"><thead class="bg-slate-50 dark:bg-slate-700 text-slate-600 dark:text-slate-300">' +
-        '<tr><th class="p-2">วันที่</th><th class="p-2 text-right">กม.เข้าเช็ค</th><th class="p-2">ผู้นำรถ</th><th class="p-2 text-right">รอบถัดไป (กม.)</th><th class="p-2 text-center">จัดการ</th></tr></thead><tbody>' +
+        '<tr><th class="p-2">วันที่</th><th class="p-2">รอบที่บันทึก</th><th class="p-2 text-right">กม.เข้าเช็ค</th><th class="p-2">ผู้นำรถ</th><th class="p-2 text-right">รอบถัดไป (กม.)</th><th class="p-2 text-center">จัดการ</th></tr></thead><tbody>' +
         body + '</tbody></table></div>';
     }
 
@@ -1120,6 +1175,12 @@
       if (idxEl) idxEl.value = '';
       if (stateEl) stateEl.textContent = '';
       if (btnEl) btnEl.textContent = 'บันทึกการเข้าเช็คระยะ';
+      const roundSel = card.querySelector('.vmgr-record-round');
+      if (roundSel) roundSel.value = '1';
+      const dueHidden = card.querySelector('.vmgr-record-round-due');
+      if (dueHidden) dueHidden.value = '';
+      const hintEl = card.querySelector('.vmgr-record-round-hint');
+      if (hintEl) hintEl.textContent = '';
     }
 
     function initVehicleManagerDatePickers(root) {
@@ -1174,6 +1235,11 @@
       const tabHidden = function (name) { return tab === name ? '' : ' hidden'; };
 
       const panelRecord = '<div class="vmgr-panel space-y-3 pt-3' + tabHidden('record') + '">' +
+          '<label class="block text-sm font-medium">บันทึกว่าเข้าเช็คระยะของรอบ</label>' +
+          '<select class="vmgr-record-round w-full px-4 py-3 text-base rounded-xl border dark:bg-slate-700 dark:border-slate-600" onchange="window.onServiceRecordRoundChange(\'' + car.id + '\')">' +
+          formatServiceRecordRoundSelectHtml(car, info) + '</select>' +
+          '<p class="vmgr-record-round-hint text-sm text-purple-700 dark:text-purple-300"></p>' +
+          '<input type="hidden" class="vmgr-record-round-due" value="">' +
           '<label class="block text-sm font-medium">วันที่นำรถเข้าเช็คระยะ</label><input type="text" class="vmgr-service-date w-full px-4 py-3 text-base rounded-xl border dark:bg-slate-700 dark:border-slate-600" placeholder="เลือกวันที่ (พ.ศ.)">' +
           '<label class="block text-sm font-medium">กม.เมื่อนำรถเข้าเช็คระยะ</label><input type="number" class="vmgr-service-km w-full px-4 py-3 text-base rounded-xl border dark:bg-slate-700 dark:border-slate-600" value="' + info.currentKm + '">' +
           '<label class="block text-sm font-medium">ผู้นำรถเข้าเช็คระยะ</label><input type="text" class="vmgr-service-by w-full px-4 py-3 text-base rounded-xl border dark:bg-slate-700 dark:border-slate-600" list="user-list" value="" placeholder="พิมพ์หรือเลือกชื่อ">' +
@@ -1271,6 +1337,9 @@
           }
           resetVehicleServiceHistoryEditor(card);
           initVehicleManagerDatePickers(card);
+          if (vehicleMgrActiveTab === 'record') {
+            window.onServiceRecordRoundChange(selectedCar.id);
+          }
         }
       }
     }
@@ -1346,8 +1415,15 @@
       const intervalEl = card.querySelector('.vmgr-interval-km');
       const intervalKm = parseFloat(intervalEl && intervalEl.value) || parseFloat(car.serviceIntervalKm) || 10000;
       let nextDue = card.querySelector('.vmgr-next-due-km').value;
+      const roundSel = card.querySelector('.vmgr-record-round');
+      const roundNumber = roundSel ? (parseInt(roundSel.value, 10) || 1) : 1;
+      const roundDueKm = parseFloat(card.querySelector('.vmgr-record-round-due').value) || 0;
       if (!svcDate || isNaN(svcKm)) {
         Swal.fire('กรุณากรอกข้อมูล', 'ระบุวันที่และกม.เมื่อนำรถเข้าเช็คระยะ', 'warning');
+        return;
+      }
+      if (!roundDueKm) {
+        Swal.fire('กรุณาเลือกรอบ', 'เลือกรอบที่เข้าเช็คระยะก่อนบันทึก', 'warning');
         return;
       }
       if (!nextDue) nextDue = String(Math.round(svcKm + intervalKm));
@@ -1355,6 +1431,8 @@
         id: vehicleId, plate: car.plate,
         serviceLastDate: svcDate, serviceLastKm: svcKm, serviceLastBy: svcBy,
         serviceMile: nextDue, serviceIntervalKm: intervalKm,
+        serviceRoundNumber: roundNumber,
+        serviceRoundDueKm: roundDueKm,
         serviceHistoryEditIndex: editIndex,
         managementAction: 'บันทึกเข้าศูนย์เช็คระยะ'
       }], adminToken).then(function (res) {
@@ -1388,6 +1466,9 @@
       if (idxEl) idxEl.value = String(historyIndex);
       if (stateEl) stateEl.textContent = 'กำลังแก้ไขรายการประวัติ #' + (historyIndex + 1);
       if (btnEl) btnEl.textContent = 'บันทึกการแก้ไขประวัติ';
+      const roundSel = card.querySelector('.vmgr-record-round');
+      if (roundSel && item.roundNumber) roundSel.value = String(item.roundNumber);
+      applyServiceRecordRoundToForm(card, car, item.roundNumber || roundSel.value || 1);
       initVehicleManagerDatePickers(card);
       const fp = dateEl && dateEl._flatpickr;
       if (fp && item.serviceDate) fp.setDate(item.serviceDate, true, 'Y-m-d');

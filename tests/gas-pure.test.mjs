@@ -79,4 +79,32 @@ describe('normalizeServiceHistoryItem_', () => {
     assert.equal(item.intervalKm, 12000);
     assert.equal(item.serviceKm, 0);
   });
+
+  it('preserves round fields when present', () => {
+    const item = normalizeServiceHistoryItem_({
+      serviceDate: '2026-01-01',
+      roundNumber: 2,
+      roundDueKm: 50000
+    }, 10000);
+    assert.equal(item.roundNumber, 2);
+    assert.equal(item.roundDueKm, 50000);
+  });
+});
+
+describe('applyServiceHistoryUpdate round fields', () => {
+  it('stores serviceRoundNumber and serviceRoundDueKm on new record', () => {
+    const { historyJson } = applyServiceHistoryUpdate('[]', {
+      serviceLastDate: '2026-05-01',
+      serviceLastKm: 48000,
+      serviceMile: 58000,
+      serviceLastBy: 'A',
+      serviceIntervalKm: 10000,
+      serviceRoundNumber: 3,
+      serviceRoundDueKm: 50000,
+      recordedAt: '2026-05-01T00:00:00.000Z'
+    });
+    const history = parseVehicleServiceHistory_(historyJson);
+    assert.equal(history[0].roundNumber, 3);
+    assert.equal(history[0].roundDueKm, 50000);
+  });
 });

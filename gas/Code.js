@@ -146,6 +146,8 @@ function normalizeServiceHistoryItem_(item, fallbackIntervalKm) {
     nextDueKm: parseFloat(item && item.nextDueKm) || 0,
     serviceBy: String(item && item.serviceBy ? item.serviceBy : ''),
     intervalKm: parseFloat(item && item.intervalKm) || safeInterval,
+    roundNumber: parseInt(item && item.roundNumber, 10) || 0,
+    roundDueKm: parseFloat(item && item.roundDueKm) || 0,
     recordedAt: String(item && item.recordedAt ? item.recordedAt : '')
   };
 }
@@ -529,6 +531,8 @@ function saveVehicle(form) {
               nextDueKm: parseFloat(form.serviceMile) || 0,
               serviceBy: String(form.serviceLastBy || ''),
               intervalKm: parseFloat(form.serviceIntervalKm) || DEFAULT_SERVICE_INTERVAL_KM,
+              roundNumber: parseInt(form.serviceRoundNumber, 10) || 0,
+              roundDueKm: parseFloat(form.serviceRoundDueKm) || 0,
               recordedAt: new Date().toISOString()
             };
             if (hasEditIndex) {
