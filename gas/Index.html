@@ -107,6 +107,34 @@
       min-height: 500px;
       max-height: 760px;
     }
+
+    .vmgr-toolbar input[type=search] { -webkit-appearance: none; }
+    .vmgr-filter-btn { padding: 0.5rem 1rem; border-radius: 999px; font-size: 0.875rem; font-weight: 500; background: #f1f5f9; color: #475569; }
+    .dark .vmgr-filter-btn { background: #334155; color: #cbd5e1; }
+    .vmgr-filter-btn-active { background: #a855f7; color: #fff; }
+    .dark .vmgr-filter-btn-active { background: #7c3aed; color: #fff; }
+    .vmgr-row { cursor: pointer; transition: background 0.15s; }
+    .vmgr-row:hover { background: #faf5ff; }
+    .dark .vmgr-row:hover { background: #2e1065; }
+    .vmgr-row-selected { background: #f3e8ff !important; }
+    .dark .vmgr-row-selected { background: #4c1d95 !important; }
+    .vmgr-badge { display: inline-block; font-size: 0.7rem; font-weight: 700; padding: 0.2rem 0.55rem; border-radius: 999px; white-space: nowrap; }
+    .vmgr-badge-ok { background: #dcfce7; color: #166534; }
+    .vmgr-badge-warning { background: #ffedd5; color: #c2410c; }
+    .vmgr-badge-overdue { background: #ef4444; color: #fff; }
+    .vmgr-badge-none { background: #e2e8f0; color: #64748b; }
+    .vmgr-remaining-big { font-size: 1.75rem; line-height: 1.2; }
+    @media (min-width: 768px) { .vmgr-remaining-big { font-size: 2rem; } }
+    .vmgr-progress { height: 12px; border-radius: 999px; background: #e2e8f0; overflow: hidden; }
+    .dark .vmgr-progress { background: #334155; }
+    .vmgr-progress-bar { height: 100%; border-radius: 999px; transition: width 0.3s; }
+    .vmgr-progress-bar-ok { background: linear-gradient(90deg, #22c55e, #16a34a); }
+    .vmgr-progress-bar-warning { background: linear-gradient(90deg, #f97316, #ea580c); }
+    .vmgr-progress-bar-overdue { background: linear-gradient(90deg, #ef4444, #dc2626); }
+    .vmgr-tab { border-radius: 0.75rem; font-weight: 600; font-size: 0.875rem; background: #f1f5f9; color: #475569; min-height: 3rem; }
+    .dark .vmgr-tab { background: #334155; color: #cbd5e1; }
+    .vmgr-tab-active { background: #a855f7 !important; color: #fff !important; }
+    .vmgr-table-wrap { -webkit-overflow-scrolling: touch; }
     .avail-picker { background: #fff; border-radius: 1rem; border: 1px solid #e2e8f0; padding: 1rem 1.1rem 1.15rem; box-shadow: 0 1px 3px rgba(15,23,42,.06); max-width: 320px; }
     .dark .avail-picker { background: #1e293b; border-color: #475569; }
     .avail-picker-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; padding: 0 .15rem; }
@@ -298,7 +326,7 @@
     <div id="view-vehicles" class="hidden space-y-6">
       <div class="border-b-2 border-purple-100 dark:border-purple-800 pb-3">
         <h2 class="text-2xl font-semibold text-purple-500 dark:text-purple-400">🛠️ จัดการยานพาหนะ</h2>
-        <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">ตั้งกม.ครบรอบเช็คระยะล่วงหน้า บันทึกเข้าศูนย์ และแก้ไขหมายเหตุบนหน้าแรก</p>
+        <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">ดูเหลือกี่กม.ถึงรอบ · บันทึกเข้าศูนย์ · ตั้งแผนรอบ · ประวัติย้อนหลัง (ไมล์ล่าสุดจากระบบจอง)</p>
       </div>
       <div id="vehicle-manager-list" class="space-y-4">
         <p class="text-center text-slate-400 py-8">กรุณาเข้าสู่ระบบ Admin</p>
@@ -977,26 +1005,76 @@
       const nextRoundKm = lastKm > 0 ? lastKm + intervalKm : (dueKm > 0 ? dueKm : null);
       return { dueKm, currentKm, intervalKm, lastKm, remaining, isOverdue, isWarning, estimatedNextDate, nextRoundKm };
     }
-    function formatVehicleServiceHistoryHtml(car) {
-      const history = Array.isArray(car.serviceHistory) ? car.serviceHistory : [];
-      const normalized = history.filter(item => item && item.serviceDate).slice(0, 8);
-      if (!normalized.length) {
-        if (!car.serviceLastDate) return '<p class="text-xs text-slate-400">ยังไม่มีประวัติเข้าศูนย์</p>';
-        const fallbackLine = formatThaiDate(car.serviceLastDate) + ' | ' + (parseFloat(car.serviceLastKm) || 0).toLocaleString() + ' กม.' +
-          ' | รอบถัดไป ' + (parseFloat(car.serviceMile) || 0).toLocaleString() + ' กม.';
-        return '<p class="text-xs text-slate-500">' + escapeHtml(fallbackLine) + '</p>';
-      }
-      return normalized.map(function (item, idx) {
-        const label = idx === 0 ? 'ล่าสุด' : ('ก่อนหน้า ' + idx);
-        const dateText = formatThaiDate(item.serviceDate);
-        const kmText = (parseFloat(item.serviceKm) || 0).toLocaleString();
-        const nextDueText = (parseFloat(item.nextDueKm) || 0).toLocaleString();
-        const byText = item.serviceBy ? (' โดย ' + escapeHtml(item.serviceBy)) : '';
-        return '<p class="text-xs text-slate-600 dark:text-slate-300"><span class="font-medium text-purple-700 dark:text-purple-300">' + label + ':</span> ' +
-          escapeHtml(dateText) + ' | ' + kmText + ' กม. | รอบถัดไป ' + nextDueText + ' กม.' + byText +
-          ' <button type="button" onclick="window.editVehicleServiceHistory(\'' + escapeHtml(car.id) + '\',' + idx + ')" class="ml-1 text-[11px] text-blue-600 hover:text-blue-700 underline">แก้ไข</button></p>';
-      }).join('');
+
+    var vehicleMgrFilter = 'all';
+    var vehicleMgrSearch = '';
+    var vehicleMgrSelectedId = null;
+    var vehicleMgrActiveTab = 'record';
+
+    function getVehicleServiceStatus(info) {
+      if (!info.dueKm || info.dueKm <= 0) return 'none';
+      if (info.isOverdue) return 'overdue';
+      if (info.isWarning) return 'warning';
+      return 'ok';
     }
+
+    function buildUpcomingServiceRounds(info, count) {
+      count = count || 5;
+      const interval = info.intervalKm || 10000;
+      let base = info.dueKm > 0 ? info.dueKm : 0;
+      if (!base && info.lastKm > 0) base = info.lastKm + interval;
+      if (!base) return [];
+      const rounds = [];
+      for (let i = 0; i < count; i++) {
+        rounds.push({ n: i + 1, km: Math.round(base + i * interval), isCurrent: i === 0 });
+      }
+      return rounds;
+    }
+
+    function formatVehicleMgrStatusBadge(info) {
+      const st = getVehicleServiceStatus(info);
+      if (st === 'overdue') return '<span class="vmgr-badge vmgr-badge-overdue">เลยกำหนด</span>';
+      if (st === 'warning') return '<span class="vmgr-badge vmgr-badge-warning">ใกล้ครบ</span>';
+      if (st === 'ok') return '<span class="vmgr-badge vmgr-badge-ok">ปกติ</span>';
+      return '<span class="vmgr-badge vmgr-badge-none">ยังไม่ตั้งรอบ</span>';
+    }
+
+    function formatVehicleMgrRemainingText(info) {
+      if (!info.dueKm || info.dueKm <= 0) return { text: '—', cls: 'text-slate-400' };
+      if (info.isOverdue) {
+        return { text: 'เลย ' + Math.abs(info.remaining).toLocaleString() + ' กม.', cls: 'text-red-600 font-bold' };
+      }
+      return { text: 'เหลือ ' + Math.max(0, info.remaining).toLocaleString() + ' กม.', cls: (info.isWarning ? 'text-orange-600 font-bold' : 'text-emerald-700 font-bold') };
+    }
+
+    function formatVehicleServiceHistoryTableHtml(car) {
+      const history = Array.isArray(car.serviceHistory) ? car.serviceHistory : [];
+      const rows = history.filter(item => item && item.serviceDate);
+      if (!rows.length && car.serviceLastDate) {
+        rows.push({
+          serviceDate: car.serviceLastDate,
+          serviceKm: car.serviceLastKm,
+          nextDueKm: car.serviceMile,
+          serviceBy: car.serviceLastBy || ''
+        });
+      }
+      if (!rows.length) {
+        return '<p class="text-sm text-slate-400 text-center py-4">ยังไม่มีประวัติเข้าศูนย์</p>';
+      }
+      const body = rows.map(function (item, idx) {
+        return '<tr class="border-t border-slate-100 dark:border-slate-700">' +
+          '<td class="p-2 whitespace-nowrap">' + escapeHtml(formatThaiDate(item.serviceDate)) + '</td>' +
+          '<td class="p-2 text-right">' + (parseFloat(item.serviceKm) || 0).toLocaleString() + '</td>' +
+          '<td class="p-2">' + escapeHtml(item.serviceBy || '-') + '</td>' +
+          '<td class="p-2 text-right">' + (parseFloat(item.nextDueKm) || 0).toLocaleString() + '</td>' +
+          '<td class="p-2 text-center"><button type="button" onclick="window.editVehicleServiceHistory(\'' + escapeHtml(car.id) + '\',' + idx + ')" class="text-blue-600 underline text-sm py-2 px-2">แก้ไข</button></td>' +
+          '</tr>';
+      }).join('');
+      return '<div class="overflow-x-auto"><table class="w-full text-sm text-left"><thead class="bg-slate-50 dark:bg-slate-700 text-slate-600 dark:text-slate-300">' +
+        '<tr><th class="p-2">วันที่</th><th class="p-2 text-right">กม.เข้าเช็ค</th><th class="p-2">ผู้นำรถ</th><th class="p-2 text-right">รอบถัดไป</th><th class="p-2 text-center">แก้ไข</th></tr></thead><tbody>' +
+        body + '</tbody></table></div>';
+    }
+
     function resetVehicleServiceHistoryEditor(card) {
       if (!card) return;
       const idxEl = card.querySelector('.vmgr-history-edit-index');
@@ -1004,8 +1082,9 @@
       const btnEl = card.querySelector('.vmgr-service-save-btn');
       if (idxEl) idxEl.value = '';
       if (stateEl) stateEl.textContent = '';
-      if (btnEl) btnEl.textContent = 'บันทึกเข้าศูนย์ + ตั้งรอบใหม่';
+      if (btnEl) btnEl.textContent = 'บันทึกการเข้าเช็คระยะ';
     }
+
     function initVehicleManagerDatePickers(root) {
       if (!root || !window.flatpickr || !window.syncBuddhistDateAll) return;
       root.querySelectorAll('.vmgr-service-date').forEach(function (el) {
@@ -1023,6 +1102,87 @@
         });
       });
     }
+
+    function filterVehicleManagerCars(cars) {
+      const q = vehicleMgrSearch.trim().toLowerCase();
+      return cars.filter(function (car) {
+        const info = getVehicleServiceInfo(car);
+        const st = getVehicleServiceStatus(info);
+        if (vehicleMgrFilter === 'warning' && st !== 'warning') return false;
+        if (vehicleMgrFilter === 'overdue' && st !== 'overdue') return false;
+        if (q) {
+          const plate = String(car.plate || '').toLowerCase();
+          const type = String(car.type || '').toLowerCase();
+          if (plate.indexOf(q) < 0 && type.indexOf(q) < 0) return false;
+        }
+        return true;
+      });
+    }
+
+    function renderVehicleManagerDetail(car) {
+      const info = getVehicleServiceInfo(car);
+      const rem = formatVehicleMgrRemainingText(info);
+      const pct = (info.dueKm > 0) ? Math.min(100, Math.round((info.currentKm / info.dueKm) * 100)) : 0;
+      const barCls = info.isOverdue ? 'vmgr-progress-bar-overdue' : (info.isWarning ? 'vmgr-progress-bar-warning' : 'vmgr-progress-bar-ok');
+      const estLine = info.estimatedNextDate && !info.isOverdue
+        ? '<p class="text-sm text-blue-700 dark:text-blue-300">ประมาณถึงรอบ ~ ' + formatThaiDate(info.estimatedNextDate) + '</p>'
+        : '';
+      const rounds = buildUpcomingServiceRounds(info, 5);
+      const roundsHtml = rounds.length
+        ? '<table class="w-full text-sm mt-2"><thead><tr class="text-slate-500"><th class="text-left py-1">รอบ</th><th class="text-right py-1">กม.ครบ</th></tr></thead><tbody>' +
+          rounds.map(function (r) {
+            return '<tr class="' + (r.isCurrent ? 'font-semibold text-purple-700 dark:text-purple-300' : '') + '"><td class="py-1">รอบที่ ' + r.n + (r.isCurrent ? ' (ปัจจุบัน)' : '') + '</td><td class="py-1 text-right">' + r.km.toLocaleString() + '</td></tr>';
+          }).join('') + '</tbody></table>'
+        : '<p class="text-xs text-slate-400">ตั้งกม.ครบรอบและระยะต่อรอบเพื่อดูแผนล่วงหน้า</p>';
+
+      const tab = vehicleMgrActiveTab;
+      const tabBtn = function (id, label) {
+        return '<button type="button" onclick="window.setVehicleMgrTab(\'' + id + '\')" class="vmgr-tab flex-1 ' + (tab === id ? 'vmgr-tab-active' : '') + '">' + label + '</button>';
+      };
+
+      const tabHidden = function (name) { return tab === name ? '' : ' hidden'; };
+
+      const panelRecord = '<div class="vmgr-panel space-y-3 pt-3' + tabHidden('record') + '">' +
+          '<label class="block text-sm font-medium">วันที่นำรถเข้าเช็คระยะ</label><input type="text" class="vmgr-service-date w-full px-4 py-3 text-base rounded-xl border dark:bg-slate-700 dark:border-slate-600" placeholder="เลือกวันที่ (พ.ศ.)">' +
+          '<label class="block text-sm font-medium">กม.เมื่อนำรถเข้าเช็คระยะ</label><input type="number" class="vmgr-service-km w-full px-4 py-3 text-base rounded-xl border dark:bg-slate-700 dark:border-slate-600" value="' + info.currentKm + '">' +
+          '<label class="block text-sm font-medium">ผู้นำรถเข้าเช็คระยะ</label><input type="text" class="vmgr-service-by w-full px-4 py-3 text-base rounded-xl border dark:bg-slate-700 dark:border-slate-600" list="user-list" value="" placeholder="พิมพ์หรือเลือกชื่อ">' +
+          '<label class="block text-sm font-medium">กม.ครบรอบถัดไป <span class="text-slate-400 font-normal">(ว่าง = กม.เข้า + ระยะต่อรอบ)</span></label><input type="number" class="vmgr-next-due-km w-full px-4 py-3 text-base rounded-xl border dark:bg-slate-700 dark:border-slate-600" placeholder="อัตโนมัติ">' +
+          '<input type="hidden" class="vmgr-history-edit-index" value="">' +
+          '<p class="vmgr-history-edit-state text-sm text-blue-700 dark:text-blue-300"></p>' +
+          '<button type="button" onclick="window.saveVehicleServiceRecord(\'' + car.id + '\')" class="vmgr-service-save-btn w-full bg-emerald-600 hover:bg-emerald-700 text-white text-base font-semibold py-3.5 rounded-xl">บันทึกการเข้าเช็คระยะ</button>' +
+          '<button type="button" onclick="window.cancelVehicleServiceHistoryEdit(\'' + car.id + '\')" class="w-full bg-slate-200 hover:bg-slate-300 text-slate-700 text-sm font-medium py-3 rounded-xl">ยกเลิกการแก้ไข</button>' +
+          '</div>';
+
+      const panelPlan = '<div class="vmgr-panel space-y-3 pt-3' + tabHidden('plan') + '">' +
+          '<label class="block text-sm font-medium">กม.ครบรอบปัจจุบัน</label><input type="number" class="vmgr-due-km w-full px-4 py-3 text-base rounded-xl border dark:bg-slate-700 dark:border-slate-600" value="' + (info.dueKm || '') + '">' +
+          '<label class="block text-sm font-medium">ระยะกม.ต่อรอบ (หลังเข้าศูนย์)</label><input type="number" class="vmgr-interval-km w-full px-4 py-3 text-base rounded-xl border dark:bg-slate-700 dark:border-slate-600" value="' + info.intervalKm + '">' +
+          '<button type="button" onclick="window.saveVehiclePlan(\'' + car.id + '\')" class="w-full bg-orange-500 hover:bg-orange-600 text-white text-base font-semibold py-3.5 rounded-xl">บันทึกแผนรอบ</button>' +
+          '<div class="bg-orange-50 dark:bg-orange-900/20 rounded-xl p-3 border border-orange-100 dark:border-orange-800/40"><p class="text-sm font-semibold text-orange-800 dark:text-orange-300 mb-1">รอบถัดไป (คำนวณจากระยะมาตรฐาน)</p>' + roundsHtml + '</div>' +
+          '</div>';
+
+      const panelHistory = '<div class="vmgr-panel pt-3' + tabHidden('history') + '">' + formatVehicleServiceHistoryTableHtml(car) + '</div>';
+
+      return '<div class="bg-white dark:bg-slate-800 rounded-2xl border-2 border-purple-200 dark:border-purple-700 p-4 md:p-5 shadow-md" data-vehicle-id="' + escapeHtml(car.id) + '">' +
+        '<div class="flex flex-wrap items-start justify-between gap-2 mb-4">' +
+        '<div><h3 class="text-xl font-bold text-purple-700 dark:text-purple-300">' + escapeHtml(car.plate) + '</h3>' +
+        '<p class="text-sm text-slate-500">' + escapeHtml(car.type) + ' · ไมล์ล่าสุดในระบบ <b>' + info.currentKm.toLocaleString() + '</b> กม.</p></div>' +
+        formatVehicleMgrStatusBadge(info) + '</div>' +
+        '<div class="mb-4">' +
+        '<p class="text-sm text-slate-500 mb-1">ถึงรอบเช็คระยะ (กม.ครบ ' + (info.dueKm ? info.dueKm.toLocaleString() : '—') + ')</p>' +
+        '<p class="vmgr-remaining-big ' + rem.cls + '">' + rem.text + '</p>' +
+        (info.dueKm > 0 ? '<div class="vmgr-progress mt-2"><div class="vmgr-progress-bar ' + barCls + '" style="width:' + pct + '%"></div></div>' +
+        '<p class="text-xs text-slate-400 mt-1">' + info.currentKm.toLocaleString() + ' / ' + info.dueKm.toLocaleString() + ' กม.</p>' : '') +
+        estLine + '</div>' +
+        '<div class="flex gap-1 mb-1">' + tabBtn('record', 'บันทึกเข้าศูนย์') + tabBtn('plan', 'ตั้งแผนรอบ') + tabBtn('history', 'ประวัติ') + '</div>' +
+        panelRecord + panelPlan + panelHistory +
+        '<div class="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700">' +
+        '<label class="block text-sm font-medium text-blue-700 dark:text-blue-300 mb-1">หมายเหตุ (แสดงหน้าแรก)</label>' +
+        '<div class="flex flex-col sm:flex-row gap-2">' +
+        '<input type="text" class="vmgr-remarks flex-1 px-4 py-3 rounded-xl border dark:bg-slate-700 dark:border-slate-600" value="' + escapeHtml(car.remarks || '') + '">' +
+        '<button type="button" onclick="window.saveVehicleRemarks(\'' + car.id + '\')" class="shrink-0 bg-blue-500 hover:bg-blue-600 text-white px-5 py-3 rounded-xl font-medium">บันทึกหมายเหตุ</button></div></div>' +
+        '</div>';
+    }
+
     function renderVehicleManager() {
       const wrap = document.getElementById('vehicle-manager-list');
       if (!wrap) return;
@@ -1030,69 +1190,90 @@
         wrap.innerHTML = '<p class="text-center text-slate-400 py-8">กรุณาเข้าสู่ระบบ Admin</p>';
         return;
       }
-      const cars = appData.vehicles.filter(c => c.status !== 'HIDDEN').slice().sort((a, b) => String(a.plate).localeCompare(String(b.plate), 'th'));
-      if (!cars.length) {
+      const allCars = appData.vehicles.filter(c => c.status !== 'HIDDEN').slice().sort((a, b) => String(a.plate).localeCompare(String(b.plate), 'th'));
+      if (!allCars.length) {
         wrap.innerHTML = '<p class="text-center text-slate-400 py-8">ไม่พบรถในระบบ</p>';
         return;
       }
-      wrap.innerHTML = cars.map(function (car) {
+      const cars = filterVehicleManagerCars(allCars);
+      if (vehicleMgrSelectedId && !allCars.some(c => c.id === vehicleMgrSelectedId)) vehicleMgrSelectedId = null;
+
+      const filterBtn = function (key, label) {
+        const on = vehicleMgrFilter === key;
+        return '<button type="button" onclick="window.setVehicleMgrFilter(\'' + key + '\')" class="vmgr-filter-btn ' + (on ? 'vmgr-filter-btn-active' : '') + '">' + label + '</button>';
+      };
+
+      const tableRows = cars.map(function (car) {
         const info = getVehicleServiceInfo(car);
-        const statusBadge = info.isOverdue
-          ? '<span class="text-xs font-bold text-white bg-red-500 px-2 py-1 rounded">เลยกำหนดเช็คระยะ</span>'
-          : (info.isWarning ? '<span class="text-xs font-bold text-white bg-orange-500 px-2 py-1 rounded">ใกล้ครบเช็คระยะ</span>' : '<span class="text-xs text-green-700 bg-green-100 px-2 py-1 rounded">ปกติ</span>');
-        const lastSvc = car.serviceLastDate
-          ? formatThaiDate(car.serviceLastDate) + ' ที่ ' + (info.lastKm || 0).toLocaleString() + ' กม.' + (car.serviceLastBy ? ' โดย ' + escapeHtml(car.serviceLastBy) : '')
-          : 'ยังไม่เคยบันทึกเข้าศูนย์';
-        const estLine = info.estimatedNextDate && !info.isOverdue
-          ? '<p class="text-xs text-blue-700 dark:text-blue-300">ประมาณถึงรอบปัจจุบัน: <b>' + formatThaiDate(info.estimatedNextDate) + '</b> (เหลือ ' + Math.max(0, info.remaining).toLocaleString() + ' กม.)</p>'
-          : (info.isOverdue ? '<p class="text-xs text-red-600 font-semibold">เลยกำหนดแล้ว ' + Math.abs(info.remaining).toLocaleString() + ' กม. — ยังแสดงรอบเดิมจนกว่าจะบันทึกเข้าศูนย์</p>' : '');
-        const nextRound = info.nextRoundKm
-          ? '<p class="text-xs text-purple-700 dark:text-purple-300">รอบถัดไป (หลังเช็คล่าสุด + ระยะ): <b>' + info.nextRoundKm.toLocaleString() + ' กม.</b></p>'
-          : '';
-        const historyHtml = formatVehicleServiceHistoryHtml(car);
-        return '<div class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 p-5 shadow-sm" data-vehicle-id="' + escapeHtml(car.id) + '">' +
-          '<div class="flex flex-wrap items-start justify-between gap-2 mb-3">' +
-          '<div><h3 class="text-lg font-semibold text-purple-700 dark:text-purple-300">' + escapeHtml(car.plate) + ' <span class="text-xs font-normal text-slate-400">(' + escapeHtml(car.type) + ')</span></h3>' +
-          '<p class="text-sm text-slate-500">ไมล์ล่าสุด <b class="text-purple-600">' + info.currentKm.toLocaleString() + '</b> กม.</p></div>' + statusBadge + '</div>' +
-          '<div class="grid grid-cols-1 lg:grid-cols-2 gap-4 text-sm">' +
-          '<div class="bg-orange-50 dark:bg-orange-900/20 rounded-xl p-4 border border-orange-100 dark:border-orange-800/40 space-y-3">' +
-          '<p class="font-semibold text-orange-800 dark:text-orange-300">📅 ตั้งค่ารอบเช็คระยะ (ล่วงหน้า)</p>' +
-          '<label class="block text-xs">กม.ครบรอบปัจจุบัน</label><input type="number" class="vmgr-due-km w-full px-3 py-2 rounded-lg border dark:bg-slate-700 dark:border-slate-600" value="' + (info.dueKm || '') + '">' +
-          '<label class="block text-xs">ระยะกม.ต่อรอบ (หลังเข้าศูนย์)</label><input type="number" class="vmgr-interval-km w-full px-3 py-2 rounded-lg border dark:bg-slate-700 dark:border-slate-600" value="' + info.intervalKm + '">' +
-          '<button type="button" onclick="window.saveVehiclePlan(\'' + car.id + '\')" class="w-full bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium py-2 rounded-lg">บันทึกแผนรอบ</button>' +
-          '<p class="text-xs text-slate-600 dark:text-slate-300">เช็คล่าสุด: ' + lastSvc + '</p>' + estLine + nextRound +
-          '</div>' +
-          '<div class="bg-emerald-50 dark:bg-emerald-900/20 rounded-xl p-4 border border-emerald-100 dark:border-emerald-800/40 space-y-3">' +
-          '<p class="font-semibold text-emerald-800 dark:text-emerald-300">🔧 บันทึกเข้าศูนย์เช็คระยะ</p>' +
-          '<label class="block text-xs">วันที่นำรถเข้าเช็คระยะ</label><input type="text" class="vmgr-service-date w-full px-3 py-2 rounded-lg border dark:bg-slate-700 dark:border-slate-600" placeholder="เลือกวันที่ (พ.ศ.)">' +
-          '<label class="block text-xs">กม.เมื่อนำรถเข้าเช็คระยะ</label><input type="number" class="vmgr-service-km w-full px-3 py-2 rounded-lg border dark:bg-slate-700 dark:border-slate-600" value="' + info.currentKm + '">' +
-          '<label class="block text-xs">ผู้นำรถเข้าเช็คระยะ</label><input type="text" class="vmgr-service-by w-full px-3 py-2 rounded-lg border dark:bg-slate-700 dark:border-slate-600" list="user-list" value="">' +
-          '<label class="block text-xs">กม.ครบรอบถัดไป (ว่าง = กม.เข้าศูนย์ + ระยะต่อรอบ)</label><input type="number" class="vmgr-next-due-km w-full px-3 py-2 rounded-lg border dark:bg-slate-700 dark:border-slate-600" placeholder="อัตโนมัติ">' +
-          '<input type="hidden" class="vmgr-history-edit-index" value="">' +
-          '<p class="vmgr-history-edit-state text-xs text-blue-700 dark:text-blue-300"></p>' +
-          '<button type="button" onclick="window.saveVehicleServiceRecord(\'' + car.id + '\')" class="vmgr-service-save-btn w-full bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium py-2 rounded-lg">บันทึกเข้าศูนย์ + ตั้งรอบใหม่</button>' +
-          '<button type="button" onclick="window.cancelVehicleServiceHistoryEdit(\'' + car.id + '\')" class="w-full bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-medium py-2 rounded-lg">ยกเลิกการแก้ไขรายการประวัติ</button>' +
-          '</div></div>' +
-          '<div class="mt-4 bg-purple-50 dark:bg-purple-900/20 rounded-xl p-4 border border-purple-100 dark:border-purple-800/40">' +
-          '<p class="text-sm font-semibold text-purple-700 dark:text-purple-300 mb-2">🧾 ประวัติเช็คระยะ</p>' + historyHtml + '</div>' +
-          '<div class="mt-4"><label class="block text-sm font-medium text-blue-700 dark:text-blue-300 mb-1">📌 หมายเหตุ (แสดงหน้าแรก)</label>' +
-          '<div class="flex gap-2"><input type="text" class="vmgr-remarks flex-1 px-3 py-2 rounded-lg border dark:bg-slate-700 dark:border-slate-600" value="' + escapeHtml(car.remarks || '') + '">' +
-          '<button type="button" onclick="window.saveVehicleRemarks(\'' + car.id + '\')" class="shrink-0 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium">บันทึก</button></div></div>' +
-          '</div>';
+        const rem = formatVehicleMgrRemainingText(info);
+        const selected = car.id === vehicleMgrSelectedId;
+        const rowCls = 'vmgr-row border-b border-slate-100 dark:border-slate-700 ' + (selected ? 'vmgr-row-selected' : '');
+        return '<tr class="' + rowCls + '" onclick="window.selectVehicleManager(\'' + escapeHtml(car.id) + '\')">' +
+          '<td class="p-3 font-medium text-purple-700 dark:text-purple-300">' + escapeHtml(car.plate) + '</td>' +
+          '<td class="p-3 text-right">' + info.currentKm.toLocaleString() + '</td>' +
+          '<td class="p-3 text-right">' + (info.dueKm ? info.dueKm.toLocaleString() : '—') + '</td>' +
+          '<td class="p-3 text-right ' + rem.cls + '">' + rem.text + '</td>' +
+          '<td class="p-3 text-center">' + formatVehicleMgrStatusBadge(info) + '</td>' +
+          '<td class="p-3 text-center text-purple-600 text-sm">' + (selected ? '▼' : 'เปิด') + '</td></tr>';
       }).join('');
-      cars.forEach(function (car) {
-        const card = wrap.querySelector('[data-vehicle-id="' + car.id + '"]');
-        if (!card) return;
-        const dateEl = card.querySelector('.vmgr-service-date');
-        if (dateEl && car.serviceLastDate) dateEl.value = String(car.serviceLastDate).substring(0, 10);
-        const byEl = card.querySelector('.vmgr-service-by');
-        if (byEl && car.serviceLastBy) byEl.value = car.serviceLastBy;
-        resetVehicleServiceHistoryEditor(card);
-      });
-      initVehicleManagerDatePickers(wrap);
+
+      const selectedCar = vehicleMgrSelectedId ? allCars.find(c => c.id === vehicleMgrSelectedId) : null;
+      const detailHtml = selectedCar ? '<div id="vehicle-manager-detail" class="mt-4">' + renderVehicleManagerDetail(selectedCar) + '</div>' : '<div id="vehicle-manager-detail" class="mt-4 hidden"></div>';
+
+      wrap.innerHTML =
+        '<div class="vmgr-toolbar space-y-3 mb-4">' +
+        '<input type="search" class="w-full px-4 py-3 text-base rounded-xl border dark:bg-slate-700 dark:border-slate-600" placeholder="ค้นหาทะเบียน..." value="' + escapeHtml(vehicleMgrSearch) + '" oninput="window.setVehicleMgrSearch(this.value)">' +
+        '<div class="flex flex-wrap gap-2">' + filterBtn('all', 'ทั้งหมด') + filterBtn('warning', 'ใกล้ครบ') + filterBtn('overdue', 'เลยกำหนด') + '</div>' +
+        '<p class="text-xs text-slate-500">แสดง ' + cars.length + ' / ' + allCars.length + ' คัน · ไมล์ล่าสุดจากระบบจองรถ</p></div>' +
+        '<div class="vmgr-table-wrap bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm overflow-hidden">' +
+        '<table class="w-full text-sm"><thead class="bg-purple-50 dark:bg-slate-700 text-purple-800 dark:text-purple-200">' +
+        '<tr><th class="p-3 text-left">ทะเบียน</th><th class="p-3 text-right">ไมล์ล่าสุด</th><th class="p-3 text-right">ครบรอบ</th><th class="p-3 text-right">เหลือ</th><th class="p-3 text-center">สถานะ</th><th class="p-3 text-center"></th></tr></thead><tbody>' +
+        (tableRows || '<tr><td colspan="6" class="p-6 text-center text-slate-400">ไม่พบรถตามตัวกรอง</td></tr>') +
+        '</tbody></table></div>' + detailHtml;
+
+      if (selectedCar) {
+        const card = wrap.querySelector('[data-vehicle-id="' + selectedCar.id + '"]');
+        if (card) {
+          const dateEl = card.querySelector('.vmgr-service-date');
+          if (dateEl && selectedCar.serviceLastDate && vehicleMgrActiveTab === 'record') {
+            dateEl.value = String(selectedCar.serviceLastDate).substring(0, 10);
+          }
+          resetVehicleServiceHistoryEditor(card);
+          initVehicleManagerDatePickers(card);
+        }
+      }
     }
+
+    window.setVehicleMgrFilter = function (key) {
+      vehicleMgrFilter = key === 'warning' || key === 'overdue' ? key : 'all';
+      renderVehicleManager();
+    };
+    window.setVehicleMgrSearch = function (value) {
+      vehicleMgrSearch = String(value || '');
+      renderVehicleManager();
+    };
+    window.selectVehicleManager = function (vehicleId, tab) {
+      if (vehicleMgrSelectedId === vehicleId && !tab) {
+        vehicleMgrSelectedId = null;
+      } else {
+        vehicleMgrSelectedId = vehicleId;
+        if (tab) vehicleMgrActiveTab = tab;
+        else if (!vehicleMgrActiveTab) vehicleMgrActiveTab = 'record';
+      }
+      renderVehicleManager();
+      if (vehicleMgrSelectedId) {
+        const el = document.getElementById('vehicle-manager-detail');
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    };
+    window.setVehicleMgrTab = function (tab) {
+      vehicleMgrActiveTab = tab === 'plan' || tab === 'history' ? tab : 'record';
+      renderVehicleManager();
+    };
+
     function getVehicleManagerCard(vehicleId) {
-      return document.querySelector('[data-vehicle-id="' + vehicleId + '"]');
+      const el = document.querySelector('[data-vehicle-id="' + vehicleId + '"]');
+      return el || null;
     }
     window.saveVehiclePlan = function (vehicleId) {
       if (!isAdmin || !adminToken) return;
@@ -1120,7 +1301,8 @@
       const svcKm = parseFloat(card.querySelector('.vmgr-service-km').value);
       const svcBy = card.querySelector('.vmgr-service-by').value.trim();
       const editIndex = card.querySelector('.vmgr-history-edit-index').value;
-      const intervalKm = parseFloat(card.querySelector('.vmgr-interval-km').value) || parseFloat(car.serviceIntervalKm) || 10000;
+      const intervalEl = card.querySelector('.vmgr-interval-km');
+      const intervalKm = parseFloat(intervalEl && intervalEl.value) || parseFloat(car.serviceIntervalKm) || 10000;
       let nextDue = card.querySelector('.vmgr-next-due-km').value;
       if (!svcDate || isNaN(svcKm)) {
         Swal.fire('กรุณากรอกข้อมูล', 'ระบุวันที่และกม.เมื่อนำรถเข้าเช็คระยะ', 'warning');
@@ -1139,37 +1321,6 @@
         serviceHistoryEditIndex: editIndex,
         managementAction: 'บันทึกเข้าศูนย์เช็คระยะ'
       });
-    };
-    window.editVehicleServiceHistory = function (vehicleId, historyIndex) {
-      const card = getVehicleManagerCard(vehicleId);
-      const car = appData.vehicles.find(v => v.id === vehicleId);
-      if (!card || !car) return;
-      const history = Array.isArray(car.serviceHistory) ? car.serviceHistory : [];
-      const item = history[historyIndex];
-      if (!item) return;
-      const dateEl = card.querySelector('.vmgr-service-date');
-      const kmEl = card.querySelector('.vmgr-service-km');
-      const byEl = card.querySelector('.vmgr-service-by');
-      const nextDueEl = card.querySelector('.vmgr-next-due-km');
-      const intervalEl = card.querySelector('.vmgr-interval-km');
-      const idxEl = card.querySelector('.vmgr-history-edit-index');
-      const stateEl = card.querySelector('.vmgr-history-edit-state');
-      const btnEl = card.querySelector('.vmgr-service-save-btn');
-      if (dateEl) dateEl.value = item.serviceDate || '';
-      if (kmEl) kmEl.value = parseFloat(item.serviceKm) || '';
-      if (byEl) byEl.value = item.serviceBy || '';
-      if (nextDueEl) nextDueEl.value = parseFloat(item.nextDueKm) || '';
-      if (intervalEl && item.intervalKm) intervalEl.value = parseFloat(item.intervalKm) || '';
-      if (idxEl) idxEl.value = String(historyIndex);
-      if (stateEl) stateEl.textContent = 'กำลังแก้ไขรายการประวัติ #' + (historyIndex + 1);
-      if (btnEl) btnEl.textContent = 'บันทึกการแก้ไขประวัติ';
-      const fp = dateEl && dateEl._flatpickr;
-      if (fp && item.serviceDate) fp.setDate(item.serviceDate, true, 'Y-m-d');
-    };
-    window.cancelVehicleServiceHistoryEdit = function (vehicleId) {
-      const card = getVehicleManagerCard(vehicleId);
-      if (!card) return;
-      resetVehicleServiceHistoryEditor(card);
     };
     window.saveVehicleRemarks = function (vehicleId) {
       if (!isAdmin || !adminToken) return;

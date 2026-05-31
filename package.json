@@ -1,0 +1,9 @@
+{
+  "name": "emd-car",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "stresstest": "node tests/stress-api.mjs"
+  }
+}
