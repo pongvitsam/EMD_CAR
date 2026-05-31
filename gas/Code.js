@@ -180,6 +180,10 @@ function buildVehicleRowValues_(form, row, imgUrl, activeStatus) {
   ];
 }
 
+function include_(filename) {
+  return HtmlService.createHtmlOutputFromFile(filename).getContent();
+}
+
 function doGet(e) {
   const params = e && e.parameter ? e.parameter : {};
   if (params.action) {
@@ -198,7 +202,8 @@ function doGet(e) {
       return jsonOutput_({ success: false, msg: String(err.message || err) });
     }
   }
-  return HtmlService.createHtmlOutputFromFile('Index')
+  return HtmlService.createTemplateFromFile('Index')
+      .evaluate()
       .setTitle('🚗 EMD CAR 🚗')
       .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
