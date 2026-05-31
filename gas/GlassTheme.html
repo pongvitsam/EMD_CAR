@@ -574,15 +574,78 @@ body.emd-glass {
   backdrop-filter: blur(var(--emd-blur));
   border: 1px solid var(--emd-glass-border-bright) !important;
   box-shadow: var(--emd-shadow);
+  color-scheme: dark;
 }
 
 .flatpickr-months .flatpickr-month,
-.flatpickr-current-month .flatpickr-monthDropdown-months,
 .flatpickr-weekdays,
 .flatpickr-weekday {
   background: transparent !important;
   color: var(--emd-text) !important;
   fill: var(--emd-text) !important;
+}
+
+/* Month/year controls â€” native dropdown must use dark scheme + explicit option colors */
+.flatpickr-current-month .flatpickr-monthDropdown-months,
+select.flatpickr-monthDropdown-months {
+  appearance: auto;
+  -webkit-appearance: menulist;
+  background: var(--emd-bg-mid) !important;
+  color: var(--emd-text) !important;
+  border: 1px solid var(--emd-glass-border-bright) !important;
+  border-radius: 0.35rem;
+  padding: 0.2rem 0.45rem;
+  font-weight: 500;
+  color-scheme: dark;
+}
+
+.flatpickr-monthDropdown-months option,
+.flatpickr-current-month .flatpickr-monthDropdown-months option {
+  background-color: var(--emd-bg-mid) !important;
+  color: var(--emd-text) !important;
+}
+
+.flatpickr-current-month input.cur-year,
+.flatpickr-current-month .numInputWrapper input {
+  background: var(--emd-bg-mid) !important;
+  color: var(--emd-text) !important;
+  border: 1px solid var(--emd-glass-border) !important;
+  border-radius: 0.35rem;
+  color-scheme: dark;
+}
+
+.flatpickr-current-month .numInputWrapper span.arrowUp:after {
+  border-bottom-color: var(--emd-text) !important;
+}
+
+.flatpickr-current-month .numInputWrapper span.arrowDown:after {
+  border-top-color: var(--emd-text) !important;
+}
+
+.flatpickr-months .flatpickr-prev-month,
+.flatpickr-months .flatpickr-next-month {
+  color: var(--emd-text) !important;
+  fill: var(--emd-text) !important;
+}
+
+.flatpickr-months .flatpickr-prev-month:hover,
+.flatpickr-months .flatpickr-next-month:hover {
+  color: var(--emd-accent-soft) !important;
+}
+
+.flatpickr-time {
+  border-top: 1px solid var(--emd-glass-border) !important;
+}
+
+.flatpickr-time .flatpickr-am-pm {
+  background: var(--emd-bg-mid) !important;
+  color: var(--emd-text) !important;
+  color-scheme: dark;
+}
+
+.flatpickr-time .flatpickr-am-pm:hover,
+.flatpickr-time .flatpickr-am-pm:focus {
+  background: rgba(59, 130, 246, 0.25) !important;
 }
 
 .flatpickr-day {
