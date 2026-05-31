@@ -8,7 +8,7 @@ const LEGACY_APP_DATA_CACHE_KEY = 'APP_DATA_V1';
 const CACHE_TTL_SEC = 120;
 const LOGS_CACHE_TTL_SEC = 90;
 const ADMIN_SESSION_CACHE_PREFIX = 'ADMIN_SESSION_';
-const VEHICLE_HEADERS = ['Vehicle_ID', 'ทะเบียน', 'รูปรถ(URL)', 'ประเภท', 'Email', 'Password', 'ระยะ Service (km)', 'ไมล์ล่าสุด (km)', 'จุดจอดล่าสุด', 'พรบ.หมดอายุ', 'หมายเหตุ', 'สถานะ', 'วันคืนรถ/หมดสัญญา', 'วันที่เช็คระยะล่าสุด', 'กม.เช็คระยะล่าสุด', 'ผู้นำเข้าเช็คระยะ', 'ระยะกม.ต่อรอบ', 'ประวัติเช็คระยะ(JSON)'];
+const VEHICLE_HEADERS = ['Vehicle_ID', 'ทะเบียน', 'รูปรถ(URL)', 'ประเภท', 'Email', 'Password', 'ระยะ Service (km)', 'ไมล์ล่าสุด (km)', 'จุดจอดล่าสุด', 'พรบ.หมดอายุ', 'หมายเหตุ', 'สถานะ', 'วันคืนรถ/หมดสัญญา', 'วันที่เช็คระยะล่าสุด', 'กม.เช็คระยะล่าสุด', 'ผู้นำเข้าเช็คระยะ', 'ระยะกม.ต่อรอบ', 'ประวัติเช็คระยะ(JSON)', 'แผนรอบถัดไป(JSON)'];
 const DEFAULT_SERVICE_INTERVAL_KM = 10000;
 
 function getSpreadsheet_() {
@@ -124,6 +124,20 @@ function parseVehicleServiceHistory_(value) {
   }
 }
 
+function parseVehicleServiceRoundPlan_(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) {
+    return value.map(function (n) { return Math.round(parseFloat(n) || 0); }).filter(function (n) { return n > 0; });
+  }
+  try {
+    const parsed = JSON.parse(String(value));
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map(function (n) { return Math.round(parseFloat(n) || 0); }).filter(function (n) { return n > 0; });
+  } catch (err) {
+    return [];
+  }
+}
+
 function normalizeServiceHistoryItem_(item, fallbackIntervalKm) {
   const safeInterval = parseFloat(fallbackIntervalKm) || DEFAULT_SERVICE_INTERVAL_KM;
   return {
@@ -141,6 +155,7 @@ function buildVehicleRowValues_(form, row, imgUrl, activeStatus) {
   const safePass = vehicleFormField_(form, 'pass', row, 5, '');
   const intervalKm = parseFloat(vehicleFormField_(form, 'serviceIntervalKm', row, 16, DEFAULT_SERVICE_INTERVAL_KM)) || DEFAULT_SERVICE_INTERVAL_KM;
   const historyJson = vehicleFormField_(form, 'serviceHistoryJson', row, 17, '[]');
+  const roundPlanJson = vehicleFormField_(form, 'serviceRoundPlanJson', row, 18, '[]');
   return [
     vehicleFormField_(form, 'plate', row, 1, ''),
     imgUrl,
@@ -158,7 +173,8 @@ function buildVehicleRowValues_(form, row, imgUrl, activeStatus) {
     vehicleFormField_(form, 'serviceLastKm', row, 14, ''),
     vehicleFormField_(form, 'serviceLastBy', row, 15, ''),
     intervalKm,
-    historyJson
+    historyJson,
+    roundPlanJson
   ];
 }
 
@@ -253,7 +269,8 @@ function buildAppPayload_(ss, includeLogs) {
     serviceLastKm: parseFloat(r[14]) || 0,
     serviceLastBy: r[15] || '',
     serviceIntervalKm: parseFloat(r[16]) || DEFAULT_SERVICE_INTERVAL_KM,
-    serviceHistory: parseVehicleServiceHistory_(r[17])
+    serviceHistory: parseVehicleServiceHistory_(r[17]),
+    serviceRoundPlan: parseVehicleServiceRoundPlan_(r[18])
   }));
 
   const bDataVal = getSheetOrThrow_(ss, 'Bookings').getDataRange().getValues();
@@ -469,6 +486,33 @@ function saveVehicle(form) {
       for (let i = 1; i < data.length; i++) {
         if (data[i][0] == form.id) {
           const row = data[i];
+          const isHistoryNextDueUpdate = String(form.managementAction || '') === 'แก้ไขรอบถัดไปประวัติ'
+            && form.serviceHistoryEditIndex !== undefined
+            && form.serviceHistoryEditIndex !== ''
+            && form.serviceMile !== undefined;
+          if (isHistoryNextDueUpdate) {
+            const history = parseVehicleServiceHistory_(row[17]).map(function (item) {
+              return normalizeServiceHistoryItem_(item, form.serviceIntervalKm || row[16]);
+            });
+            const editIndexRaw = Number(form.serviceHistoryEditIndex);
+            if (!isNaN(editIndexRaw) && editIndexRaw >= 0 && editIndexRaw < history.length) {
+              history[editIndexRaw].nextDueKm = parseFloat(form.serviceMile) || 0;
+              form.serviceHistoryJson = JSON.stringify(history.slice(0, 30));
+              if (editIndexRaw === 0) {
+                form.serviceMile = history[0].nextDueKm;
+                if (form.serviceRoundPlan && Array.isArray(form.serviceRoundPlan) && form.serviceRoundPlan.length) {
+                  form.serviceRoundPlan[0] = history[0].nextDueKm;
+                  form.serviceRoundPlanJson = JSON.stringify(form.serviceRoundPlan);
+                }
+              }
+            }
+          }
+          const isPlanUpdate = String(form.managementAction || '') === 'ตั้งแผนเช็คระยะ';
+          if (isPlanUpdate && form.serviceRoundPlan && Array.isArray(form.serviceRoundPlan)) {
+            const cleaned = form.serviceRoundPlan.map(function (n) { return Math.round(parseFloat(n) || 0); }).filter(function (n) { return n > 0; });
+            form.serviceRoundPlanJson = JSON.stringify(cleaned.slice(0, 10));
+            if (cleaned.length > 0) form.serviceMile = cleaned[0];
+          }
           const isServiceRecordUpdate = String(form.managementAction || '') === 'บันทึกเข้าศูนย์เช็คระยะ'
             && form.serviceLastDate
             && form.serviceLastKm !== undefined
@@ -501,6 +545,10 @@ function saveVehicle(form) {
               form.serviceIntervalKm = latest.intervalKm;
             }
             form.serviceHistoryJson = JSON.stringify(history.slice(0, 30));
+            const planFromRecord = [parseFloat(form.serviceMile) || 0];
+            const intervalForPlan = parseFloat(form.serviceIntervalKm) || DEFAULT_SERVICE_INTERVAL_KM;
+            for (let p = 1; p < 5; p++) planFromRecord.push(Math.round(planFromRecord[0] + p * intervalForPlan));
+            form.serviceRoundPlanJson = JSON.stringify(planFromRecord.filter(function (n) { return n > 0; }));
           }
           if (!imgUrl) imgUrl = row[2] || '';
           const values = buildVehicleRowValues_(form, row, imgUrl, activeStatus);

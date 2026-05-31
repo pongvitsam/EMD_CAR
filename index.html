@@ -994,8 +994,19 @@
       return 'ok';
     }
 
-    function buildUpcomingServiceRounds(info, count) {
+    function parseServiceRoundPlan(car) {
+      if (!car || !Array.isArray(car.serviceRoundPlan)) return [];
+      return car.serviceRoundPlan.map(function (n) { return Math.round(parseFloat(n) || 0); }).filter(function (n) { return n > 0; });
+    }
+
+    function buildUpcomingServiceRounds(car, info, count) {
       count = count || 5;
+      const stored = parseServiceRoundPlan(car);
+      if (stored.length >= count) {
+        return stored.slice(0, count).map(function (km, i) {
+          return { n: i + 1, km: km, isCurrent: i === 0 };
+        });
+      }
       const interval = info.intervalKm || 10000;
       let base = info.dueKm > 0 ? info.dueKm : 0;
       if (!base && info.lastKm > 0) base = info.lastKm + interval;
@@ -1006,6 +1017,53 @@
       }
       return rounds;
     }
+
+    function formatUpcomingRoundsEditableHtml(car, info, vehicleId) {
+      const rounds = buildUpcomingServiceRounds(car, info, 5);
+      if (!rounds.length) {
+        return '<p class="text-xs text-slate-400">ตั้งกม.ครบรอบและระยะต่อรอบเพื่อดูแผนล่วงหน้า</p>';
+      }
+      const rows = rounds.map(function (r) {
+        return '<tr class="' + (r.isCurrent ? 'font-semibold text-purple-700 dark:text-purple-300' : '') + '">' +
+          '<td class="py-2 pr-2">รอบที่ ' + r.n + (r.isCurrent ? ' (ปัจจุบัน)' : '') + '</td>' +
+          '<td class="py-2 text-right">' +
+          '<input type="number" class="vmgr-round-km w-full max-w-[9rem] ml-auto px-3 py-2 text-base text-right rounded-lg border dark:bg-slate-700 dark:border-slate-600" data-round="' + r.n + '" value="' + r.km + '" oninput="window.syncVehicleDueFromRound1(\'' + escapeHtml(vehicleId) + '\')">' +
+          '</td></tr>';
+      }).join('');
+      return '<table class="w-full text-sm mt-2"><thead><tr class="text-slate-500"><th class="text-left py-1">รอบ</th><th class="text-right py-1">กม.ครบ (แก้ไขได้)</th></tr></thead><tbody>' + rows + '</tbody></table>' +
+        '<button type="button" onclick="window.recalcVehicleRoundPlan(\'' + escapeHtml(vehicleId) + '\')" class="mt-2 w-full text-sm py-2 rounded-lg border border-orange-200 text-orange-700 dark:border-orange-700 dark:text-orange-300">คำนวณรอบใหม่จากระยะมาตรฐาน</button>';
+    }
+
+    window.recalcVehicleRoundPlan = function (vehicleId) {
+      const card = getVehicleManagerCard(vehicleId);
+      const car = appData.vehicles.find(function (v) { return v.id === vehicleId; });
+      if (!card || !car) return;
+      const info = getVehicleServiceInfo(car);
+      const interval = parseFloat(card.querySelector('.vmgr-interval-km').value) || info.intervalKm || 10000;
+      let base = parseFloat(card.querySelector('.vmgr-due-km').value);
+      if (isNaN(base) || base <= 0) base = info.dueKm > 0 ? info.dueKm : (info.lastKm > 0 ? info.lastKm + interval : 0);
+      if (!base) return;
+      card.querySelectorAll('.vmgr-round-km').forEach(function (el, i) {
+        el.value = Math.round(base + i * interval);
+      });
+      window.syncVehicleDueFromRound1(vehicleId);
+    };
+
+    window.syncVehicleDueFromRound1 = function (vehicleId) {
+      const card = getVehicleManagerCard(vehicleId);
+      if (!card) return;
+      const r1 = card.querySelector('.vmgr-round-km[data-round="1"]');
+      const dueEl = card.querySelector('.vmgr-due-km');
+      if (r1 && dueEl) dueEl.value = r1.value;
+    };
+
+    window.syncVehicleRound1FromDue = function (vehicleId) {
+      const card = getVehicleManagerCard(vehicleId);
+      if (!card) return;
+      const dueEl = card.querySelector('.vmgr-due-km');
+      const r1 = card.querySelector('.vmgr-round-km[data-round="1"]');
+      if (dueEl && r1) r1.value = dueEl.value;
+    };
 
     function formatVehicleMgrStatusBadge(info) {
       const st = getVehicleServiceStatus(info);
@@ -1038,16 +1096,19 @@
         return '<p class="text-sm text-slate-400 text-center py-4">ยังไม่มีประวัติเข้าศูนย์</p>';
       }
       const body = rows.map(function (item, idx) {
+        const nextDueVal = Math.round(parseFloat(item.nextDueKm) || 0);
         return '<tr class="border-t border-slate-100 dark:border-slate-700">' +
           '<td class="p-2 whitespace-nowrap">' + escapeHtml(formatThaiDate(item.serviceDate)) + '</td>' +
           '<td class="p-2 text-right">' + (parseFloat(item.serviceKm) || 0).toLocaleString() + '</td>' +
           '<td class="p-2">' + escapeHtml(item.serviceBy || '-') + '</td>' +
-          '<td class="p-2 text-right">' + (parseFloat(item.nextDueKm) || 0).toLocaleString() + '</td>' +
-          '<td class="p-2 text-center"><button type="button" onclick="window.editVehicleServiceHistory(\'' + escapeHtml(car.id) + '\',' + idx + ')" class="text-blue-600 underline text-sm py-2 px-2">แก้ไข</button></td>' +
+          '<td class="p-2 text-right"><input type="number" class="vmgr-hist-next-due w-full max-w-[7rem] ml-auto px-2 py-2 text-right text-base rounded-lg border dark:bg-slate-700 dark:border-slate-600" data-hist-idx="' + idx + '" value="' + nextDueVal + '"></td>' +
+          '<td class="p-2 text-center whitespace-nowrap">' +
+          '<button type="button" onclick="window.saveVehicleHistoryNextDue(\'' + escapeHtml(car.id) + '\',' + idx + ')" class="text-emerald-700 underline text-sm py-2 px-1">บันทึกรอบ</button> ' +
+          '<button type="button" onclick="window.editVehicleServiceHistory(\'' + escapeHtml(car.id) + '\',' + idx + ')" class="text-blue-600 underline text-sm py-2 px-1">แก้ไขทั้งรายการ</button></td>' +
           '</tr>';
       }).join('');
       return '<div class="overflow-x-auto"><table class="w-full text-sm text-left"><thead class="bg-slate-50 dark:bg-slate-700 text-slate-600 dark:text-slate-300">' +
-        '<tr><th class="p-2">วันที่</th><th class="p-2 text-right">กม.เข้าเช็ค</th><th class="p-2">ผู้นำรถ</th><th class="p-2 text-right">รอบถัดไป</th><th class="p-2 text-center">แก้ไข</th></tr></thead><tbody>' +
+        '<tr><th class="p-2">วันที่</th><th class="p-2 text-right">กม.เข้าเช็ค</th><th class="p-2">ผู้นำรถ</th><th class="p-2 text-right">รอบถัดไป (กม.)</th><th class="p-2 text-center">จัดการ</th></tr></thead><tbody>' +
         body + '</tbody></table></div>';
     }
 
@@ -1103,13 +1164,7 @@
       const estLine = info.estimatedNextDate && !info.isOverdue
         ? '<p class="text-sm text-blue-700 dark:text-blue-300">ประมาณถึงรอบ ~ ' + formatThaiDate(info.estimatedNextDate) + '</p>'
         : '';
-      const rounds = buildUpcomingServiceRounds(info, 5);
-      const roundsHtml = rounds.length
-        ? '<table class="w-full text-sm mt-2"><thead><tr class="text-slate-500"><th class="text-left py-1">รอบ</th><th class="text-right py-1">กม.ครบ</th></tr></thead><tbody>' +
-          rounds.map(function (r) {
-            return '<tr class="' + (r.isCurrent ? 'font-semibold text-purple-700 dark:text-purple-300' : '') + '"><td class="py-1">รอบที่ ' + r.n + (r.isCurrent ? ' (ปัจจุบัน)' : '') + '</td><td class="py-1 text-right">' + r.km.toLocaleString() + '</td></tr>';
-          }).join('') + '</tbody></table>'
-        : '<p class="text-xs text-slate-400">ตั้งกม.ครบรอบและระยะต่อรอบเพื่อดูแผนล่วงหน้า</p>';
+      const roundsHtml = formatUpcomingRoundsEditableHtml(car, info, car.id);
 
       const tab = vehicleMgrActiveTab;
       const tabBtn = function (id, label) {
@@ -1130,10 +1185,10 @@
           '</div>';
 
       const panelPlan = '<div class="vmgr-panel space-y-3 pt-3' + tabHidden('plan') + '">' +
-          '<label class="block text-sm font-medium">กม.ครบรอบปัจจุบัน</label><input type="number" class="vmgr-due-km w-full px-4 py-3 text-base rounded-xl border dark:bg-slate-700 dark:border-slate-600" value="' + (info.dueKm || '') + '">' +
+          '<label class="block text-sm font-medium">กม.ครบรอบปัจจุบัน (รอบที่ 1)</label><input type="number" class="vmgr-due-km w-full px-4 py-3 text-base rounded-xl border dark:bg-slate-700 dark:border-slate-600" value="' + (info.dueKm || '') + '" oninput="window.syncVehicleRound1FromDue(\'' + car.id + '\')">' +
           '<label class="block text-sm font-medium">ระยะกม.ต่อรอบ (หลังเข้าศูนย์)</label><input type="number" class="vmgr-interval-km w-full px-4 py-3 text-base rounded-xl border dark:bg-slate-700 dark:border-slate-600" value="' + info.intervalKm + '">' +
           '<button type="button" onclick="window.saveVehiclePlan(\'' + car.id + '\')" class="w-full bg-orange-500 hover:bg-orange-600 text-white text-base font-semibold py-3.5 rounded-xl">บันทึกแผนรอบ</button>' +
-          '<div class="bg-orange-50 dark:bg-orange-900/20 rounded-xl p-3 border border-orange-100 dark:border-orange-800/40"><p class="text-sm font-semibold text-orange-800 dark:text-orange-300 mb-1">รอบถัดไป (คำนวณจากระยะมาตรฐาน)</p>' + roundsHtml + '</div>' +
+          '<div class="bg-orange-50 dark:bg-orange-900/20 rounded-xl p-3 border border-orange-100 dark:border-orange-800/40"><p class="text-sm font-semibold text-orange-800 dark:text-orange-300 mb-1">รอบถัดไป (แก้ไขกม.ครบแต่ละรอบได้)</p>' + roundsHtml + '</div>' +
           '</div>';
 
       const panelHistory = '<div class="vmgr-panel pt-3' + tabHidden('history') + '">' + formatVehicleServiceHistoryTableHtml(car) + '</div>';
@@ -1251,15 +1306,28 @@
       const el = document.querySelector('[data-vehicle-id="' + vehicleId + '"]');
       return el || null;
     }
+    function collectVehicleRoundPlanFromCard(card) {
+      const rounds = [];
+      if (!card) return rounds;
+      card.querySelectorAll('.vmgr-round-km').forEach(function (el) {
+        const n = parseFloat(el.value);
+        if (!isNaN(n) && n > 0) rounds.push(Math.round(n));
+      });
+      return rounds;
+    }
+
     window.saveVehiclePlan = function (vehicleId) {
       if (!isAdmin || !adminToken) return;
       const card = getVehicleManagerCard(vehicleId);
       const car = appData.vehicles.find(v => v.id === vehicleId);
       if (!card || !car) return;
+      const rounds = collectVehicleRoundPlanFromCard(card);
+      const dueKm = rounds.length ? rounds[0] : card.querySelector('.vmgr-due-km').value;
       apiCall('saveVehicleManagement', [{
         id: vehicleId, plate: car.plate,
-        serviceMile: card.querySelector('.vmgr-due-km').value,
+        serviceMile: dueKm,
         serviceIntervalKm: card.querySelector('.vmgr-interval-km').value,
+        serviceRoundPlan: rounds,
         managementAction: 'ตั้งแผนเช็คระยะ'
       }], adminToken).then(function (res) {
         showToast(res.msg, res.success);
@@ -1329,6 +1397,30 @@
       const card = getVehicleManagerCard(vehicleId);
       if (!card) return;
       resetVehicleServiceHistoryEditor(card);
+    };
+    window.saveVehicleHistoryNextDue = function (vehicleId, historyIndex) {
+      if (!isAdmin || !adminToken) return;
+      const card = getVehicleManagerCard(vehicleId);
+      const car = appData.vehicles.find(function (v) { return v.id === vehicleId; });
+      if (!card || !car) return;
+      const input = card.querySelector('.vmgr-hist-next-due[data-hist-idx="' + historyIndex + '"]');
+      if (!input) return;
+      const nextDue = parseFloat(input.value);
+      if (isNaN(nextDue) || nextDue <= 0) {
+        Swal.fire('กรุณากรอกข้อมูล', 'ระบุกม.ครบรอบถัดไปให้ถูกต้อง', 'warning');
+        return;
+      }
+      const rounds = collectVehicleRoundPlanFromCard(card);
+      apiCall('saveVehicleManagement', [{
+        id: vehicleId, plate: car.plate,
+        serviceHistoryEditIndex: historyIndex,
+        serviceMile: nextDue,
+        serviceRoundPlan: rounds.length ? rounds : undefined,
+        managementAction: 'แก้ไขรอบถัดไปประวัติ'
+      }], adminToken).then(function (res) {
+        showToast(res.msg, res.success);
+        if (res.success) reloadAfterMutation();
+      }).catch(function (err) { Swal.fire('ผิดพลาด', err.message || '', 'error'); });
     };
     window.saveVehicleRemarks = function (vehicleId) {
       if (!isAdmin || !adminToken) return;
