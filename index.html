@@ -422,7 +422,7 @@
         <input type="hidden" id="mile-booking-id">
         <div><label class="block text-sm font-medium mb-1">ไมล์ก่อนใช้</label><input type="number" id="mile-start" required class="w-full px-3 py-3 text-base rounded-xl border outline-none dark:bg-slate-700 dark:border-slate-600"></div>
         <div><label class="block text-sm font-medium mb-1">ไมล์หลังใช้ <span class="text-red-500">*</span></label><input type="number" id="mile-end" required class="w-full px-3 py-3 text-base rounded-xl border outline-none dark:bg-slate-700 dark:border-slate-600"></div>
-        <div><label class="block text-sm font-medium mb-1 text-purple-700 dark:text-purple-300">📍 จุดจอดรถ</label><input type="text" id="mile-parking" class="w-full px-3 py-3 text-base rounded-xl border outline-none dark:bg-slate-700 dark:border-slate-600" placeholder="ชั้น/ช่องจอด"></div>
+        <div><label class="block text-sm font-medium mb-1 text-purple-700 dark:text-purple-300">📍 จุดจอดหลังใช้งาน</label><input type="text" id="mile-parking" autocomplete="off" class="w-full px-3 py-3 text-base rounded-xl border outline-none dark:bg-slate-700 dark:border-slate-600" placeholder="พิมพ์ชั้น/ช่องจอดเอง"></div>
         <button type="submit" id="mile-submit-btn" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3.5 rounded-xl">บันทึกไมล์</button>
       </form>
     </div>
@@ -2881,7 +2881,7 @@
       if (isNaN(startMile) || startMile <= 0) startMile = car ? (parseFloat(car.currentMile) || 0) : 0;
       document.getElementById('mile-start').value = startMile > 0 ? startMile : '';
       document.getElementById('mile-end').value = (bk.endMile && parseFloat(bk.endMile) > 0) ? bk.endMile : '';
-      document.getElementById('mile-parking').value = bk.parkingSpot || (car ? (car.parkingSpot || '') : '');
+      document.getElementById('mile-parking').value = '';
       document.getElementById('mileage-modal').style.display = 'flex';
       setTimeout(function () { document.getElementById('mile-end').focus(); }, 150);
     };
