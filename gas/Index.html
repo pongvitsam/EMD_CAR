@@ -35,7 +35,6 @@
       }
     }
   </script>
-  <?!= include_('GlassTheme'); ?>
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js'></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -155,12 +154,13 @@
       }
     }
   </style>
+  <?!= include_('GlassTheme'); ?>
 </head>
 <body class="emd-glass flex flex-col min-h-screen">
   <div id="app-loading" class="fixed inset-0 z-[100] flex items-center justify-center backdrop-blur-sm">
     <div class="text-center">
-      <div class="mx-auto h-10 w-10 rounded-full border-4 border-purple-200 border-t-purple-600 animate-spin"></div>
-      <p class="mt-3 text-sm text-slate-500 dark:text-slate-300">กำลังโหลดข้อมูล...</p>
+      <div class="mx-auto h-10 w-10 rounded-full border-4 border-blue-200 border-t-blue-500 animate-spin"></div>
+      <p class="mt-3 text-sm">กำลังโหลดข้อมูล...</p>
     </div>
   </div>
 
@@ -181,7 +181,7 @@
   </div>
 
   <div id="legacy-app-root" class="hidden flex flex-col flex-1 min-h-0 w-full">
-  <div id="announcement-banner" class="hidden bg-yellow-400 dark:bg-yellow-600 text-yellow-900 dark:text-yellow-50 px-4 py-2 text-sm font-medium w-full overflow-hidden whitespace-nowrap">
+  <div id="announcement-banner" class="hidden px-4 py-2 text-sm font-medium w-full overflow-hidden whitespace-nowrap">
     <div class="inline-block animate-marquee" id="banner-text-content"></div>
   </div>
 
@@ -892,7 +892,7 @@
       const rangeHint = dashboardAvailMode === 'range'
         ? (dashboardAvailRangeStep === 'end' ? 'คลิกวันสิ้นสุดช่วง' : 'คลิกวันเริ่มต้นช่วง')
         : 'คลิกวันที่ในปฏิทิน';
-      wrap.innerHTML = '<div class="dashboard-avail-card bg-white dark:bg-slate-800 p-3 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm h-full flex flex-col min-h-0">' +
+      wrap.innerHTML = '<div class="dashboard-avail-card emd-panel bg-white dark:bg-slate-800 p-3 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm h-full flex flex-col min-h-0">' +
         '<div class="flex items-center justify-between gap-1 mb-1 shrink-0">' +
         '<h3 class="text-sm font-semibold text-purple-600 dark:text-purple-400 whitespace-nowrap">🔎 ตรวจหารถว่าง</h3>' +
         '<div class="flex gap-1">' +
@@ -1608,7 +1608,7 @@
       const { value: formValues } = await Swal.fire({
         title: 'ผู้ดูแลระบบ (Admin)',
         html: '<input id="swal-user" class="swal2-input" placeholder="Username"><input id="swal-pass" type="password" class="swal2-input" placeholder="Password">',
-        focusConfirm: false, confirmButtonText: 'เข้าสู่ระบบ', confirmButtonColor: '#a855f7', showLoaderOnConfirm: true,
+        focusConfirm: false, confirmButtonText: 'เข้าสู่ระบบ', confirmButtonColor: '#3b82f6', showLoaderOnConfirm: true,
         preConfirm: () => {
           const user = document.getElementById('swal-user').value;
           const pass = document.getElementById('swal-pass').value;
@@ -1636,7 +1636,7 @@
         refreshNameManager();
         Swal.fire({ icon: 'success', title: 'สำเร็จ', text: 'เข้าสู่ระบบ Admin แล้ว', timer: 1500, showConfirmButton: false });
       } else if (formValues && !formValues.success) {
-        Swal.fire({ icon: 'error', title: 'ข้อผิดพลาด', text: 'ข้อมูลไม่ถูกต้อง', confirmButtonColor: '#a855f7' });
+        Swal.fire({ icon: 'error', title: 'ข้อผิดพลาด', text: 'ข้อมูลไม่ถูกต้อง', confirmButtonColor: '#3b82f6' });
       }
     };
 
@@ -1765,9 +1765,9 @@
         if (isBookedNow) activeCarsCount++;
       });
       document.getElementById('dashboard-stat-active').innerHTML =
-        '<div class="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col items-center justify-center h-full min-h-[5rem]"><p class="text-slate-500 dark:text-slate-400 text-xs text-center">กำลังใช้งานในขณะนี้</p><p class="text-2xl font-bold text-orange-500 mt-1">' + activeCarsCount + '</p></div>';
+        '<div class="emd-panel bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col items-center justify-center h-full min-h-[5rem]"><p class="text-slate-500 dark:text-slate-400 text-xs text-center">กำลังใช้งานในขณะนี้</p><p class="text-2xl font-bold text-orange-500 mt-1">' + activeCarsCount + '</p></div>';
       document.getElementById('dashboard-stat-dept').innerHTML =
-        '<div class="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm h-full">' +
+        '<div class="emd-panel bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm h-full">' +
           '<div class="flex justify-between items-center gap-2 mb-1">' +
             '<p class="text-slate-500 dark:text-slate-400 text-xs">จำนวนครั้งการจองแต่ละแผนก (' + bookingsThisMonth + ' ครั้ง)</p>' +
             '<select id="dashboard-month" onchange="window.changeDashboardMonth(this.value)" class="text-xs px-2 py-1 rounded-lg border border-purple-200 outline-none bg-purple-50 text-purple-700 dark:bg-slate-700 dark:text-purple-300 dark:border-slate-600">' +
@@ -1799,7 +1799,7 @@
               labels: topRows.map(r => r[0]),
               datasets: [{
                 data: topRows.map(r => r[1]),
-                backgroundColor: '#8b5cf6',
+                  backgroundColor: '#3b82f6',
                 borderRadius: 8,
                 barThickness: 14
               }]
@@ -1810,8 +1810,8 @@
               responsive: true,
               plugins: { legend: { display: false } },
               scales: {
-                x: { beginAtZero: true, ticks: { precision: 0 } },
-                y: { ticks: { autoSkip: false } }
+                x: { beginAtZero: true, ticks: { precision: 0, color: '#94a3b8' }, grid: { color: 'rgba(148, 163, 184, 0.18)' } },
+                y: { ticks: { autoSkip: false, color: '#e8f0fc' }, grid: { color: 'rgba(148, 163, 184, 0.18)' } }
               }
             }
           });
@@ -1889,12 +1889,18 @@
 
       const labels = rows.map(r => r.name);
       const userBarColors = rows.map(r => getColorForUser(r.key));
+      const emdChartTick = '#94a3b8';
+      const emdChartLabel = '#e8f0fc';
+      const emdChartGrid = 'rgba(148, 163, 184, 0.18)';
       const commonOptions = title => ({
         indexAxis: 'y',
         maintainAspectRatio: false,
         responsive: true,
-        plugins: { legend: { display: false }, title: { display: true, text: title } },
-        scales: { x: { beginAtZero: true, ticks: { precision: 0 } }, y: { ticks: { autoSkip: false } } }
+        plugins: { legend: { display: false }, title: { display: true, text: title, color: emdChartLabel, font: { family: 'Kanit', size: 13 } } },
+        scales: {
+          x: { beginAtZero: true, ticks: { precision: 0, color: emdChartTick }, grid: { color: emdChartGrid } },
+          y: { ticks: { autoSkip: false, color: emdChartLabel }, grid: { color: emdChartGrid } }
+        }
       });
 
       window.chart1 = new Chart(document.getElementById('userBookingChart'), {
@@ -2023,11 +2029,11 @@
             remarksHtml = `<div class="mt-2 text-xs text-red-700 dark:text-red-300 bg-red-100 dark:bg-red-900/30 p-2 rounded-lg border border-red-200 dark:border-red-800 font-bold">⚠️ เหตุผล: ${car.remarks}</div>`;
         }
 
-        let settingBtn = '<button onclick="window.openVehicleModal(\'' + car.id + '\')" class="absolute top-2 right-2 bg-white/95 hover:bg-white text-purple-600 px-3 py-1 rounded-full shadow-md text-xs font-bold border border-purple-200 z-10 transition">อัปเดตข้อมูล</button>';
+        let settingBtn = '<button onclick="window.openVehicleModal(\'' + car.id + '\')" class="absolute top-2 right-2 bg-white/95 hover:bg-white text-purple-600 px-3 py-1 rounded-full shadow-md text-xs font-bold border border-purple-200 z-10 transition backdrop-blur-sm">อัปเดตข้อมูล</button>';
 
         let carImageSrc = car.img;
         if (!carImageSrc) carImageSrc = 'https://via.placeholder.com/400x200';
-        cardsHtml += '<div class="bg-white dark:bg-slate-800 rounded-3xl overflow-hidden shadow-sm ' + borderClass + ' flex flex-col relative transition-colors">' +
+        cardsHtml += '<div class="emd-car-card emd-panel bg-white dark:bg-slate-800 rounded-3xl overflow-hidden shadow-sm ' + borderClass + ' flex flex-col relative transition-colors">' +
           settingBtn +
           '<div class="relative bg-slate-100 dark:bg-slate-700">' +
             '<img src="' + carImageSrc + '" class="w-full h-48 object-cover transition duration-300 ' + imgFilter + '">' +
@@ -2285,7 +2291,7 @@
         showCancelButton: true,
         confirmButtonText: 'บันทึก',
         cancelButtonText: 'ยกเลิก',
-        confirmButtonColor: '#a855f7',
+        confirmButtonColor: '#3b82f6',
         didOpen: () => {
           document.getElementById('swal-managed-name').value = item.fullName || '';
           document.getElementById('swal-managed-dept').value = item.dept || '';
@@ -2377,7 +2383,7 @@
         showCancelButton: true,
         confirmButtonText: 'บันทึก',
         cancelButtonText: 'ยกเลิก',
-        confirmButtonColor: '#a855f7',
+        confirmButtonColor: '#3b82f6',
         inputValidator: (value) => {
           if (!value || value < 0) return 'กรุณาระบุเลขไมล์ให้ถูกต้อง!'
         }
@@ -2476,7 +2482,7 @@
 
     window.addOtherName = async function() {
       if (document.getElementById('bk-not-emd').checked) {
-        Swal.fire({ icon: 'info', title: 'กรอกเองได้เลย', text: 'กรณีไม่ใช่ กธพ จะไม่เพิ่มชื่อเข้า dropdown รายชื่อ', confirmButtonColor: '#a855f7' });
+        Swal.fire({ icon: 'info', title: 'กรอกเองได้เลย', text: 'กรณีไม่ใช่ กธพ จะไม่เพิ่มชื่อเข้า dropdown รายชื่อ', confirmButtonColor: '#3b82f6' });
         document.getElementById('bk-user').focus();
         return;
       }
@@ -2492,7 +2498,7 @@
         showCancelButton: true,
         confirmButtonText: 'เพิ่มรายชื่อ',
         cancelButtonText: 'ยกเลิก',
-        confirmButtonColor: '#a855f7',
+        confirmButtonColor: '#3b82f6',
         didOpen: () => {
           document.getElementById('swal-new-name').value = currentName;
           document.getElementById('swal-new-dept').value = currentDept;
@@ -2753,7 +2759,7 @@
         cancelButtonText: options.cancelText || 'ยกเลิก',
         allowOutsideClick: false,
         allowEscapeKey: false,
-        confirmButtonColor: '#a855f7',
+        confirmButtonColor: '#3b82f6',
         didOpen: function () {
           const btn = Swal.getConfirmButton();
           btn.disabled = true;
@@ -2979,7 +2985,7 @@
           input: 'text', 
           inputValidator: v => !v && 'กรุณาระบุเหตุผลเพื่อบันทึกในระบบ', 
           showCancelButton: true,
-          confirmButtonColor: '#a855f7'
+          confirmButtonColor: '#3b82f6'
         });
         if (!isConfirmed) return; 
         reason = t;

@@ -26,48 +26,75 @@ html {
 
 html.dark body,
 body.emd-glass {
-  color: var(--emd-text);
-  background-color: var(--emd-bg-deep);
+  color: var(--emd-text) !important;
+  background-color: var(--emd-bg-deep) !important;
   background-image:
     radial-gradient(ellipse 120% 80% at 10% -20%, rgba(37, 99, 235, 0.35), transparent 50%),
     radial-gradient(ellipse 90% 70% at 100% 0%, rgba(14, 165, 233, 0.2), transparent 45%),
     radial-gradient(ellipse 80% 60% at 50% 100%, rgba(30, 64, 175, 0.25), transparent 55%),
-    linear-gradient(165deg, var(--emd-bg-deep) 0%, var(--emd-bg-mid) 45%, var(--emd-bg-accent) 100%);
+    linear-gradient(165deg, var(--emd-bg-deep) 0%, var(--emd-bg-mid) 45%, var(--emd-bg-accent) 100%) !important;
   background-attachment: fixed;
 }
 
-/* Glass surfaces â€” override Tailwind utility backgrounds */
+.emd-glass main {
+  color: var(--emd-text);
+}
+
+.emd-glass main h2,
+.emd-glass main h3,
+.emd-glass .emd-heading {
+  color: var(--emd-accent-light) !important;
+  border-color: var(--emd-glass-border-bright) !important;
+  text-shadow: 0 1px 12px rgba(59, 130, 246, 0.25);
+}
+
+.emd-glass label {
+  color: var(--emd-text);
+}
+
+.emd-glass strong {
+  color: #f1f5f9;
+}
+
+/* Unified glass panel (cards, dashboard, tables, modals) */
+.emd-glass .emd-panel,
+.emd-glass .emd-car-card,
 .emd-glass .bg-white,
-.emd-glass .dark .bg-white,
+.emd-glass .dark\:bg-slate-800,
+.emd-glass .dark\:bg-slate-700,
 .emd-glass .bg-slate-50,
-.emd-glass .dark .bg-slate-50,
+.emd-glass .dark\:bg-slate-50,
 .emd-glass .bg-slate-100,
-.emd-glass .dark .bg-slate-100 {
+.emd-glass .dark\:bg-slate-100,
+.emd-glass .dashboard-avail-card {
   background: var(--emd-glass-card) !important;
   backdrop-filter: blur(var(--emd-blur));
   -webkit-backdrop-filter: blur(var(--emd-blur));
-  border: 1px solid var(--emd-glass-border);
+  border: 1px solid var(--emd-glass-border) !important;
   box-shadow: var(--emd-shadow);
+  color: var(--emd-text);
 }
 
 .emd-glass .bg-slate-800,
-.emd-glass .dark .bg-slate-800,
+.emd-glass .dark\:bg-slate-800,
 .emd-glass .bg-slate-700,
-.emd-glass .dark .bg-slate-700,
+.emd-glass .dark\:bg-slate-700,
 .emd-glass .bg-slate-600,
-.emd-glass .dark .bg-slate-600 {
-  background: var(--emd-glass) !important;
+.emd-glass .dark\:bg-slate-600 {
+  background: var(--emd-glass-card) !important;
   backdrop-filter: blur(var(--emd-blur));
   -webkit-backdrop-filter: blur(var(--emd-blur));
   border-color: var(--emd-glass-border) !important;
+  color: var(--emd-text);
 }
 
 .emd-glass .bg-purple-50,
-.emd-glass .dark .bg-purple-50,
+.emd-glass .dark\:bg-purple-50,
 .emd-glass .bg-purple-900\/20,
-.emd-glass .dark .bg-purple-900\/20 {
-  background: rgba(59, 130, 246, 0.12) !important;
+.emd-glass .dark\:bg-purple-900\/20 {
+  background: rgba(59, 130, 246, 0.15) !important;
   border-color: var(--emd-glass-border-bright) !important;
+  color: var(--emd-text) !important;
 }
 
 .emd-glass .bg-purple-400,
@@ -106,23 +133,53 @@ body.emd-glass {
 .emd-glass .text-purple-600,
 .emd-glass .text-purple-700,
 .emd-glass .text-purple-800,
-.emd-glass .dark .text-purple-300,
-.emd-glass .dark .text-purple-400 {
+.emd-glass .text-purple-900,
+.emd-glass .dark\:text-purple-300,
+.emd-glass .dark\:text-purple-400 {
   color: var(--emd-accent-light) !important;
 }
 
+.emd-glass .text-slate-400,
 .emd-glass .text-slate-500,
 .emd-glass .text-slate-600,
-.emd-glass .dark .text-slate-300,
-.emd-glass .dark .text-slate-400,
-.emd-glass .dark .text-slate-500 {
+.emd-glass .dark\:text-slate-300,
+.emd-glass .dark\:text-slate-400,
+.emd-glass .dark\:text-slate-500 {
   color: var(--emd-text-muted) !important;
 }
 
 .emd-glass .text-slate-700,
-.emd-glass .dark .text-slate-200,
-.emd-glass .dark .text-slate-300 {
+.emd-glass .dark\:text-slate-200,
+.emd-glass .dark\:text-slate-300 {
   color: var(--emd-text) !important;
+}
+
+.emd-glass .text-orange-500,
+.emd-glass .text-orange-600 {
+  color: #fb923c !important;
+}
+
+.emd-glass .text-green-700,
+.emd-glass .dark\:text-green-400 {
+  color: #4ade80 !important;
+}
+
+.emd-glass .text-blue-600,
+.emd-glass .dark\:text-blue-400,
+.emd-glass .text-blue-700,
+.emd-glass .dark\:text-blue-300 {
+  color: #93c5fd !important;
+}
+
+.emd-glass .text-orange-700,
+.emd-glass .dark\:text-orange-400 {
+  color: #fdba74 !important;
+}
+
+.emd-glass .text-red-700,
+.emd-glass .dark\:text-red-300,
+.emd-glass .text-red-700 {
+  color: #fca5a5 !important;
 }
 
 .emd-glass .hover\:text-purple-600:hover {
@@ -293,8 +350,10 @@ body.emd-glass {
 
 /* Banner */
 #announcement-banner {
-  background: linear-gradient(90deg, rgba(234, 179, 8, 0.9), rgba(245, 158, 11, 0.85)) !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  background: linear-gradient(90deg, rgba(37, 99, 235, 0.92), rgba(14, 165, 233, 0.88)) !important;
+  color: #f0f9ff !important;
+  border-bottom: 1px solid var(--emd-glass-border-bright);
+  text-shadow: 0 1px 2px rgba(2, 6, 23, 0.35);
 }
 
 /* Footer */
@@ -406,25 +465,84 @@ body.emd-glass {
 
 /* Status panels in car cards */
 .emd-glass .bg-orange-50,
-.emd-glass .dark .bg-orange-900\/20 {
-  background: rgba(249, 115, 22, 0.12) !important;
+.emd-glass .dark\:bg-orange-900\/20 {
+  background: rgba(249, 115, 22, 0.18) !important;
+  border: 1px solid rgba(251, 146, 60, 0.35);
 }
 
 .emd-glass .bg-green-50,
-.emd-glass .dark .bg-green-900\/20,
+.emd-glass .dark\:bg-green-900\/20,
+.emd-glass .dark\:bg-green-900\/30,
 .emd-glass .bg-emerald-50,
-.emd-glass .dark .bg-emerald-900\/20 {
-  background: rgba(16, 185, 129, 0.12) !important;
+.emd-glass .dark\:bg-emerald-900\/20 {
+  background: rgba(16, 185, 129, 0.18) !important;
+  border: 1px solid rgba(52, 211, 153, 0.35);
+}
+
+.emd-glass .bg-green-100 {
+  background: rgba(16, 185, 129, 0.28) !important;
+  color: #bbf7d0 !important;
+  border: 1px solid rgba(52, 211, 153, 0.4);
 }
 
 .emd-glass .bg-red-50,
-.emd-glass .dark .bg-red-900\/20 {
-  background: rgba(239, 68, 68, 0.12) !important;
+.emd-glass .dark\:bg-red-900\/20,
+.emd-glass .dark\:bg-red-900\/30,
+.emd-glass .bg-red-100 {
+  background: rgba(239, 68, 68, 0.18) !important;
+  border: 1px solid rgba(248, 113, 113, 0.35);
 }
 
 .emd-glass .bg-blue-50,
-.emd-glass .dark .bg-blue-900\/20 {
-  background: rgba(59, 130, 246, 0.12) !important;
+.emd-glass .dark\:bg-blue-900\/20 {
+  background: rgba(59, 130, 246, 0.18) !important;
+  border: 1px solid rgba(96, 165, 250, 0.35);
+}
+
+.emd-glass .bg-purple-100,
+.emd-glass .hover\:bg-purple-200:hover,
+.emd-glass .dark\:bg-purple-900\/40 {
+  background: rgba(59, 130, 246, 0.28) !important;
+  color: var(--emd-accent-light) !important;
+  border: 1px solid var(--emd-glass-border-bright);
+}
+
+.emd-glass .bg-white\/95,
+.emd-glass .hover\:bg-white:hover,
+.emd-glass .bg-white\/15,
+.emd-glass .hover\:bg-white\/25:hover {
+  background: rgba(30, 64, 120, 0.88) !important;
+  color: var(--emd-accent-light) !important;
+  border-color: var(--emd-glass-border-bright) !important;
+}
+
+.emd-glass .bg-orange-100 {
+  background: rgba(249, 115, 22, 0.25) !important;
+  color: #fed7aa !important;
+}
+
+.emd-glass .border-slate-100,
+.emd-glass .dark\:border-slate-700,
+.emd-glass .border-orange-300,
+.emd-glass .dark\:border-orange-800,
+.emd-glass .border-blue-300,
+.emd-glass .dark\:border-blue-800,
+.emd-glass .border-red-300,
+.emd-glass .dark\:border-red-800 {
+  border-color: var(--emd-glass-border) !important;
+}
+
+.emd-glass .emd-car-card.border-orange-300,
+.emd-glass .emd-car-card.border-orange-400,
+.emd-glass .emd-car-card.border-red-500,
+.emd-glass .emd-car-card.border-red-300 {
+  border-color: rgba(251, 146, 60, 0.65) !important;
+  box-shadow: var(--emd-shadow), 0 0 0 1px rgba(251, 146, 60, 0.2);
+}
+
+.emd-glass select option {
+  background: var(--emd-bg-mid);
+  color: var(--emd-text);
 }
 
 /* SweetAlert2 */
@@ -516,6 +634,18 @@ body.emd-glass {
 .emd-glass button:focus-visible {
   outline: 2px solid var(--emd-accent-soft);
   outline-offset: 2px;
+}
+
+#app-loading p {
+  color: var(--emd-text-muted) !important;
+}
+
+#app-loading .border-blue-200 {
+  border-color: rgba(96, 165, 250, 0.35) !important;
+}
+
+#app-loading .border-t-blue-500 {
+  border-top-color: var(--emd-accent) !important;
 }
 
 </style>
