@@ -2754,6 +2754,8 @@
     };
 
     const MILEAGE_HOWTO_HTML = '<p class="text-sm text-slate-600 dark:text-slate-300 mt-3 pt-3 border-t border-slate-200 dark:border-slate-600 text-left"><strong>วิธีอัปเดต</strong><br>1. เปิดหน้าปฏิทิน &gt; เลือกวันที่ใช้รถ &gt; อัปเดตเลขไมล์</p>';
+    const MILEAGE_REMINDER_MESSAGE = '<p class="text-left text-sky-100 text-sm mb-3 leading-relaxed border border-sky-500/30 bg-sky-500/10 rounded-xl px-3 py-2">จองรถไปขับแล้ว อย่าลืมลงเลขไมล์ไว้ใช้บำรุงรักษาเพื่อส่วนรวม... ร่วมรับผิดชอบไปด้วยกัน ครับ</p>';
+    const MILEAGE_REMINDER_COUNTDOWN_SEC = 15;
     const MILEAGE_REMINDER_MONTH_MS = 30 * 24 * 60 * 60 * 1000;
     window._mileageSubmitAckKey = '';
     window._mileageNameAlertKey = '';
@@ -2805,6 +2807,39 @@
       return bookings.map(function (b) { return b.id; }).sort().join('|');
     }
 
+    function getBookingYearMonthKey(b) {
+      const end = parseTimeSafe(b && b.end);
+      if (!end) return null;
+      const d = new Date(end);
+      return d.getFullYear() * 12 + d.getMonth();
+    }
+
+    /** เดือนปัจจุบัน: แจ้งทุกรายการ | เดือนก่อน (ขึ้นเดือนใหม่): เฉพาะรายการล่าสุดต่อเดือน */
+    function filterPendingMileageForDisplay(bookings) {
+      const now = new Date();
+      const curKey = now.getFullYear() * 12 + now.getMonth();
+      const groups = new Map();
+      bookings.forEach(function (b) {
+        const k = getBookingYearMonthKey(b);
+        if (k == null) return;
+        if (!groups.has(k)) groups.set(k, []);
+        groups.get(k).push(b);
+      });
+      const result = [];
+      let prevMonthCollapsed = false;
+      groups.forEach(function (list, k) {
+        const sorted = list.slice().sort(function (a, b) { return parseTimeSafe(b.end) - parseTimeSafe(a.end); });
+        if (k === curKey) {
+          result.push.apply(result, sorted);
+        } else if (k < curKey) {
+          result.push(sorted[0]);
+          if (sorted.length > 1) prevMonthCollapsed = true;
+        }
+      });
+      result.sort(function (a, b) { return parseTimeSafe(b.end) - parseTimeSafe(a.end); });
+      return { bookings: result, prevMonthCollapsed: prevMonthCollapsed };
+    }
+
     function buildPendingMileageDateText(bookings) {
       return bookings.map(function (b) { return formatThaiDate(b.end); }).join(', ');
     }
@@ -2815,24 +2850,33 @@
       }).join('');
     }
 
-    function buildPendingMileageAlertHtml(bookings) {
+    function buildPendingMileageAlertHtml(bookings, opts) {
+      opts = opts || {};
       const dates = buildPendingMileageDateText(bookings);
-      return '<p class="text-left">มีการใช้รถภายใน <strong>1 เดือนที่ผ่านมา</strong> ที่ยังไม่ได้บันทึกไมล์ กรุณาอัปเดตเลขไมล์ ก่อน/หลังใช้งานในวันที่ <strong>' + escapeHtml(dates) + '</strong> เพื่อปิดการแจ้งเตือน</p>' +
+      const monthNote = opts.prevMonthCollapsed
+        ? '<p class="text-left text-xs text-slate-400 mb-2">ขึ้นเดือนใหม่แล้ว — แสดงเฉพาะรายการล่าสุดของเดือนที่แล้ว (รายการอื่นยังต้องอัปเดตในปฏิทิน)</p>'
+        : '';
+      return MILEAGE_REMINDER_MESSAGE +
+        monthNote +
+        '<p class="text-left">มีการใช้รถภายใน <strong>1 เดือนที่ผ่านมา</strong> ที่ยังไม่ได้บันทึกไมล์ กรุณาอัปเดตเลขไมล์ ก่อน/หลังใช้งานในวันที่ <strong>' + escapeHtml(dates) + '</strong> เพื่อปิดการแจ้งเตือน</p>' +
         '<ul class="text-sm list-disc pl-5 my-2 text-left">' + formatPendingMileageListHtml(bookings) + '</ul>';
     }
 
-    async function requirePendingMileageCountdown(bookings, options) {
+    async function requirePendingMileageCountdown(allBookings, options) {
       options = options || {};
-      const ackKey = getPendingMileageAckKey(bookings);
+      if (!allBookings || !allBookings.length) return true;
+      const display = filterPendingMileageForDisplay(allBookings);
+      const bookings = display.bookings;
+      const ackKey = getPendingMileageAckKey(allBookings);
       const ackProp = options.ackProp === 'name' ? '_mileageNameAlertKey' : '_mileageSubmitAckKey';
       if (window[ackProp] === ackKey) return true;
       const doneLabel = options.doneLabel || 'จองต่อ';
       const waitDoneText = options.waitDoneText || 'แล้วจองต่อได้';
-      let seconds = 10;
+      let seconds = MILEAGE_REMINDER_COUNTDOWN_SEC;
       const result = await Swal.fire({
         icon: 'warning',
         title: 'ยังไม่ได้อัปเดตเลขไมล์',
-        html: buildPendingMileageAlertHtml(bookings) +
+        html: buildPendingMileageAlertHtml(bookings, { prevMonthCollapsed: display.prevMonthCollapsed }) +
           '<p id="mile-countdown" class="text-lg font-bold text-red-600 dark:text-red-400 mt-3">รอ ' + seconds + ' วินาที ' + waitDoneText + '...</p>' + MILEAGE_HOWTO_HTML,
         confirmButtonText: doneLabel + ' (' + seconds + ')',
         showCancelButton: !!options.showCancel,
