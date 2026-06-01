@@ -682,11 +682,17 @@ function saveBooking(form) {
       if (!nData.includes(form.dept)) nSheet.appendRow(['', '', form.dept]);
     }
 
+    const endMileNum = parseFloat(form.endMile);
+    const hasPostTripMile = !isNaN(endMileNum) && endMileNum > 0;
+    const bookingParking = hasPostTripMile ? (form.parkingSpot || '').trim() : '';
+
     const vData = vSheet.getDataRange().getValues();
     for (let i = 1; i < vData.length; i++) {
-      if (String(vData[i][1]).trim() === String(form.plate).trim()) { 
-        if (form.endMile && parseFloat(form.endMile) > 0) vSheet.getRange(i + 1, 8).setValue(form.endMile); 
-        if (form.parkingSpot && form.parkingSpot.trim() !== '') vSheet.getRange(i + 1, 9).setValue(form.parkingSpot); 
+      if (String(vData[i][1]).trim() === String(form.plate).trim()) {
+        if (hasPostTripMile) {
+          vSheet.getRange(i + 1, 8).setValue(form.endMile);
+          if (bookingParking) vSheet.getRange(i + 1, 9).setValue(bookingParking);
+        }
         break;
       }
     }
@@ -694,14 +700,14 @@ function saveBooking(form) {
     if (form.id) {
       for (let i = 1; i < bData.length; i++) {
         if (String(bData[i][0]).trim() === String(form.id).trim()) {
-          bSheet.getRange(i + 1, 2, 1, 12).setValues([[form.plate, fname, lname, form.dept, "'" + form.start, "'" + form.end, form.dest, form.driver, form.originalEmail, form.startMile, form.endMile, form.parkingSpot || '']]);
+          bSheet.getRange(i + 1, 2, 1, 12).setValues([[form.plate, fname, lname, form.dept, "'" + form.start, "'" + form.end, form.dest, form.driver, form.originalEmail, form.startMile, form.endMile, bookingParking]]);
           clearAppCache_();
-          logSheet.appendRow([new Date(), actionEmail, 'UPDATE_BOOKING', form.plate, `แก้ไข/คืนรถ (จุดจอด: ${form.parkingSpot || '-'}, ไมล์: ${form.startMile} -> ${form.endMile})`, form.editReason || '-']);
+          logSheet.appendRow([new Date(), actionEmail, 'UPDATE_BOOKING', form.plate, `แก้ไข/คืนรถ (จุดจอด: ${bookingParking || '-'}, ไมล์: ${form.startMile} -> ${form.endMile})`, form.editReason || '-']);
           return {success: true, msg: 'อัปเดตการจองและจุดจอดเรียบร้อยครับ'};
         }
       }
     } else {
-      bSheet.appendRow(['B_' + new Date().getTime(), form.plate, fname, lname, form.dept, "'" + form.start, "'" + form.end, form.dest, form.driver, actionEmail, form.startMile, form.endMile, form.parkingSpot || '']);
+      bSheet.appendRow(['B_' + new Date().getTime(), form.plate, fname, lname, form.dept, "'" + form.start, "'" + form.end, form.dest, form.driver, actionEmail, form.startMile, form.endMile, bookingParking]);
       clearAppCache_();
       logSheet.appendRow([new Date(), actionEmail, 'CREATE_BOOKING', form.plate, `จองไป ${form.dest}`, '-']);
       return {success: true, msg: 'บันทึกการจองสำเร็จครับ'};

@@ -716,6 +716,11 @@
     function isBookingActiveNow(b, nowTime) {
       return parseTimeSafe(b.start) <= nowTime && parseTimeSafe(b.end) >= nowTime && (!b.endMile || parseFloat(b.endMile) == 0);
     }
+    /** คืนรถแล้ว — มีไมล์หลังใช้บันทึกแล้ว (จุดจอดแสดงได้เมื่อบันทึกไมล์แล้วเท่านั้น) */
+    function bookingHasPostTripData(b) {
+      const endMile = parseFloat(b && b.endMile);
+      return !isNaN(endMile) && endMile > 0;
+    }
     function getCarIdleLabel(plate, nowTime) {
       const plateNorm = String(plate || '').trim();
       let lastFreeAt = 0;
@@ -2150,7 +2155,7 @@
           const color = getColorForUser(b);
           const destText = escapeHtml(b.dest || '-');
           
-          const hasReturnInfo = (b.endMile && String(b.endMile).trim() !== '' && parseFloat(b.endMile) > 0) || (b.parkingSpot && String(b.parkingSpot).trim() !== '');
+          const hasReturnInfo = bookingHasPostTripData(b);
           const returnInfoHtml = hasReturnInfo ? `
             <div class="bg-emerald-50 dark:bg-emerald-900/20 p-3 rounded-xl mt-3 space-y-1 border border-emerald-100 dark:border-emerald-800/40">
               <p><strong>🔧 คืนรถ / อัปเดตข้อมูล</strong></p>
@@ -2646,7 +2651,7 @@
           document.getElementById('bk-start-mile').value = bk.startMile || '';
           document.getElementById('bk-end-mile').value = bk.endMile || '';
           const carData = appData.vehicles.find(v => String(v.plate).trim() === String(bk.plate).trim());
-          document.getElementById('bk-parking').value = bk.parkingSpot || (carData ? (carData.parkingSpot || '') : '');
+          document.getElementById('bk-parking').value = bookingHasPostTripData(bk) ? (bk.parkingSpot || '') : '';
           
           if(fpStart && bk.start) fpStart.setDate(bk.start);
           if(fpEnd && bk.end) fpEnd.setDate(bk.end);
@@ -3083,8 +3088,10 @@
         start: document.getElementById('bk-start').value, 
         end: document.getElementById('bk-end').value, 
         startMile: document.getElementById('bk-start-mile').value, 
-        endMile: document.getElementById('bk-end-mile').value, 
-        parkingSpot: document.getElementById('bk-parking').value, 
+        endMile: document.getElementById('bk-end-mile').value,
+        parkingSpot: bookingHasPostTripData({ endMile: document.getElementById('bk-end-mile').value })
+          ? document.getElementById('bk-parking').value
+          : '',
         originalEmail: origEmail || appData.currentUserEmail, 
         editReason: reason 
       };
