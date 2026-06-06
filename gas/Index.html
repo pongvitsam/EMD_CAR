@@ -300,9 +300,9 @@
 
       <div class="overflow-x-auto bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700">
         <table class="w-full text-left text-sm whitespace-nowrap">
-          <thead class="bg-purple-50 dark:bg-slate-700 text-purple-700 dark:text-purple-300"><tr><th class="p-3">ทะเบียนรถ</th><th class="p-3">ผู้ใช้งาน (แผนก)</th><th class="p-3">จุดหมาย</th><th class="p-3">เวลาเริ่ม</th><th class="p-3">เวลาสิ้นสุด</th><th class="p-3 text-center">ระยะทาง (km)</th></tr></thead>
+          <thead class="bg-purple-50 dark:bg-slate-700 text-purple-700 dark:text-purple-300"><tr><th class="p-3">ทะเบียนรถ</th><th class="p-3">ผู้ใช้งาน (แผนก)</th><th class="p-3">จุดหมาย</th><th class="p-3">เวลาเริ่ม</th><th class="p-3">เวลาสิ้นสุด</th><th id="search-dist-col" class="p-3 text-center hidden">ระยะทาง (km)</th></tr></thead>
           <tbody id="search-results" class="divide-y divide-slate-100 dark:divide-slate-700">
-             <tr><td colspan="6" class="p-6 text-center text-slate-400">กรุณากด "ค้นหา" เพื่อดูข้อมูล</td></tr>
+             <tr><td colspan="5" class="p-6 text-center text-slate-400">กรุณากด "ค้นหา" เพื่อดูข้อมูล</td></tr>
           </tbody>
         </table>
       </div>
@@ -1647,6 +1647,7 @@
         isCalendarInitialized = true;
       }
       if (isAdmin) renderCharts();
+      syncSearchReportDistanceColumn();
       if (!fromCache) writeCache(appData);
       legacyAppBootstrapped = true;
       hideLoading();
@@ -1682,6 +1683,7 @@
         renderCars(appData.vehicles); 
         if (!isChartsRendered) renderCharts();
         refreshNameManager();
+        refreshSearchReportForAdmin();
         Swal.fire({ icon: 'success', title: 'สำเร็จ', text: 'เข้าสู่ระบบ Admin แล้ว', timer: 1500, showConfirmButton: false });
       } else if (formValues && !formValues.success) {
         Swal.fire({ icon: 'error', title: 'ข้อผิดพลาด', text: 'ข้อมูลไม่ถูกต้อง', confirmButtonColor: '#3b82f6' });
@@ -1702,6 +1704,7 @@
       renderCars(appData.vehicles); 
       switchTab('dashboard');
       lockLegacySite();
+      refreshSearchReportForAdmin();
     }
 
     function renderMileageExemptCheckboxes() {
@@ -2176,6 +2179,19 @@
       applyCalendarScrollMode(calendar.view.type);
     }
 
+    function syncSearchReportDistanceColumn() {
+      const col = document.getElementById('search-dist-col');
+      if (col) col.classList.toggle('hidden', !isAdmin);
+    }
+    function refreshSearchReportForAdmin() {
+      syncSearchReportDistanceColumn();
+      const tbody = document.getElementById('search-results');
+      if (!tbody || !tbody.firstChild) return;
+      const first = tbody.firstChild.textContent || '';
+      if (first.includes('กรุณากด')) return;
+      searchBookings();
+    }
+
     function searchBookings() {
       const plateFilter = document.getElementById('search-plate').value;
       const deptFilter = document.getElementById('search-dept').value;
@@ -2204,19 +2220,22 @@
       });
 
       window.filteredBookingsForExport = results; 
+      const colCount = isAdmin ? 6 : 5;
 
       if(results.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-slate-500">❌ ไม่พบข้อมูลที่ตรงกับเงื่อนไขการค้นหา</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="${colCount}" class="p-4 text-center text-slate-500">❌ ไม่พบข้อมูลที่ตรงกับเงื่อนไขการค้นหา</td></tr>`;
         return;
       }
 
       results.forEach(b => {
         let dist = (b.endMile && b.startMile) ? (b.endMile - b.startMile) : '-';
-        tbody.innerHTML += `<tr class="dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50"><td class="p-3 font-semibold text-purple-600 dark:text-purple-400">${escapeHtml(b.plate)}</td><td class="p-3">${formatUserNameColored(b)} <span class="text-xs text-slate-400">(${escapeHtml(b.dept || '-')})</span></td><td class="p-3">${escapeHtml(b.dest || '-')}</td><td class="p-3">${formatThaiDateTime(b.start)}</td><td class="p-3">${formatThaiDateTime(b.end)}</td><td class="p-3 text-center">${dist}</td></tr>`;
+        const distCell = isAdmin ? `<td class="p-3 text-center">${dist}</td>` : '';
+        tbody.innerHTML += `<tr class="dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50"><td class="p-3 font-semibold text-purple-600 dark:text-purple-400">${escapeHtml(b.plate)}</td><td class="p-3">${formatUserNameColored(b)} <span class="text-xs text-slate-400">(${escapeHtml(b.dept || '-')})</span></td><td class="p-3">${escapeHtml(b.dest || '-')}</td><td class="p-3">${formatThaiDateTime(b.start)}</td><td class="p-3">${formatThaiDateTime(b.end)}</td>${distCell}</tr>`;
       });
     }
 
     window.exportCSV = function() {
+      if (!isAdmin) return;
       let dataToExport = window.filteredBookingsForExport || [];
       if (dataToExport.length === 0) {
         showToast('ไม่มีข้อมูลสำหรับ Export กรุณากดค้นหาก่อน', false);
