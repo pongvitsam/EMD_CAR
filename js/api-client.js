@@ -1,17 +1,30 @@
 (function () {
   const inflight = {};
   const MAX_GET_URL_LEN = 7500;
+  const MUTATION_ACTIONS = new Set([
+    'saveVehicle', 'saveVehicleManagement', 'deleteVehicle', 'saveBooking', 'deleteBooking',
+    'quickUpdateMileage', 'saveAdminSettings', 'saveNameOption', 'saveManagedName', 'deleteManagedName'
+  ]);
 
   function getApiUrl() {
     return (window.EMD_GAS_API_URL || '').replace(/\/$/, '');
   }
 
+  function getClientIp() {
+    return window.EMD_CLIENT_IP || '';
+  }
+
   function buildQuery(action, args, token) {
-    return new URLSearchParams({
+    const params = {
       action: action,
       args: JSON.stringify(args || []),
       token: token || ''
-    });
+    };
+    if (MUTATION_ACTIONS.has(action)) {
+      const ip = getClientIp();
+      if (ip) params.clientIp = ip;
+    }
+    return new URLSearchParams(params);
   }
 
   function parseResponse(text) {
@@ -67,8 +80,12 @@
   function emdApiPost(action, args, token) {
     const url = getApiUrl();
     if (!url) return Promise.reject(new Error('ยังไม่ได้ตั้งค่า EMD_GAS_API_URL ใน config.js'));
-    const payload = JSON.stringify({ action: action, args: args || [], token: token || '' });
-    const body = new TextEncoder().encode(payload);
+    const payload = { action: action, args: args || [], token: token || '' };
+    if (MUTATION_ACTIONS.has(action)) {
+      const ip = getClientIp();
+      if (ip) payload.clientIp = ip;
+    }
+    const body = new TextEncoder().encode(JSON.stringify(payload));
     return fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },

@@ -197,7 +197,7 @@ function doGet(e) {
         }
       }
       if (!Array.isArray(args)) args = [];
-      return jsonOutput_(dispatchApi_(params.action, args, params.token || ''));
+      return jsonOutput_(dispatchApi_(params.action, args, params.token || '', params.clientIp || ''));
     } catch (err) {
       return jsonOutput_({ success: false, msg: String(err.message || err) });
     }
@@ -214,7 +214,7 @@ function doPost(e) {
     const action = body.action;
     if (!action) return jsonOutput_({ success: false, msg: 'ไม่ระบุ action' });
     const args = Array.isArray(body.args) ? body.args : [];
-    const result = dispatchApi_(action, args, body.token || '');
+    const result = dispatchApi_(action, args, body.token || '', body.clientIp || '');
     return jsonOutput_(result);
   } catch (err) {
     return jsonOutput_({ success: false, msg: String(err.message || err) });
@@ -226,7 +226,41 @@ function jsonOutput_(obj) {
       .setMimeType(ContentService.MimeType.JSON);
 }
 
-function dispatchApi_(action, args, token) {
+function sanitizeClientIp_(ip) {
+  const s = String(ip || '').trim();
+  if (!s || s.length > 45) return '-';
+  if (!/^[\d.a-fA-F:]+$/.test(s)) return '-';
+  return s;
+}
+
+function resolveClientIp_(clientIp, payload) {
+  const fromPayload = payload && payload.clientIp ? String(payload.clientIp).trim() : '';
+  const ip = fromPayload || String(clientIp || '').trim();
+  return sanitizeClientIp_(ip);
+}
+
+function ensureLogsIpColumn_(ss) {
+  const sheet = ss.getSheetByName('Logs');
+  if (!sheet) return;
+  const header = sheet.getRange(1, 7).getValue();
+  if (String(header || '').trim() !== 'IP') {
+    sheet.getRange(1, 7).setValue('IP');
+  }
+}
+
+function appendLogRow_(logSheet, email, action, target, detail, reason, clientIp) {
+  logSheet.appendRow([
+    new Date(),
+    email,
+    action,
+    target,
+    detail,
+    reason || '-',
+    clientIp || '-'
+  ]);
+}
+
+function dispatchApi_(action, args, token, clientIp) {
   args = Array.isArray(args) ? args : [];
   switch (action) {
     case 'getAppData': return getAppData(!(args.length > 0 && args[0] === false));
@@ -237,12 +271,12 @@ function dispatchApi_(action, args, token) {
     case 'saveManagedName': return saveManagedName(token, args[0]);
     case 'deleteManagedName': return deleteManagedName(token, args[0]);
     case 'saveNameOption': return saveNameOption(args[0]);
-    case 'saveVehicle': return saveVehicle(args[0]);
-    case 'saveVehicleManagement': return saveVehicleManagement(token, args[0]);
-    case 'deleteVehicle': return deleteVehicle(args[0], args[1]);
-    case 'saveBooking': return saveBooking(args[0]);
-    case 'deleteBooking': return deleteBooking(args[0]);
-    case 'quickUpdateMileage': return quickUpdateMileage(args[0], args[1], args[2]);
+    case 'saveVehicle': return saveVehicle(args[0], clientIp);
+    case 'saveVehicleManagement': return saveVehicleManagement(token, args[0], clientIp);
+    case 'deleteVehicle': return deleteVehicle(args[0], args[1], clientIp);
+    case 'saveBooking': return saveBooking(args[0], clientIp);
+    case 'deleteBooking': return deleteBooking(args[0], args[1], clientIp);
+    case 'quickUpdateMileage': return quickUpdateMileage(args[0], args[1], args[2], clientIp);
     default: throw new Error('Unknown action: ' + action);
   }
 }
@@ -252,7 +286,8 @@ function setupDatabase() {
   if (!ss.getSheetByName('Name')) ss.insertSheet('Name').appendRow(['ชื่อ', 'นามสกุล', 'แผนก']);
   ensureVehiclesSheet_(ss);
   if (!ss.getSheetByName('Bookings')) ss.insertSheet('Bookings').appendRow(['Booking_ID', 'ทะเบียนรถ', 'ชื่อ', 'นามสกุล', 'แผนก', 'เริ่ม', 'สิ้นสุด', 'จุดหมาย', 'ผู้ขับขี่', 'อีเมลผู้บันทึก', 'ไมล์ก่อนใช้', 'ไมล์หลังใช้', 'จุดจอดหลังใช้งาน']);
-  if (!ss.getSheetByName('Logs')) ss.insertSheet('Logs').appendRow(['Timestamp', 'อีเมลผู้ทำรายการ', 'Action', 'Target', 'รายละเอียด', 'เหตุผลการแก้ไข']);
+  if (!ss.getSheetByName('Logs')) ss.insertSheet('Logs').appendRow(['Timestamp', 'อีเมลผู้ทำรายการ', 'Action', 'Target', 'รายละเอียด', 'เหตุผลการแก้ไข', 'IP']);
+  ensureLogsIpColumn_(ss);
   
   if (!ss.getSheetByName('Settings')) {
     const sSheet = ss.insertSheet('Settings');
@@ -321,7 +356,7 @@ function parseMileageReminderExempt_(value) {
 function readLogsFromSheet_(ss) {
   const rawLogs = getSheetOrThrow_(ss, 'Logs').getDataRange().getValues();
   return rawLogs.slice(1).slice(-100).map(r => ({
-    timestamp: r[0], email: r[1], action: r[2], target: r[3], detail: r[4], reason: r[5] || '-'
+    timestamp: r[0], email: r[1], action: r[2], target: r[3], detail: r[4], reason: r[5] || '-', ip: r[6] || '-'
   })).reverse();
 }
 
@@ -491,18 +526,19 @@ function uploadImageToDrive(base64Data, filename) {
   } catch(e) { throw new Error("Drive Error: " + e.message); }
 }
 
-function saveVehicleManagement(token, form) {
+function saveVehicleManagement(token, form, clientIp) {
   requireAdminSession_(token);
-  return saveVehicle(form);
+  return saveVehicle(form, clientIp);
 }
 
-function saveVehicle(form) {
+function saveVehicle(form, clientIp) {
   try {
     const ss = getSpreadsheet_();
     setupDatabase();
     const sheet = getSheetOrThrow_(ss, 'Vehicles');
     const logSheet = getSheetOrThrow_(ss, 'Logs');
     const actionEmail = Session.getActiveUser().getEmail() || 'Unknown User';
+    const ip = resolveClientIp_(clientIp, form);
     
     let imgUrl = form.existingImg;
     if (form.imageBase64 && form.imageBase64.trim() !== '') {
@@ -588,7 +624,7 @@ function saveVehicle(form) {
           clearAppCache_();
           const plate = values[0] || row[1];
           const detail = form.managementAction ? String(form.managementAction) : `อัปเดตข้อมูลรถ/สถานะ (${activeStatus})`;
-          logSheet.appendRow([new Date(), actionEmail, 'UPDATE_VEHICLE', plate, detail, form.editReason || '-']);
+          appendLogRow_(logSheet, actionEmail, 'UPDATE_VEHICLE', plate, detail, form.editReason || '-', ip);
           return {success: true, msg: 'อัปเดตข้อมูลรถเรียบร้อยครับ'};
         }
       }
@@ -597,18 +633,19 @@ function saveVehicle(form) {
       const values = buildVehicleRowValues_(form, [], imgUrl || '', activeStatus);
       sheet.appendRow([newId].concat(values));
       clearAppCache_();
-      logSheet.appendRow([new Date(), actionEmail, 'ADD_VEHICLE', values[0], 'เพิ่มรถใหม่เข้าระบบ', '-']);
+      appendLogRow_(logSheet, actionEmail, 'ADD_VEHICLE', values[0], 'เพิ่มรถใหม่เข้าระบบ', '-', ip);
       return {success: true, msg: 'เพิ่มรถเข้าระบบเรียบร้อยครับ'};
     }
   } catch (error) { return {success: false, msg: error.message}; }
 }
 
-function deleteVehicle(id, mode) {
+function deleteVehicle(id, mode, clientIp) {
   try {
     const ss = getSpreadsheet_();
     const vSheet = getSheetOrThrow_(ss, 'Vehicles');
     const vData = vSheet.getDataRange().getValues();
     const actionEmail = Session.getActiveUser().getEmail() || 'Unknown User';
+    const ip = sanitizeClientIp_(clientIp);
     
     for (let i = 1; i < vData.length; i++) {
       if (vData[i][0] == id) {
@@ -626,13 +663,13 @@ function deleteVehicle(id, mode) {
             }
           }
           clearAppCache_();
-          getSheetOrThrow_(ss, 'Logs').appendRow([new Date(), actionEmail, 'HARD_DELETE', plate, `ลบรถ+ประวัติการจองถาวร (${deletedCount} รายการ)`, 'Admin ลบรถถาวร']);
+          appendLogRow_(getSheetOrThrow_(ss, 'Logs'), actionEmail, 'HARD_DELETE', plate, `ลบรถ+ประวัติการจองถาวร (${deletedCount} รายการ)`, 'Admin ลบรถถาวร', ip);
           return {success: true, msg: 'ลบรถและประวัติการจองทั้งหมดแบบถาวรแล้วครับ'};
           
         } else {
           vSheet.getRange(i + 1, 12).setValue('HIDDEN');
           clearAppCache_();
-          getSheetOrThrow_(ss, 'Logs').appendRow([new Date(), actionEmail, 'SOFT_DELETE', plate, `ซ่อนรถออกจากระบบ`, 'Admin กดซ่อนรถ']);
+          appendLogRow_(getSheetOrThrow_(ss, 'Logs'), actionEmail, 'SOFT_DELETE', plate, `ซ่อนรถออกจากระบบ`, 'Admin กดซ่อนรถ', ip);
           return {success: true, msg: 'ซ่อนรถคันนี้ออกจากหน้าเว็บเรียบร้อยแล้วครับ'};
         }
       }
@@ -641,11 +678,12 @@ function deleteVehicle(id, mode) {
   } catch(e) { return {success: false, msg: e.message}; }
 }
 
-function saveBooking(form) {
+function saveBooking(form, clientIp) {
   try {
     const ss = getSpreadsheet_();
     const bSheet = getSheetOrThrow_(ss, 'Bookings');
     const bData = bSheet.getDataRange().getValues();
+    const ip = resolveClientIp_(clientIp, form);
 
     const newStart = parseTimeSafe_(form.start);
     const newEnd = parseTimeSafe_(form.end);
@@ -702,33 +740,46 @@ function saveBooking(form) {
         if (String(bData[i][0]).trim() === String(form.id).trim()) {
           bSheet.getRange(i + 1, 2, 1, 12).setValues([[form.plate, fname, lname, form.dept, "'" + form.start, "'" + form.end, form.dest, form.driver, form.originalEmail, form.startMile, form.endMile, bookingParking]]);
           clearAppCache_();
-          logSheet.appendRow([new Date(), actionEmail, 'UPDATE_BOOKING', form.plate, `แก้ไข/คืนรถ (จุดจอด: ${bookingParking || '-'}, ไมล์: ${form.startMile} -> ${form.endMile})`, form.editReason || '-']);
+          appendLogRow_(logSheet, actionEmail, 'UPDATE_BOOKING', form.plate, `แก้ไข/คืนรถ (จุดจอด: ${bookingParking || '-'}, ไมล์: ${form.startMile} -> ${form.endMile})`, form.editReason || '-', ip);
           return {success: true, msg: 'อัปเดตการจองและจุดจอดเรียบร้อยครับ'};
         }
       }
     } else {
       bSheet.appendRow(['B_' + new Date().getTime(), form.plate, fname, lname, form.dept, "'" + form.start, "'" + form.end, form.dest, form.driver, actionEmail, form.startMile, form.endMile, bookingParking]);
       clearAppCache_();
-      logSheet.appendRow([new Date(), actionEmail, 'CREATE_BOOKING', form.plate, `จองไป ${form.dest}`, '-']);
+      appendLogRow_(logSheet, actionEmail, 'CREATE_BOOKING', form.plate, `จองไป ${form.dest}`, '-', ip);
       return {success: true, msg: 'บันทึกการจองสำเร็จครับ'};
     }
   } catch (error) { return {success: false, msg: error.message}; }
 }
 
-function deleteBooking(id) {
+function deleteBooking(id, reason, clientIp) {
+  if (id && typeof id === 'object') {
+    const p = id;
+    clientIp = p.clientIp || clientIp || '';
+    reason = p.reason != null ? p.reason : reason;
+    id = p.id;
+  }
   try {
     const ss = getSpreadsheet_();
     const bSheet = getSheetOrThrow_(ss, 'Bookings');
     const data = bSheet.getDataRange().getValues();
     const actionEmail = Session.getActiveUser().getEmail() || 'Unknown User';
+    const ip = sanitizeClientIp_(clientIp);
     
     for (let i = 1; i < data.length; i++) {
       if (data[i][0] == id) {
         const plate = data[i][1];
         const dest = data[i][7];
+        const startMs = parseTimeSafe_(data[i][5]);
+        const isPast = startMs && startMs < Date.now();
+        const reasonText = String(reason || '').trim();
+        if (isPast && !reasonText) {
+          return { success: false, msg: 'การจองนี้ผ่านวันเวลาแล้ว กรุณาระบุเหตุผลในการลบ' };
+        }
         bSheet.deleteRow(i + 1);
         clearAppCache_();
-        getSheetOrThrow_(ss, 'Logs').appendRow([new Date(), actionEmail, 'DELETE_BOOKING', plate, `ลบการจองไป ${dest}`, 'ผู้ใช้กดยกเลิก/ลบการจอง']);
+        appendLogRow_(getSheetOrThrow_(ss, 'Logs'), actionEmail, 'DELETE_BOOKING', plate, `ลบการจองไป ${dest}`, reasonText || 'ผู้ใช้กดยกเลิก/ลบการจอง', ip);
         return {success: true, msg: 'ลบข้อมูลการจองเรียบร้อยแล้วครับ'};
       }
     }
@@ -780,18 +831,19 @@ function dailyExpiryCheck() {
     });
   }
 }
-function quickUpdateMileage(id, plate, newMile) {
+function quickUpdateMileage(id, plate, newMile, clientIp) {
   try {
     const ss = getSpreadsheet_();
     const sheet = getSheetOrThrow_(ss, 'Vehicles');
     const data = sheet.getDataRange().getValues();
     const actionEmail = Session.getActiveUser().getEmail() || 'Unknown User';
+    const ip = sanitizeClientIp_(clientIp);
     
     for (let i = 1; i < data.length; i++) {
       if (data[i][0] == id) {
         sheet.getRange(i + 1, 8).setValue(newMile); 
         clearAppCache_();
-        getSheetOrThrow_(ss, 'Logs').appendRow([new Date(), actionEmail, 'UPDATE_MILEAGE', plate, `แก้ไขไมล์ด่วน: ${newMile} km`, 'แก้เลขไมล์ที่กรอกผิด']);
+        appendLogRow_(getSheetOrThrow_(ss, 'Logs'), actionEmail, 'UPDATE_MILEAGE', plate, `แก้ไขไมล์ด่วน: ${newMile} km`, 'แก้เลขไมล์ที่กรอกผิด', ip);
         return { success: true, msg: 'อัปเดตเลขไมล์เรียบร้อยครับ' };
       }
     }

@@ -313,7 +313,7 @@
       <input type="text" id="log-filter" oninput="filterLogs()" placeholder="ค้นหา Logs..." class="w-full md:w-1/3 px-4 py-2 rounded-xl border dark:bg-slate-700 dark:border-slate-600 outline-none focus:ring-2 focus:ring-purple-300">
       <div class="overflow-x-auto bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 h-[600px]">
         <table class="w-full text-left text-sm whitespace-nowrap">
-          <thead class="bg-slate-50 dark:bg-slate-700 text-slate-600 dark:text-slate-300 sticky top-0"><tr><th class="p-3">เวลา</th><th class="p-3">อีเมล</th><th class="p-3">Action</th><th class="p-3">เป้าหมาย</th><th class="p-3">รายละเอียด</th><th class="p-3">เหตุผล</th></tr></thead>
+          <thead class="bg-slate-50 dark:bg-slate-700 text-slate-600 dark:text-slate-300 sticky top-0"><tr><th class="p-3">เวลา</th><th class="p-3">อีเมล</th><th class="p-3">Action</th><th class="p-3">เป้าหมาย</th><th class="p-3">รายละเอียด</th><th class="p-3">เหตุผล</th><th class="p-3">IP</th></tr></thead>
           <tbody id="log-results" class="divide-y divide-slate-100 dark:divide-slate-700"></tbody>
         </table>
       </div>
@@ -559,6 +559,26 @@
       if (!isNaN(d.getTime())) return d.getTime();
       return new Date(s).getTime() || 0;
     };
+    function resolveClientIpOnce() {
+      if (window.EMD_CLIENT_IP) return;
+      try {
+        const cached = sessionStorage.getItem('emd_client_ip');
+        if (cached) { window.EMD_CLIENT_IP = cached; return; }
+      } catch (e) {}
+      fetch('https://api.ipify.org?format=json', { cache: 'force-cache' })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          const ip = d && d.ip ? String(d.ip) : '';
+          window.EMD_CLIENT_IP = ip;
+          try { sessionStorage.setItem('emd_client_ip', ip); } catch (e) {}
+        })
+        .catch(function () { window.EMD_CLIENT_IP = ''; });
+    }
+    window.emdClientIp = function () { return window.EMD_CLIENT_IP || ''; };
+    function emdAttachClientIp(obj) {
+      if (obj && typeof obj === 'object') obj.clientIp = window.emdClientIp();
+      return obj;
+    }
     const TH_BUDDHIST_LOCALE = 'th-TH-u-ca-buddhist';
     const formatThaiDate = (value) => {
       const d = value instanceof Date ? value : new Date(value);
@@ -960,6 +980,7 @@
       if (root) root.classList.remove('hidden');
       if (!legacyAppBootstrapped) {
         showSkeletonState();
+        resolveClientIpOnce();
         loadData();
       }
     }
@@ -1436,13 +1457,13 @@
         if (res.success) loadData();
       }).withFailureHandler(function (err) {
         Swal.fire('ผิดพลาด', err.message || '', 'error');
-      }).saveVehicleManagement(adminToken, {
+      }).saveVehicleManagement(adminToken, emdAttachClientIp({
         id: vehicleId, plate: car.plate,
         serviceMile: dueKm,
         serviceIntervalKm: card.querySelector('.vmgr-interval-km').value,
         serviceRoundPlan: rounds,
         managementAction: 'ตั้งแผนเช็คระยะ'
-      });
+      }));
     };
     window.saveVehicleServiceRecord = function (vehicleId) {
       if (!isAdmin || !adminToken) return;
@@ -1473,7 +1494,7 @@
         if (res.success) loadData();
       }).withFailureHandler(function (err) {
         Swal.fire('ผิดพลาด', err.message || '', 'error');
-      }).saveVehicleManagement(adminToken, {
+      }).saveVehicleManagement(adminToken, emdAttachClientIp({
         id: vehicleId, plate: car.plate,
         serviceLastDate: svcDate, serviceLastKm: svcKm, serviceLastBy: svcBy,
         serviceMile: nextDue, serviceIntervalKm: intervalKm,
@@ -1481,7 +1502,7 @@
         serviceRoundDueKm: roundDueKm,
         serviceHistoryEditIndex: editIndex,
         managementAction: 'บันทึกเข้าศูนย์เช็คระยะ'
-      });
+      }));
     };
     window.editVehicleServiceHistory = function (vehicleId, historyIndex) {
       vehicleMgrSelectedId = vehicleId;
@@ -1540,13 +1561,13 @@
         if (res.success) loadData();
       }).withFailureHandler(function (err) {
         Swal.fire('ผิดพลาด', err.message || '', 'error');
-      }).saveVehicleManagement(adminToken, {
+      }).saveVehicleManagement(adminToken, emdAttachClientIp({
         id: vehicleId, plate: car.plate,
         serviceHistoryEditIndex: historyIndex,
         serviceMile: nextDue,
         serviceRoundPlan: rounds.length ? rounds : undefined,
         managementAction: 'แก้ไขรอบถัดไปประวัติ'
-      });
+      }));
     };
     window.saveVehicleRemarks = function (vehicleId) {
       if (!isAdmin || !adminToken) return;
@@ -1558,11 +1579,11 @@
         if (res.success) loadData();
       }).withFailureHandler(function (err) {
         Swal.fire('ผิดพลาด', err.message || '', 'error');
-      }).saveVehicleManagement(adminToken, {
+      }).saveVehicleManagement(adminToken, emdAttachClientIp({
         id: vehicleId, plate: car.plate,
         remarks: card.querySelector('.vmgr-remarks').value,
         managementAction: 'แก้ไขหมายเหตุรถ'
-      });
+      }));
     };
 
 
@@ -2396,7 +2417,7 @@
     function filterLogs() {
       const q = document.getElementById('log-filter').value.toLowerCase();
       document.getElementById('log-results').innerHTML = window.allLogs.filter(l => Object.values(l).join(' ').toLowerCase().includes(q))
-        .map(l => `<tr class="dark:text-slate-300"><td class="p-3">${formatThaiDateTime(l.timestamp)}</td><td class="p-3">${l.email}</td><td class="p-3">${l.action}</td><td class="p-3">${l.target}</td><td class="p-3">${l.detail}</td><td class="p-3">${l.reason}</td></tr>`).join('');
+        .map(l => `<tr class="dark:text-slate-300"><td class="p-3">${formatThaiDateTime(l.timestamp)}</td><td class="p-3">${l.email}</td><td class="p-3">${l.action}</td><td class="p-3">${l.target}</td><td class="p-3">${l.detail}</td><td class="p-3">${l.reason}</td><td class="p-3 font-mono text-xs">${l.ip || '-'}</td></tr>`).join('');
     }
 
     window.closeModal = id => document.getElementById(id).style.display = 'none';
@@ -2421,7 +2442,7 @@
         google.script.run.withSuccessHandler(res => {
           showToast(res.msg, res.success);
           if (res.success) loadData(); 
-        }).quickUpdateMileage(id, plate, parseFloat(newMile));
+        }).quickUpdateMileage(id, plate, parseFloat(newMile), emdClientIp());
       }
     };
 
@@ -2626,15 +2647,39 @@
     window.deleteBookingAction = async function() {
       const id = document.getElementById('bk-id').value;
       if(!id) return;
-      const { isConfirmed } = await Swal.fire({ title: 'ยืนยันการลบ?', text: "คุณต้องการลบข้อมูลการจองนี้ใช่หรือไม่?", icon: 'warning', showCancelButton: true, confirmButtonColor: '#ef4444', confirmButtonText: 'ลบเลย', cancelButtonText: 'ยกเลิก' });
-      if(isConfirmed) {
-        const btn = document.getElementById('bk-delete-btn'); btn.innerText = 'กำลังลบ...'; btn.disabled = true;
-        google.script.run.withSuccessHandler(res => {
+      const startMs = parseTimeSafe(document.getElementById('bk-start').value);
+      const isPastBooking = startMs && startMs < Date.now();
+      let reason = '';
+      if (isPastBooking) {
+        const result = await Swal.fire({
+          title: 'ลบการจองที่ผ่านมาแล้ว',
+          text: 'กรุณาระบุเหตุผลในการลบการจองนี้',
+          input: 'textarea',
+          inputPlaceholder: 'ระบุเหตุผล...',
+          icon: 'warning',
+          showCancelButton: true,
+          confirmButtonColor: '#ef4444',
+          confirmButtonText: 'ลบพร้อมบันทึกเหตุผล',
+          cancelButtonText: 'ยกเลิก',
+          inputValidator: (value) => {
+            if (!value || !String(value).trim()) return 'กรุณาระบุเหตุผลในการลบ';
+          }
+        });
+        if (!result.isConfirmed) return;
+        reason = String(result.value || '').trim();
+      } else {
+        const { isConfirmed } = await Swal.fire({ title: 'ยืนยันการลบ?', text: "คุณต้องการลบข้อมูลการจองนี้ใช่หรือไม่?", icon: 'warning', showCancelButton: true, confirmButtonColor: '#ef4444', confirmButtonText: 'ลบเลย', cancelButtonText: 'ยกเลิก' });
+        if (!isConfirmed) return;
+      }
+      const btn = document.getElementById('bk-delete-btn'); btn.innerText = 'กำลังลบ...'; btn.disabled = true;
+      google.script.run.withSuccessHandler(res => {
           showToast(res.msg, res.success);
           if(res.success) { window.closeModal('booking-modal'); loadData(); resetCalendarDetailHint(); }
           btn.innerText = '🗑️ ลบการจองนี้'; btn.disabled = false;
-        }).deleteBooking(id);
-      }
+        }).withFailureHandler(function (err) {
+          Swal.fire('ผิดพลาด', err.message || 'ลบการจองไม่สำเร็จ', 'error');
+          btn.innerText = '🗑️ ลบการจองนี้'; btn.disabled = false;
+        }).deleteBooking(id, reason, emdClientIp());
     };
 
     window.openVehicleModal = function(id) {
@@ -2994,7 +3039,7 @@
         Swal.fire('ผิดพลาด', err.message || 'บันทึกไมล์ไม่สำเร็จ', 'error');
         btn.disabled = false;
         btn.textContent = 'บันทึกไมล์';
-      }).saveBooking(obj);
+      }).saveBooking(emdAttachClientIp(obj));
     };
 
     window.userSelected = function () {
@@ -3162,7 +3207,7 @@
         }
         btn.innerText = 'บันทึกข้อมูล'; 
         btn.disabled = false;
-      }).saveBooking(obj);
+      }).saveBooking(emdAttachClientIp(obj));
     };
 
     window.submitVehicle = function(e) {
@@ -3184,7 +3229,7 @@
       google.script.run.withSuccessHandler(res => { 
         showToast(res.msg); window.closeModal('vehicle-modal'); loadData(); 
         btn.innerText = 'บันทึกข้อมูลรถ'; btn.disabled = false; 
-      }).saveVehicle(obj);
+      }).saveVehicle(emdAttachClientIp(obj));
     };
 
     window.deleteVehicleAction = async function() {
@@ -3217,7 +3262,7 @@
           showToast(res.msg, res.success);
           if(res.success) { window.closeModal('vehicle-modal'); loadData(); }
           btn.innerText = '🗑️ ลบรถคันนี้ออกจากระบบ'; btn.disabled = false;
-        }).deleteVehicle(carId, mode);
+        }).deleteVehicle(carId, mode, emdClientIp());
       }
     };
 
