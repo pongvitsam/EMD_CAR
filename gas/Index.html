@@ -169,6 +169,13 @@
       #dashboard-overview .dashboard-avail-card .avail-picker-day { font-size: .72rem; }
       #dashboard-overview .dashboard-avail-card .avail-picker-dow { font-size: .62rem; }
     }
+    .dept-bar-list { display: flex; flex-direction: column; gap: 0.55rem; margin-top: 0.35rem; }
+    .dept-bar-row { display: grid; grid-template-columns: minmax(3.25rem, 4.25rem) 1fr auto; gap: 0.45rem; align-items: center; }
+    .dept-bar-label { font-size: 0.72rem; font-weight: 600; color: var(--emd-text-muted, #94a3b8); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .dept-bar-track { height: 0.5rem; background: rgba(148, 163, 184, 0.14); border-radius: 999px; overflow: hidden; }
+    .dept-bar-fill { height: 100%; border-radius: 999px; min-width: 4px; box-shadow: 0 0 10px rgba(99, 102, 241, 0.28); transition: width 0.35s ease; }
+    .dept-bar-count { font-size: 0.75rem; font-weight: 700; color: #a5b4fc; min-width: 1.1rem; text-align: right; line-height: 1; }
+    .dept-bar-empty { text-align: center; padding: 1.5rem 0.75rem; color: var(--emd-text-muted, #94a3b8); font-size: 0.8rem; }
     @media (max-width: 1024px) {
       .calendar-panel {
         height: calc(100vh - 270px);
@@ -537,7 +544,6 @@
     let dashboardAvailViewYm = '';
     let dashboardAvailRangeStep = 'start';
     let statsSelectedMonth = '';
-    let dashboardDeptChartInstance = null;
     let hasViewedCalendarBookingDetail = false;
     let legacySiteUnlocked = false;
     let legacyAppBootstrapped = false;
@@ -716,6 +722,31 @@
       let s = String(dept || '').trim();
       if (!s) return 'ไม่ระบุแผนก';
       return s.replace(/\.+$/, '');
+    }
+    function buildDashboardDeptBarsHtml(rows, total) {
+      if (!rows || rows.length === 0) {
+        return '<div class="dept-bar-empty"><p>📊 ยังไม่มีรายการจองในเดือนนี้</p></div>';
+      }
+      const maxCount = rows[0][1] || 1;
+      const gradients = [
+        'linear-gradient(90deg, #6366f1, #818cf8)',
+        'linear-gradient(90deg, #3b82f6, #60a5fa)',
+        'linear-gradient(90deg, #0ea5e9, #38bdf8)',
+        'linear-gradient(90deg, #8b5cf6, #a78bfa)',
+        'linear-gradient(90deg, #06b6d4, #22d3ee)',
+        'linear-gradient(90deg, #64748b, #94a3b8)'
+      ];
+      return '<div class="dept-bar-list">' + rows.map(function (row, i) {
+        const label = escapeHtml(row[0]);
+        const count = row[1];
+        const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+        const widthPct = maxCount > 0 ? Math.max(10, Math.round((count / maxCount) * 100)) : 0;
+        const grad = gradients[i % gradients.length];
+        return '<div class="dept-bar-row" title="' + label + ' — ' + count + ' ครั้ง (' + pct + '%)">' +
+          '<span class="dept-bar-label" title="' + label + '">' + label + '</span>' +
+          '<div class="dept-bar-track"><div class="dept-bar-fill" style="width:' + widthPct + '%;background:' + grad + '"></div></div>' +
+          '<span class="dept-bar-count">' + count + '</span></div>';
+      }).join('') + '</div>';
     }
     function formatDurationSince(fromMs, nowMs) {
       const diff = nowMs - fromMs;
@@ -1818,56 +1849,19 @@
       document.getElementById('dashboard-stat-active').innerHTML =
         '<div class="emd-panel bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col items-center justify-center h-full min-h-[5rem]"><p class="text-slate-500 dark:text-slate-400 text-xs text-center">กำลังใช้งานในขณะนี้</p><p class="text-2xl font-bold text-orange-500 mt-1">' + activeCarsCount + '</p></div>';
       document.getElementById('dashboard-stat-dept').innerHTML =
-        '<div class="emd-panel bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm h-full">' +
-          '<div class="flex justify-between items-center gap-2 mb-1">' +
-            '<p class="text-slate-500 dark:text-slate-400 text-xs">จำนวนครั้งการจองแต่ละแผนก (' + bookingsThisMonth + ' ครั้ง)</p>' +
-            '<select id="dashboard-month" onchange="window.changeDashboardMonth(this.value)" class="text-xs px-2 py-1 rounded-lg border border-purple-200 outline-none bg-purple-50 text-purple-700 dark:bg-slate-700 dark:text-purple-300 dark:border-slate-600">' +
+        '<div class="emd-panel bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm h-full flex flex-col min-h-0">' +
+          '<div class="flex items-start justify-between gap-2 shrink-0">' +
+            '<div class="min-w-0">' +
+              '<p class="text-xs font-semibold text-purple-400 dark:text-purple-300">การจองรายแผนก</p>' +
+              '<p class="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">รวม ' + bookingsThisMonth + ' ครั้ง</p>' +
+            '</div>' +
+            '<select id="dashboard-month" onchange="window.changeDashboardMonth(this.value)" class="text-xs px-2 py-1 rounded-lg border border-purple-200 outline-none bg-purple-50 text-purple-700 dark:bg-slate-700 dark:text-purple-300 dark:border-slate-600 shrink-0">' +
               monthOptions.map(m => '<option value="' + m + '" ' + (m === selectedMonth ? 'selected' : '') + '>' + formatThaiMonthYearBE(m) + '</option>').join('') +
             '</select>' +
           '</div>' +
-          '<div class="h-24"><canvas id="dashboardDeptChart"></canvas></div>' +
+          '<div class="flex-1 min-h-0 overflow-y-auto mt-1">' + buildDashboardDeptBarsHtml(topRows, bookingsThisMonth) + '</div>' +
         '</div>';
 
-      const chartCanvas = document.getElementById('dashboardDeptChart');
-      if (dashboardDeptChartInstance && typeof dashboardDeptChartInstance.destroy === 'function') {
-        dashboardDeptChartInstance.destroy();
-        dashboardDeptChartInstance = null;
-      }
-      if (chartCanvas) {
-        if (topRows.length === 0) {
-          const ctx = chartCanvas.getContext('2d');
-          if (ctx) {
-            ctx.clearRect(0, 0, chartCanvas.width, chartCanvas.height);
-            ctx.font = '14px Kanit, sans-serif';
-            ctx.fillStyle = '#94a3b8';
-            ctx.textAlign = 'center';
-            ctx.fillText('ยังไม่มีรายการจองในเดือนนี้', chartCanvas.width / 2, 60);
-          }
-        } else {
-          dashboardDeptChartInstance = new Chart(chartCanvas, {
-            type: 'bar',
-            data: {
-              labels: topRows.map(r => r[0]),
-              datasets: [{
-                data: topRows.map(r => r[1]),
-                  backgroundColor: '#3b82f6',
-                borderRadius: 8,
-                barThickness: 14
-              }]
-            },
-            options: {
-              indexAxis: 'y',
-              maintainAspectRatio: false,
-              responsive: true,
-              plugins: { legend: { display: false } },
-              scales: {
-                x: { beginAtZero: true, ticks: { precision: 0, color: '#94a3b8' }, grid: { color: 'rgba(148, 163, 184, 0.18)' } },
-                y: { ticks: { autoSkip: false, color: '#e8f0fc' }, grid: { color: 'rgba(148, 163, 184, 0.18)' } }
-              }
-            }
-          });
-        }
-      }
       renderDashboardAvailabilityCard();
     }
 
