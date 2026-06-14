@@ -2104,11 +2104,13 @@
           else if (daysLeft < 0) actAlert = `<p class="text-xs text-white bg-red-500 px-2 py-1 rounded mt-1 font-bold shadow">❌ พ.ร.บ. หมดอายุแล้ว!</p>`;
         }
 
-        let serviceHtml = `<p class="text-sm text-slate-500 dark:text-slate-400 mb-1">ไมล์ล่าสุด: 
-            <button onclick="window.promptEditMileage('${car.id}', '${car.plate}', ${car.currentMile})" class="font-bold text-purple-600 bg-purple-100 hover:bg-purple-200 dark:text-purple-300 dark:bg-purple-900/40 px-2 py-0.5 rounded cursor-pointer transition shadow-sm">
-              ${car.currentMile.toLocaleString()} ✏️
-            </button> / ${car.serviceMile.toLocaleString()}
-          </p>`;
+        const mileDisplay = isAdmin
+          ? '<button onclick="window.promptEditMileage(\'' + car.id + '\', \'' + escapeHtml(car.plate) + '\', ' + car.currentMile + ')" class="font-bold text-purple-600 bg-purple-100 hover:bg-purple-200 dark:text-purple-300 dark:bg-purple-900/40 px-2 py-0.5 rounded cursor-pointer transition shadow-sm">' +
+            car.currentMile.toLocaleString() + ' ✏️</button>'
+          : '<span class="font-bold text-purple-600 dark:text-purple-300">' + car.currentMile.toLocaleString() + '</span>';
+        let serviceHtml = '<p class="text-sm text-slate-500 dark:text-slate-400 mb-1">ไมล์ล่าสุด: ' +
+            mileDisplay + ' / ' + car.serviceMile.toLocaleString() +
+          '</p>';
 
         const svcInfo = getVehicleServiceInfo(car);
         if (car.serviceLastDate) {
@@ -2518,6 +2520,7 @@
     window.closeModal = id => document.getElementById(id).style.display = 'none';
 
     window.promptEditMileage = async function(id, plate, currentMile) {
+      if (!isAdmin) return;
       const { value: newMile } = await Swal.fire({
         title: `แก้เลขไมล์: ${plate}`,
         text: 'แก้ไขไมล์ล่าสุดในกรณีที่กรอกผิด',
