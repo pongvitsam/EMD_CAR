@@ -190,6 +190,39 @@
     .top-booker-name { font-weight: 600; color: var(--emd-text-muted, #cbd5e1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .top-booker-count { font-size: 0.68rem; font-weight: 700; color: #fbbf24; white-space: nowrap; }
     .top-booker-empty { font-size: 0.68rem; color: var(--emd-text-muted, #94a3b8); text-align: center; padding: 0.25rem 0; }
+    .emd-combobox { position: relative; }
+    .emd-combobox-menu {
+      position: absolute;
+      left: 0; right: 0; top: calc(100% + 4px);
+      z-index: 80;
+      max-height: 11rem;
+      overflow-y: auto;
+      border-radius: 0.75rem;
+      border: 1px solid rgba(148, 163, 184, 0.28);
+      background: #1e293b;
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+    }
+    .emd-combobox-item {
+      display: flex;
+      width: 100%;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      padding: 0.5rem 0.75rem;
+      text-align: left;
+      font-size: 0.8125rem;
+      color: #e2e8f0;
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      transition: background 0.12s;
+    }
+    .emd-combobox-item:hover, .emd-combobox-item:focus-visible {
+      background: rgba(99, 102, 241, 0.22);
+      outline: none;
+    }
+    .emd-combobox-item-dept { font-size: 0.7rem; color: #94a3b8; flex-shrink: 0; }
+    .emd-combobox-empty { padding: 0.65rem 0.75rem; font-size: 0.75rem; color: #94a3b8; text-align: center; }
   </style>
   <link rel="stylesheet" href="css/glass-theme.css">
 </head>
@@ -395,7 +428,10 @@
               <span>ผู้จอง (ชื่อ นามสกุล)</span>
               <button type="button" id="bk-add-other-name-btn" onclick="window.addOtherName()" class="text-xs px-2 py-1 rounded-lg bg-purple-100 text-purple-700 hover:bg-purple-200 dark:bg-purple-900/40 dark:text-purple-300">+ เพิ่มชื่ออื่น</button>
             </label>
-            <input type="text" id="bk-user" list="user-list" oninput="window.userSelected()" required class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600" placeholder="สมชาย ใจดี"><datalist id="user-list"></datalist>
+            <div class="emd-combobox">
+              <input type="text" id="bk-user" oninput="window.userSelected()" onfocus="window.showBookingCombobox('bk-user')" required autocomplete="off" class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600" placeholder="สมชาย ใจดี">
+              <div id="bk-user-menu" class="emd-combobox-menu hidden" role="listbox"></div>
+            </div>
           </div>
           <div>
             <label class="block text-sm font-medium mb-1 flex justify-between">
@@ -405,13 +441,21 @@
                 <span class="text-xs text-slate-500 dark:text-slate-400">ไม่ใช่ กธพ</span>
               </label>
             </label>
-            <input type="text" id="bk-dept" list="dept-list" required class="w-full px-3 py-2 rounded-lg border bg-slate-50 outline-none dark:bg-slate-700 dark:border-slate-600"><datalist id="dept-list"></datalist>
+            <div class="emd-combobox">
+              <input type="text" id="bk-dept" onfocus="window.showBookingCombobox('bk-dept')" required autocomplete="off" class="w-full px-3 py-2 rounded-lg border bg-slate-50 outline-none dark:bg-slate-700 dark:border-slate-600">
+              <div id="bk-dept-menu" class="emd-combobox-menu hidden" role="listbox"></div>
+            </div>
           </div>
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div><label class="block text-sm font-medium mb-1">จุดหมาย</label><input type="text" id="bk-dest" required class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600"></div>
-          <div><label class="block text-sm font-medium mb-1">ผู้ขับขี่</label><input type="text" id="bk-driver" list="user-list" required class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600"></div>
+          <div><label class="block text-sm font-medium mb-1">ผู้ขับขี่</label>
+            <div class="emd-combobox">
+              <input type="text" id="bk-driver" onfocus="window.showBookingCombobox('bk-driver')" required autocomplete="off" class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600">
+              <div id="bk-driver-menu" class="emd-combobox-menu hidden" role="listbox"></div>
+            </div>
+          </div>
         </div>
 
         <p class="text-xs text-center text-slate-500 dark:text-slate-400 -mt-2">อัปเดตไมล์หลังใช้รถได้ที่ <strong>ปฏิทิน</strong> → คลิกวันใช้รถ → ปุ่มอัปเดตเลขไมล์</p>
@@ -519,6 +563,8 @@
 
   <div id="toast" class="fixed bottom-5 right-5 px-6 py-3 rounded-xl shadow-xl transition-all duration-300 toast-leave z-50 flex items-center gap-3 bg-green-500 text-white"><span id="toast-icon">✅</span><span id="toast-msg" class="font-medium">Message</span></div>
 
+  <datalist id="user-list"></datalist>
+  <datalist id="dept-list"></datalist>
   <script src="js/api-client.js"></script>
   <script>
     const EMD_CHART_SRC = 'https://cdn.jsdelivr.net/npm/chart.js';
@@ -1043,6 +1089,7 @@
       showSkeletonState();
       ensureChartJs();
       resolveClientIpOnce();
+      initBookingComboboxes();
       loadData();
     };
 
@@ -2366,6 +2413,89 @@
       
       document.getElementById('search-plate').innerHTML = '<option value="">-- ทั้งหมด --</option>' + vehicles.map(v => `<option value="${escapeHtml(v.plate)}">${escapeHtml(v.plate)}</option>`).join('');
       document.getElementById('search-dept').innerHTML = '<option value="">-- ทั้งหมด --</option>' + depts.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+      initBookingComboboxes();
+    };
+
+    const BOOKING_COMBOBOX_IDS = ['bk-user', 'bk-dept', 'bk-driver'];
+
+    function hideAllBookingComboboxes() {
+      BOOKING_COMBOBOX_IDS.forEach(function (id) {
+        const menu = document.getElementById(id + '-menu');
+        if (menu) menu.classList.add('hidden');
+      });
+    }
+
+    function getBookingComboboxItems(inputId) {
+      const names = appData.names || [];
+      if (inputId === 'bk-dept') {
+        const depts = [...new Set(names.map(function (n) { return n.dept; }).filter(Boolean))];
+        return depts.map(function (d) { return { label: d, value: d, sub: '' }; });
+      }
+      return names.map(function (n) {
+        return { label: n.fullName, value: n.fullName, sub: n.dept || '' };
+      });
+    }
+
+    window.showBookingCombobox = function (inputId) {
+      const input = document.getElementById(inputId);
+      const menu = document.getElementById(inputId + '-menu');
+      if (!input || !menu || input.readOnly) return;
+      if (inputId === 'bk-user' && document.getElementById('bk-not-emd') && document.getElementById('bk-not-emd').checked) return;
+
+      const q = input.value.trim().toLowerCase();
+      const items = getBookingComboboxItems(inputId).filter(function (item) {
+        if (!q) return true;
+        return item.label.toLowerCase().includes(q) || (item.sub && item.sub.toLowerCase().includes(q));
+      }).slice(0, 12);
+
+      if (!items.length) {
+        menu.innerHTML = '<div class="emd-combobox-empty">ไม่พบรายชื่อที่ตรงกัน</div>';
+      } else {
+        menu.innerHTML = items.map(function (item) {
+          return '<button type="button" class="emd-combobox-item" data-value="' + escapeHtml(item.value) + '">' +
+            '<span>' + escapeHtml(item.label) + '</span>' +
+            (item.sub ? '<span class="emd-combobox-item-dept">' + escapeHtml(item.sub) + '</span>' : '') +
+            '</button>';
+        }).join('');
+      }
+      menu.classList.remove('hidden');
+      BOOKING_COMBOBOX_IDS.forEach(function (id) {
+        if (id !== inputId) {
+          const other = document.getElementById(id + '-menu');
+          if (other) other.classList.add('hidden');
+        }
+      });
+    };
+
+    function initBookingComboboxes() {
+      if (window._bookingComboboxInited) return;
+      window._bookingComboboxInited = true;
+
+      BOOKING_COMBOBOX_IDS.forEach(function (inputId) {
+        const input = document.getElementById(inputId);
+        const menu = document.getElementById(inputId + '-menu');
+        if (!input || !menu) return;
+
+        input.addEventListener('input', function () {
+          window.showBookingCombobox(inputId);
+        });
+
+        menu.addEventListener('mousedown', function (e) { e.preventDefault(); });
+
+        menu.addEventListener('click', function (e) {
+          const btn = e.target.closest('.emd-combobox-item');
+          if (!btn) return;
+          input.value = btn.getAttribute('data-value') || '';
+          menu.classList.add('hidden');
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          if (inputId === 'bk-user') window.userSelected();
+        });
+      });
+
+      document.addEventListener('click', function (e) {
+        if (e.target.closest('.emd-combobox')) return;
+        hideAllBookingComboboxes();
+      });
     };
 
     function applyNameRows(rows) {
@@ -2614,17 +2744,14 @@
         deptInput.value = 'ไม่ใช่ กธพ';
         deptInput.readOnly = true;
         deptInput.classList.add('bg-slate-100', 'dark:bg-slate-600');
-        userInput.removeAttribute('list');
-        userInput.setAttribute('autocomplete', 'off');
         userInput.placeholder = 'กรอกชื่อ-นามสกุลเอง';
         if (!keepUserValue) userInput.value = '';
+        hideAllBookingComboboxes();
       }
       else {
         if(deptInput.value === 'ไม่ใช่ กธพ') deptInput.value = '';
         deptInput.readOnly = false;
         deptInput.classList.remove('bg-slate-100', 'dark:bg-slate-600');
-        userInput.setAttribute('list', 'user-list');
-        userInput.removeAttribute('autocomplete');
         userInput.placeholder = 'สมชาย ใจดี';
       }
     };
@@ -2704,6 +2831,7 @@
       document.getElementById('bk-parking').value = '';
       window._mileageNameAlertKey = '';
       window._mileageSubmitAckKey = '';
+      hideAllBookingComboboxes();
 
       window.toggleDept();
       document.getElementById('bk-plate').innerHTML = '<option value="">-- กรุณาระบุเวลาด้านบนเพื่อค้นหารถ --</option>';
