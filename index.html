@@ -181,6 +181,15 @@
     .dept-bar-fill { height: 100%; border-radius: 999px; min-width: 4px; box-shadow: 0 0 10px rgba(99, 102, 241, 0.28); transition: width 0.35s ease; }
     .dept-bar-count { font-size: 0.75rem; font-weight: 700; color: #a5b4fc; min-width: 1.1rem; text-align: right; line-height: 1; }
     .dept-bar-empty { text-align: center; padding: 1.5rem 0.75rem; color: var(--emd-text-muted, #94a3b8); font-size: 0.8rem; }
+    .dept-stat-body { min-height: 7rem; }
+    .top-booker-section { margin-top: auto; padding-top: 0.65rem; border-top: 1px solid rgba(148, 163, 184, 0.18); }
+    .top-booker-title { font-size: 0.68rem; font-weight: 700; color: #fbbf24; margin-bottom: 0.4rem; letter-spacing: 0.02em; }
+    .top-booker-list { display: flex; flex-direction: column; gap: 0.35rem; }
+    .top-booker-row { display: grid; grid-template-columns: auto 1fr auto; gap: 0.35rem; align-items: center; font-size: 0.72rem; }
+    .top-booker-medal { font-size: 0.9rem; line-height: 1; }
+    .top-booker-name { font-weight: 600; color: var(--emd-text-muted, #cbd5e1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .top-booker-count { font-size: 0.68rem; font-weight: 700; color: #fbbf24; white-space: nowrap; }
+    .top-booker-empty { font-size: 0.68rem; color: var(--emd-text-muted, #94a3b8); text-align: center; padding: 0.25rem 0; }
   </style>
   <link rel="stylesheet" href="css/glass-theme.css">
 </head>
@@ -749,6 +758,34 @@
           '<div class="dept-bar-track"><div class="dept-bar-fill" style="width:' + widthPct + '%;background:' + grad + '"></div></div>' +
           '<span class="dept-bar-count">' + count + '</span></div>';
       }).join('') + '</div>';
+    }
+    function buildDashboardTopBookersHtml(bookings) {
+      const userCounts = {};
+      (bookings || []).forEach(function (b) {
+        const key = getBookingFullName(b);
+        if (!key) return;
+        const display = getBookingDisplayName(b);
+        if (!userCounts[key]) userCounts[key] = { name: display, count: 0 };
+        else if (display.length > userCounts[key].name.length) userCounts[key].name = display;
+        userCounts[key].count++;
+      });
+      const top3 = Object.values(userCounts).sort(function (a, b) {
+        return b.count - a.count || a.name.localeCompare(b.name, 'th');
+      }).slice(0, 3);
+      const medals = ['🏆🚗💨', '🥈🛞😤', '🥉⛽🤓'];
+      if (!top3.length) {
+        return '<div class="top-booker-section"><p class="top-booker-title">🏅 รางวัล พขร. ดีเด่น</p><p class="top-booker-empty">ยังไม่มีผู้จองในเดือนนี้</p></div>';
+      }
+      return '<div class="top-booker-section">' +
+        '<p class="top-booker-title">🏅 รางวัล พขร. ดีเด่น</p>' +
+        '<div class="top-booker-list">' +
+        top3.map(function (row, i) {
+          return '<div class="top-booker-row" title="' + escapeHtml(row.name) + ' — ' + row.count + ' ครั้ง">' +
+            '<span class="top-booker-medal">' + (medals[i] || '🚙') + '</span>' +
+            '<span class="top-booker-name">' + escapeHtml(row.name) + '</span>' +
+            '<span class="top-booker-count">' + row.count + ' ครั้ง</span></div>';
+        }).join('') +
+        '</div></div>';
     }
     function formatDurationSince(fromMs, nowMs) {
       const diff = nowMs - fromMs;
@@ -1884,7 +1921,10 @@
               monthOptions.map(m => '<option value="' + m + '" ' + (m === selectedMonth ? 'selected' : '') + '>' + formatThaiMonthYearBE(m) + '</option>').join('') +
             '</select>' +
           '</div>' +
-          '<div class="flex-1 min-h-0 overflow-y-auto mt-1">' + buildDashboardDeptBarsHtml(topRows, bookingsThisMonth) + '</div>' +
+          '<div class="flex-1 min-h-0 overflow-y-auto mt-1 flex flex-col dept-stat-body">' +
+            buildDashboardDeptBarsHtml(topRows, bookingsThisMonth) +
+            buildDashboardTopBookersHtml(bookingsThisMonthList) +
+          '</div>' +
         '</div>';
 
       renderDashboardAvailabilityCard();
