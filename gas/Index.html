@@ -758,17 +758,21 @@
       }).join('') + '</div>';
     }
     function buildDashboardTopBookersHtml(bookings) {
-      const userCounts = {};
+      const userStats = {};
       (bookings || []).forEach(function (b) {
         const key = getBookingFullName(b);
         if (!key) return;
         const display = getBookingDisplayName(b);
-        if (!userCounts[key]) userCounts[key] = { name: display, count: 0 };
-        else if (display.length > userCounts[key].name.length) userCounts[key].name = display;
-        userCounts[key].count++;
+        if (!userStats[key]) userStats[key] = { name: display, days: 0 };
+        else if (display.length > userStats[key].name.length) userStats[key].name = display;
+        const startTime = parseTimeSafe(b.start);
+        const endTime = parseTimeSafe(b.end);
+        if (startTime && endTime && endTime > startTime) {
+          userStats[key].days += Math.max(1, Math.ceil((endTime - startTime) / (1000 * 60 * 60 * 24)));
+        }
       });
-      const top3 = Object.values(userCounts).sort(function (a, b) {
-        return b.count - a.count || a.name.localeCompare(b.name, 'th');
+      const top3 = Object.values(userStats).sort(function (a, b) {
+        return b.days - a.days || a.name.localeCompare(b.name, 'th');
       }).slice(0, 3);
       const medals = ['🏆🚗💨', '🥈🛞😤', '🥉⛽🤓'];
       if (!top3.length) {
@@ -778,10 +782,10 @@
         '<p class="top-booker-title">🏅 รางวัล พขร. ดีเด่น</p>' +
         '<div class="top-booker-list">' +
         top3.map(function (row, i) {
-          return '<div class="top-booker-row" title="' + escapeHtml(row.name) + ' — ' + row.count + ' ครั้ง">' +
+          return '<div class="top-booker-row" title="' + escapeHtml(row.name) + ' — ' + row.days + ' วัน">' +
             '<span class="top-booker-medal">' + (medals[i] || '🚙') + '</span>' +
             '<span class="top-booker-name">' + escapeHtml(row.name) + '</span>' +
-            '<span class="top-booker-count">' + row.count + ' ครั้ง</span></div>';
+            '<span class="top-booker-count">' + row.days + ' วัน</span></div>';
         }).join('') +
         '</div></div>';
     }
