@@ -3142,20 +3142,31 @@
         '<ul class="text-sm list-disc pl-5 my-2 text-left">' + formatPendingMileageListHtml(bookings) + '</ul>';
     }
 
+    function isPendingMileageAcked(ackKey) {
+      return window._mileageNameAlertKey === ackKey || window._mileageSubmitAckKey === ackKey;
+    }
+
+    function setPendingMileageAcked(ackKey) {
+      window._mileageNameAlertKey = ackKey;
+      window._mileageSubmitAckKey = ackKey;
+    }
+
     async function requirePendingMileageCountdown(allBookings, options) {
       options = options || {};
       if (!allBookings || !allBookings.length) return true;
-      const bookerName = options.bookerName || getBookingFullName(allBookings[0]);
-      const display = filterPendingMileageForDisplay(allBookings);
-      const bookings = display.bookings;
       const ackKey = getPendingMileageAckKey(allBookings);
-      const ackProp = options.ackProp === 'name' ? '_mileageNameAlertKey' : '_mileageSubmitAckKey';
-      if (window[ackProp] === ackKey) return true;
-      const doneLabel = options.doneLabel || 'จองต่อ';
-      const waitDoneText = options.waitDoneText || 'แล้วจองต่อได้';
-      const attempt = getMileageEscAttempt(bookerName);
-      let seconds = computeMileageCountdownSec(bookerName, allBookings);
-      const result = await Swal.fire({
+      if (isPendingMileageAcked(ackKey)) return true;
+      if (window._mileageReminderModalPromise) return window._mileageReminderModalPromise;
+
+      const run = (async function () {
+        const bookerName = options.bookerName || getBookingFullName(allBookings[0]);
+        const display = filterPendingMileageForDisplay(allBookings);
+        const bookings = display.bookings;
+        const doneLabel = options.doneLabel || 'จองต่อ';
+        const waitDoneText = options.waitDoneText || 'แล้วจองต่อได้';
+        const attempt = getMileageEscAttempt(bookerName);
+        let seconds = computeMileageCountdownSec(bookerName, allBookings);
+        const result = await Swal.fire({
         icon: 'warning',
         title: 'ยังไม่ได้อัปเดตเลขไมล์',
         html: buildPendingMileageAlertHtml(bookings, {
@@ -3195,12 +3206,20 @@
           }
         }
       });
-      if (result.isConfirmed) {
-        window[ackProp] = ackKey;
-        setMileageEscAttempt(bookerName, getMileageEscAttempt(bookerName) + 1);
-        return true;
+        if (result.isConfirmed) {
+          setPendingMileageAcked(ackKey);
+          setMileageEscAttempt(bookerName, getMileageEscAttempt(bookerName) + 1);
+          return true;
+        }
+        return false;
+      })();
+
+      window._mileageReminderModalPromise = run;
+      try {
+        return await run;
+      } finally {
+        if (window._mileageReminderModalPromise === run) window._mileageReminderModalPromise = null;
       }
-      return false;
     }
 
     window.openMileageUpdateModal = function (bookingId) {
