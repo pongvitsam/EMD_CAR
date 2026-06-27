@@ -2165,9 +2165,6 @@
           '</p>';
 
         const svcInfo = getVehicleServiceInfo(car);
-        if (car.serviceLastDate) {
-          serviceHtml += `<p class="text-xs text-slate-500 mt-1">เช็คล่าสุด: ${formatThaiDate(car.serviceLastDate)} (${(svcInfo.lastKm || 0).toLocaleString()} กม.)</p>`;
-        }
         if (car.status === 'ACTIVE') {
           serviceHtml += formatLastParkingUpdateLine(car, nowTime);
         }
