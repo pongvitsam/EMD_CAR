@@ -890,10 +890,15 @@
       const lastBk = getLastPastBookingForPlate(car.plate, nowTime);
       if (!lastBk) return '';
       const parking = String(lastBk.parkingSpot || '').trim();
-      if (parking) {
+      const hasMileage = bookingHasPostTripData(lastBk);
+      if (parking && hasMileage) {
         return '<p class="text-xs text-blue-600 dark:text-blue-400 mt-0.5">อัพเดท📍 จุดจอดหลังใช้งาน ล่าสุดของคนใช้ก่อนหน้า: ' + escapeHtml(parking) + '</p>';
       }
-      return '<p class="text-xs text-orange-600 dark:text-orange-400 mt-0.5">คุณ ' + formatUserNameColored(lastBk) + ' ใช้งานล่าสุด ยังไม่อัพเดทจุดจอดรถ</p>';
+      let missingText = '';
+      if (!hasMileage && !parking) missingText = 'ยังไม่อัพเดททั้งจุดจอดรถและเลขไมล์';
+      else if (!hasMileage) missingText = 'ยังไม่อัพเดทเลขไมล์';
+      else missingText = 'ยังไม่อัพเดทจุดจอดรถ';
+      return '<p class="text-xs text-orange-600 dark:text-orange-400 mt-0.5">' + formatUserNameColored(lastBk) + ' ใช้งานล่าสุด ' + missingText + '</p>';
     }
     function getTodayDateInputValue() {
       const n = new Date();
