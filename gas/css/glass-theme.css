@@ -539,6 +539,16 @@ body.emd-glass {
   box-shadow: var(--emd-shadow), 0 0 0 1px rgba(251, 146, 60, 0.2);
 }
 
+.emd-car-card .car-card-status {
+  min-height: 5.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.emd-car-card .car-card-status > div {
+  margin-bottom: 0 !important;
+  min-height: 100%;
+}
+
 .emd-glass select option {
   background: var(--emd-bg-mid);
   color: var(--emd-text);
