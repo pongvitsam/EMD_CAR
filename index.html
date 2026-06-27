@@ -891,14 +891,15 @@
       if (!lastBk) return '';
       const parking = String(lastBk.parkingSpot || '').trim();
       const hasMileage = bookingHasPostTripData(lastBk);
+      const lineCls = 'text-xs mt-1';
       if (parking && hasMileage) {
-        return '<p class="text-xs text-blue-600 dark:text-blue-400 mt-0.5">อัพเดท📍 จุดจอดหลังใช้งาน ล่าสุดของคนใช้ก่อนหน้า: ' + escapeHtml(parking) + '</p>';
+        return '<p class="' + lineCls + '">' + formatUserNameColored(lastBk) + ' <span class="text-blue-600 dark:text-blue-400">อัพเดท📍 จุดจอดหลังใช้งาน ล่าสุด: ' + escapeHtml(parking) + '</span></p>';
       }
       let missingText = '';
       if (!hasMileage && !parking) missingText = 'ยังไม่อัพเดททั้งจุดจอดรถและเลขไมล์';
       else if (!hasMileage) missingText = 'ยังไม่อัพเดทเลขไมล์';
       else missingText = 'ยังไม่อัพเดทจุดจอดรถ';
-      return '<p class="text-xs text-orange-600 dark:text-orange-400 mt-0.5">' + formatUserNameColored(lastBk) + ' ใช้งานล่าสุด ' + missingText + '</p>';
+      return '<p class="' + lineCls + '">' + formatUserNameColored(lastBk) + ' <span class="text-orange-600 dark:text-orange-400">ใช้งานล่าสุด ' + missingText + '</span></p>';
     }
     function getTodayDateInputValue() {
       const n = new Date();
@@ -2160,7 +2161,7 @@
         } else if (currentBooking) {
           // สถานะ: กำลังใช้งาน
           const tripDest = escapeHtml(currentBooking.dest || '-');
-          statusHtml = `<div class="bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-400 p-3 rounded-xl mb-3"><p class="font-bold text-sm">🚗 กำลังใช้งาน</p><p class="text-sm mt-1">${formatUserNameColored(currentBooking)} → <strong>${tripDest}</strong></p></div>`;
+          statusHtml = `<div class="bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-400 p-3 rounded-xl mb-3"><p class="font-bold text-sm">🚗 กำลังใช้งาน</p><p class="text-sm mt-1">${escapeHtml(getBookingDisplayName(currentBooking))} → <strong>${tripDest}</strong></p></div>`;
           borderClass = "border-orange-300 dark:border-orange-800 border-2";
         } else if (nextBooking) {
           // สถานะ: ว่างตอนนี้ แต่มีคิวรอนำรถออก
@@ -2170,7 +2171,7 @@
           const displayTime = isToday ? `วันนี้ ${timeStr} น.` : `${formatThaiDate(nextDate)} ${timeStr} น.`;
           
           const nextDest = escapeHtml(nextBooking.dest || '-');
-          statusHtml = `<div class="bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 p-3 rounded-xl mb-3"><p class="font-bold text-sm">⏳ รอนำรถออก (ถูกจองแล้ว)</p><p class="text-sm mt-1">คิวถัดไป: ${displayTime}</p><p class="text-xs mt-1">${formatUserNameColored(nextBooking)} → <strong>${nextDest}</strong></p></div>`;
+          statusHtml = `<div class="bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 p-3 rounded-xl mb-3"><p class="font-bold text-sm">⏳ รอนำรถออก (ถูกจองแล้ว)</p><p class="text-sm mt-1">คิวถัดไป: ${displayTime}</p><p class="text-xs mt-1">${escapeHtml(getBookingDisplayName(nextBooking))} → <strong>${nextDest}</strong></p></div>`;
           borderClass = "border-blue-300 dark:border-blue-800 border-2";
         } else {
           const idleLabel = getCarIdleLabel(car.plate, nowTime);
@@ -2224,9 +2225,9 @@
           }
         }
 
-        let remarksHtml = car.remarks ? `<div class="mt-2 text-xs text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/20 p-2 rounded-lg border border-blue-100 dark:border-blue-800">📌 <b>หมายเหตุ:</b> ${car.remarks}</div>` : '';
+        let remarksHtml = car.remarks ? `<div class="mt-2 text-xs text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/20 p-2 rounded-lg border border-blue-100 dark:border-blue-800">📌 <b>หมายเหตุ:</b> ${escapeHtml(car.remarks)}</div>` : '';
         if (car.status !== 'ACTIVE' && car.remarks) {
-            remarksHtml = `<div class="mt-2 text-xs text-red-700 dark:text-red-300 bg-red-100 dark:bg-red-900/30 p-2 rounded-lg border border-red-200 dark:border-red-800 font-bold">⚠️ เหตุผล: ${car.remarks}</div>`;
+            remarksHtml = `<div class="mt-2 text-xs text-red-700 dark:text-red-300 bg-red-100 dark:bg-red-900/30 p-2 rounded-lg border border-red-200 dark:border-red-800 font-bold">⚠️ เหตุผล: ${escapeHtml(car.remarks)}</div>`;
         }
 
         let settingBtn = '<button onclick="window.openVehicleModal(\'' + car.id + '\')" class="absolute top-2 right-2 bg-white/95 hover:bg-white text-purple-600 px-3 py-1 rounded-full shadow-md text-xs font-bold border border-purple-200 z-10 transition backdrop-blur-sm">อัปเดตข้อมูล</button>';
