@@ -418,6 +418,7 @@
             <select id="bk-plate" onchange="window.updateCarImage()" required class="w-full px-3 py-2 rounded-lg border border-purple-200 outline-none dark:bg-slate-700 dark:border-slate-600">
               <option value="">-- กรุณาระบุเวลาด้านบนเพื่อค้นหารถ --</option>
             </select>
+            <div id="bk-car-remarks" class="hidden mt-2"></div>
           </div>
           <img id="bk-car-img" src="" class="hidden w-full h-40 object-cover rounded-xl shadow-sm border border-purple-200 dark:border-slate-600 bg-white">
         </div>
@@ -866,6 +867,33 @@
       });
       if (!lastFreeAt) return 'ว่าง (ไม่มีประวัติคืนในระบบ)';
       return formatDurationSince(lastFreeAt, nowTime);
+    }
+    function getLastPastBookingForPlate(plate, nowTime) {
+      const plateNorm = String(plate || '').trim();
+      let best = null;
+      let bestEnd = 0;
+      appData.bookings.forEach(b => {
+        if (String(b.plate).trim() !== plateNorm) return;
+        if (isBookingActiveNow(b, nowTime)) return;
+        const end = parseTimeSafe(b.end);
+        const returned = bookingHasPostTripData(b);
+        if (!returned && (!end || end > nowTime)) return;
+        const sortEnd = end || 0;
+        if (sortEnd >= bestEnd) {
+          bestEnd = sortEnd;
+          best = b;
+        }
+      });
+      return best;
+    }
+    function formatLastParkingUpdateLine(car, nowTime) {
+      const lastBk = getLastPastBookingForPlate(car.plate, nowTime);
+      if (!lastBk) return '';
+      const parking = String(lastBk.parkingSpot || '').trim();
+      if (parking) {
+        return '<p class="text-xs text-blue-600 dark:text-blue-400 mt-0.5">อัพเดท📍 จุดจอดหลังใช้งาน ล่าสุดของคนใช้ก่อนหน้า: ' + escapeHtml(parking) + '</p>';
+      }
+      return '<p class="text-xs text-orange-600 dark:text-orange-400 mt-0.5">คุณ ' + formatUserNameColored(lastBk) + ' ใช้งานล่าสุด ยังไม่อัพเดทจุดจอดรถ</p>';
     }
     function getTodayDateInputValue() {
       const n = new Date();
@@ -2163,8 +2191,8 @@
         if (car.serviceLastDate) {
           serviceHtml += `<p class="text-xs text-slate-500 mt-1">เช็คล่าสุด: ${formatThaiDate(car.serviceLastDate)} (${(svcInfo.lastKm || 0).toLocaleString()} กม.)</p>`;
         }
-        if (svcInfo.estimatedNextDate && !svcInfo.isOverdue && car.status === 'ACTIVE') {
-          serviceHtml += `<p class="text-xs text-blue-600 dark:text-blue-400 mt-0.5">ประมาณครบรอบ: ${formatThaiDate(svcInfo.estimatedNextDate)}</p>`;
+        if (car.status === 'ACTIVE') {
+          serviceHtml += formatLastParkingUpdateLine(car, nowTime);
         }
         if (car.serviceMile > 0 && car.status === 'ACTIVE') {
           if (svcInfo.isOverdue) {
@@ -2680,7 +2708,24 @@
     window.updateCarImage = function() {
       const car = appData.vehicles.find(v => v.plate === document.getElementById('bk-plate').value);
       const img = document.getElementById('bk-car-img');
+      const remarksEl = document.getElementById('bk-car-remarks');
       if (car && car.img) { img.src = car.img; img.classList.remove('hidden'); } else img.classList.add('hidden');
+      if (remarksEl) {
+        const remarks = String(car && car.remarks || '').trim();
+        if (remarks) {
+          if (car.status !== 'ACTIVE') {
+            remarksEl.className = 'mt-2 text-xs text-red-700 dark:text-red-300 bg-red-100 dark:bg-red-900/30 p-2 rounded-lg border border-red-200 dark:border-red-800 font-bold';
+            remarksEl.innerHTML = '⚠️ เหตุผล: ' + escapeHtml(remarks);
+          } else {
+            remarksEl.className = 'mt-2 text-xs text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/20 p-2 rounded-lg border border-blue-100 dark:border-blue-800';
+            remarksEl.innerHTML = '📌 <b>หมายเหตุ:</b> ' + escapeHtml(remarks);
+          }
+          remarksEl.classList.remove('hidden');
+        } else {
+          remarksEl.innerHTML = '';
+          remarksEl.classList.add('hidden');
+        }
+      }
     };
 
     window.filterAvailableCars = function() {
@@ -2824,6 +2869,8 @@
       document.getElementById('booking-form').reset(); 
       document.getElementById('bk-id').value = '';
       document.getElementById('bk-car-img').classList.add('hidden');
+      const bkRemarksEl = document.getElementById('bk-car-remarks');
+      if (bkRemarksEl) { bkRemarksEl.innerHTML = ''; bkRemarksEl.classList.add('hidden'); }
       document.getElementById('bk-delete-btn').classList.add('hidden');
       document.getElementById('bk-not-emd').checked = false; 
       
