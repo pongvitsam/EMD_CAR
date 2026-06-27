@@ -893,7 +893,7 @@
       const hasMileage = bookingHasPostTripData(lastBk);
       const lineCls = 'text-xs mt-1';
       if (parking && hasMileage) {
-        return '<p class="' + lineCls + '">' + formatUserNameColored(lastBk) + ' <span class="text-blue-600 dark:text-blue-400">อัพเดท📍 จุดจอดหลังใช้งาน ล่าสุด: ' + escapeHtml(parking) + '</span></p>';
+        return '<p class="' + lineCls + '">' + formatUserNameColored(lastBk) + ' <span class="text-blue-600 dark:text-blue-400">ผู้ใช้ก่อนหน้า อัพเดท📍 จุดจอดหลังใช้งาน ล่าสุด: ' + escapeHtml(parking) + '</span></p>';
       }
       let missingText = '';
       if (!hasMileage && !parking) missingText = 'ยังไม่อัพเดททั้งจุดจอดรถและเลขไมล์';
@@ -1458,9 +1458,9 @@
         '<div class="flex gap-1 mb-1">' + tabBtn('record', 'บันทึกเข้าศูนย์') + tabBtn('plan', 'ตั้งแผนรอบ') + tabBtn('history', 'ประวัติ') + '</div>' +
         panelRecord + panelPlan + panelHistory +
         '<div class="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700">' +
-        '<label class="block text-sm font-medium text-blue-700 dark:text-blue-300 mb-1">หมายเหตุ (แสดงหน้าแรก)</label>' +
+        '<label class="block text-sm font-medium text-blue-700 dark:text-blue-300 mb-1">หมายเหตุบำรุงรักษา</label>' +
         '<div class="flex flex-col sm:flex-row gap-2">' +
-        '<input type="text" class="vmgr-remarks flex-1 px-4 py-3 rounded-xl border dark:bg-slate-700 dark:border-slate-600" value="' + escapeHtml(car.remarks || '') + '">' +
+        '<input type="text" class="vmgr-remarks flex-1 px-4 py-3 rounded-xl border dark:bg-slate-700 dark:border-slate-600" value="' + escapeHtml(car.maintenanceRemarks || '') + '">' +
         '<button type="button" onclick="window.saveVehicleRemarks(\'' + car.id + '\')" class="shrink-0 bg-blue-500 hover:bg-blue-600 text-white px-5 py-3 rounded-xl font-medium">บันทึกหมายเหตุ</button></div></div>' +
         '</div>';
     }
@@ -1695,8 +1695,8 @@
       if (!card || !car) return;
       apiCall('saveVehicleManagement', [{
         id: vehicleId, plate: car.plate,
-        remarks: card.querySelector('.vmgr-remarks').value,
-        managementAction: 'แก้ไขหมายเหตุรถ'
+        maintenanceRemarks: card.querySelector('.vmgr-remarks').value,
+        managementAction: 'แก้ไขหมายเหตุบำรุงรักษา'
       }], adminToken).then(function (res) {
         showToast(res.msg, res.success);
         if (res.success) reloadAfterMutation();

@@ -8,7 +8,7 @@ const LEGACY_APP_DATA_CACHE_KEY = 'APP_DATA_V1';
 const CACHE_TTL_SEC = 120;
 const LOGS_CACHE_TTL_SEC = 90;
 const ADMIN_SESSION_CACHE_PREFIX = 'ADMIN_SESSION_';
-const VEHICLE_HEADERS = ['Vehicle_ID', 'ทะเบียน', 'รูปรถ(URL)', 'ประเภท', 'Email', 'Password', 'ระยะ Service (km)', 'ไมล์ล่าสุด (km)', 'จุดจอดล่าสุด', 'พรบ.หมดอายุ', 'หมายเหตุ', 'สถานะ', 'วันคืนรถ/หมดสัญญา', 'วันที่เช็คระยะล่าสุด', 'กม.เช็คระยะล่าสุด', 'ผู้นำเข้าเช็คระยะ', 'ระยะกม.ต่อรอบ', 'ประวัติเช็คระยะ(JSON)', 'แผนรอบถัดไป(JSON)'];
+const VEHICLE_HEADERS = ['Vehicle_ID', 'ทะเบียน', 'รูปรถ(URL)', 'ประเภท', 'Email', 'Password', 'ระยะ Service (km)', 'ไมล์ล่าสุด (km)', 'จุดจอดล่าสุด', 'พรบ.หมดอายุ', 'หมายเหตุ', 'สถานะ', 'วันคืนรถ/หมดสัญญา', 'วันที่เช็คระยะล่าสุด', 'กม.เช็คระยะล่าสุด', 'ผู้นำเข้าเช็คระยะ', 'ระยะกม.ต่อรอบ', 'ประวัติเช็คระยะ(JSON)', 'แผนรอบถัดไป(JSON)', 'หมายเหตุบำรุงรักษา'];
 const DEFAULT_SERVICE_INTERVAL_KM = 10000;
 
 function getSpreadsheet_() {
@@ -112,6 +112,14 @@ function vehicleFormField_(form, key, row, colIndex, fallback) {
   return fallback;
 }
 
+function vehicleMaintenanceRemarksField_(form, row) {
+  if (form && Object.prototype.hasOwnProperty.call(form, 'maintenanceRemarks')) {
+    return String(form.maintenanceRemarks || '');
+  }
+  if (row && row[19] !== undefined && row[19] !== null) return String(row[19]);
+  return '';
+}
+
 function parseVehicleServiceHistory_(value) {
   if (!value) return [];
   if (Array.isArray(value)) return value;
@@ -176,7 +184,8 @@ function buildVehicleRowValues_(form, row, imgUrl, activeStatus) {
     vehicleFormField_(form, 'serviceLastBy', row, 15, ''),
     intervalKm,
     historyJson,
-    roundPlanJson
+    roundPlanJson,
+    vehicleMaintenanceRemarksField_(form, row)
   ];
 }
 
@@ -313,7 +322,8 @@ function buildAppPayload_(ss, includeLogs) {
     serviceLastBy: r[15] || '',
     serviceIntervalKm: parseFloat(r[16]) || DEFAULT_SERVICE_INTERVAL_KM,
     serviceHistory: parseVehicleServiceHistory_(r[17]),
-    serviceRoundPlan: parseVehicleServiceRoundPlan_(r[18])
+    serviceRoundPlan: parseVehicleServiceRoundPlan_(r[18]),
+    maintenanceRemarks: r[19] || ''
   }));
 
   const bDataVal = getSheetOrThrow_(ss, 'Bookings').getDataRange().getValues();
