@@ -2560,7 +2560,6 @@
       const endMs = parseTimeSafe(b && b.end);
       if (!startMs || !endMs || endMs < startMs) return [];
 
-      const plateKey = normalizePlateForSearch(b && b.plate ? b.plate : 'ไม่ระบุ');
       const startDay = new Date(startMs);
       const endDay = new Date(endMs);
       startDay.setHours(0, 0, 0, 0);
@@ -2571,7 +2570,7 @@
         const dateKey = getReportDateKey(d);
         rows.push({
           monthKey: getReportMonthKey(d),
-          dayKey: plateKey + '|' + dateKey
+          dayKey: dateKey
         });
       }
       return rows;
@@ -2796,7 +2795,7 @@
 
     <section>
       <h2>สรุปจำนวนวันใช้งานรายเดือน</h2>
-      <table><thead><tr><th>เดือน</th><th class="num">จำนวนวันใช้งาน</th></tr></thead><tbody>${buildReportMonthRows(stats.monthRows)}</tbody></table>
+      <table><thead><tr><th>เดือน</th><th class="num">จำนวนวันที่ใช้งาน</th></tr></thead><tbody>${buildReportMonthRows(stats.monthRows)}</tbody></table>
     </section>
 
     <div class="grid-2">
