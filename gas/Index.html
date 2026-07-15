@@ -2319,6 +2319,90 @@
       searchBookings();
     }
 
+    function parseSearchReportMileNumber(value) {
+      if (value === undefined || value === null) return null;
+      const text = String(value).trim().replace(/,/g, '');
+      if (!/^\d+(\.\d+)?$/.test(text)) return null;
+      const n = Number(text);
+      return Number.isFinite(n) ? n : null;
+    }
+
+    function hasMileageInputValue(value) {
+      return value !== undefined && value !== null && String(value).trim() !== '';
+    }
+
+    function findDuplicateMileageInUsagePeriod(payload, startMile, endMile) {
+      const startMs = parseTimeSafe(payload.start);
+      const endMs = parseTimeSafe(payload.end);
+      const plateKey = normalizePlateForSearch(payload.plate);
+      if (!startMs || !endMs || !plateKey) return null;
+
+      const candidates = [];
+      if (startMile !== null) candidates.push({ label: 'ไมล์ก่อนใช้', value: startMile });
+      if (endMile !== null) candidates.push({ label: 'ไมล์หลังใช้', value: endMile });
+      if (!candidates.length) return null;
+
+      for (const b of (appData.bookings || [])) {
+        if (String(b.id || '').trim() === String(payload.id || '').trim()) continue;
+        if (normalizePlateForSearch(b.plate) !== plateKey) continue;
+        const bStart = parseTimeSafe(b.start);
+        const bEnd = parseTimeSafe(b.end);
+        if (!bStart || !bEnd || !(startMs < bEnd && endMs > bStart)) continue;
+
+        const existing = [
+          { label: 'ไมล์ก่อนใช้', value: parseSearchReportMileNumber(b.startMile) },
+          { label: 'ไมล์หลังใช้', value: parseSearchReportMileNumber(b.endMile) }
+        ].filter(function (row) { return row.value !== null; });
+
+        for (const candidate of candidates) {
+          const matched = existing.find(function (row) { return row.value === candidate.value; });
+          if (matched) {
+            return {
+              value: candidate.value,
+              inputLabel: candidate.label,
+              existingLabel: matched.label,
+              booking: b
+            };
+          }
+        }
+      }
+      return null;
+    }
+
+    function validateMileagePayload(payload, requireStart, requireEnd) {
+      const hasStart = hasMileageInputValue(payload.startMile);
+      const hasEnd = hasMileageInputValue(payload.endMile);
+      const startMile = parseSearchReportMileNumber(payload.startMile);
+      const endMile = parseSearchReportMileNumber(payload.endMile);
+
+      if ((requireStart || hasStart) && (startMile === null || startMile <= 0)) {
+        Swal.fire('กรุณาตรวจสอบ', 'ไมล์ก่อนใช้ต้องเป็นตัวเลขมากกว่า 0', 'warning');
+        return null;
+      }
+      if ((requireEnd || hasEnd) && (endMile === null || endMile <= 0)) {
+        Swal.fire('กรุณาตรวจสอบ', 'ไมล์หลังใช้ต้องเป็นตัวเลขมากกว่า 0', 'warning');
+        return null;
+      }
+      if (startMile !== null && endMile !== null && startMile > endMile) {
+        Swal.fire('กรุณาตรวจสอบ', 'ไมล์ก่อนใช้ต้องไม่มากกว่าไมล์หลังใช้', 'warning');
+        return null;
+      }
+
+      const duplicate = findDuplicateMileageInUsagePeriod(payload, startMile, endMile);
+      if (duplicate) {
+        Swal.fire(
+          'เลขไมล์ซ้ำ',
+          duplicate.inputLabel + ' ' + duplicate.value.toLocaleString('th-TH') +
+            ' ซ้ำกับ' + duplicate.existingLabel + 'ของ ' + (getBookingDisplayName(duplicate.booking) || '-') +
+            ' ในช่วงเวลาใช้งานเดียวกัน',
+          'warning'
+        );
+        return null;
+      }
+
+      return { startMile: startMile, endMile: endMile };
+    }
+
     function getSelectedSearchPlateOptions() {
       const wrap = document.getElementById('search-plate-list');
       if (!wrap) return [];
@@ -2376,7 +2460,9 @@
       }
 
       results.forEach(b => {
-        let dist = (b.endMile && b.startMile) ? (b.endMile - b.startMile) : '-';
+        const startMile = parseSearchReportMileNumber(b.startMile);
+        const endMile = parseSearchReportMileNumber(b.endMile);
+        const dist = (startMile !== null && endMile !== null && endMile >= startMile) ? (endMile - startMile) : '-';
         const distCell = isAdmin ? `<td class="p-3 text-center">${dist}</td>` : '';
         tbody.innerHTML += `<tr class="dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50"><td class="p-3 font-semibold text-purple-600 dark:text-purple-400">${escapeHtml(b.plate)}</td><td class="p-3">${formatUserNameColored(b)} <span class="text-xs text-slate-400">(${escapeHtml(b.dept || '-')})</span></td><td class="p-3">${escapeHtml(b.dest || '-')}</td><td class="p-3">${formatThaiDateTime(b.start)}</td><td class="p-3">${formatThaiDateTime(b.end)}</td>${distCell}</tr>`;
       });
@@ -2393,10 +2479,10 @@
       let csvContent = "data:text/csv;charset=utf-8,\uFEFFBooking_ID,ทะเบียนรถ,ผู้ใช้งาน,แผนก,เริ่ม,สิ้นสุด,จุดหมาย,ไมล์ก่อนใช้,ไมล์หลังใช้,ระยะทาง(km)\n";
       
       dataToExport.forEach(b => {
-        let dist = (b.endMile && b.startMile) ? (b.endMile - b.startMile) : 0;
-        let startM = b.startMile || 0;
-        let endM = b.endMile || 0;
-        csvContent += `"${b.id}","${b.plate}","${(b.name||'')} ${(b.surname||'')}","${b.dept}","${formatThaiDateTime(b.start)}","${formatThaiDateTime(b.end)}","${b.dest}",${startM},${endM},${dist}\n`;
+        const startM = parseSearchReportMileNumber(b.startMile);
+        const endM = parseSearchReportMileNumber(b.endMile);
+        const dist = (startM !== null && endM !== null && endM >= startM) ? (endM - startM) : '';
+        csvContent += `"${b.id}","${b.plate}","${(b.name||'')} ${(b.surname||'')}","${b.dept}","${formatThaiDateTime(b.start)}","${formatThaiDateTime(b.end)}","${b.dest}",${startM === null ? '' : startM},${endM === null ? '' : endM},${dist}\n`;
       });
       
       const link = document.createElement("a"); 
@@ -2406,12 +2492,9 @@
     };
 
     function getSearchBookingDistanceKm(b) {
-      const hasStartMile = b && b.startMile !== undefined && b.startMile !== null && String(b.startMile).trim() !== '';
-      const hasEndMile = b && b.endMile !== undefined && b.endMile !== null && String(b.endMile).trim() !== '';
-      if (!hasStartMile || !hasEndMile) return null;
-      const startMile = parseFloat(b && b.startMile);
-      const endMile = parseFloat(b && b.endMile);
-      if (!isFinite(startMile) || !isFinite(endMile) || endMile < startMile) return null;
+      const startMile = parseSearchReportMileNumber(b && b.startMile);
+      const endMile = parseSearchReportMileNumber(b && b.endMile);
+      if (startMile === null || endMile === null || endMile < startMile) return null;
       return endMile - startMile;
     }
 
@@ -3610,17 +3693,18 @@
       const bookingId = document.getElementById('mile-booking-id').value;
       const bk = appData.bookings.find(function (b) { return b.id === bookingId; });
       if (!bk) return;
-      const startMile = parseFloat(document.getElementById('mile-start').value);
-      const endMile = parseFloat(document.getElementById('mile-end').value);
+      const startMileRaw = document.getElementById('mile-start').value;
+      const endMileRaw = document.getElementById('mile-end').value;
       const parking = document.getElementById('mile-parking').value.trim();
-      if (isNaN(endMile) || endMile <= 0) {
-        Swal.fire('กรุณากรอกข้อมูล', 'ระบุไมล์หลังใช้งานให้ถูกต้อง', 'warning');
-        return;
-      }
-      if (!isNaN(startMile) && startMile > 0 && endMile < startMile) {
-        Swal.fire('กรุณาตรวจสอบ', 'ไมล์หลังใช้ต้องไม่น้อยกว่าไมล์ก่อนใช้', 'warning');
-        return;
-      }
+      const mileageValidation = validateMileagePayload({
+        id: bk.id,
+        plate: bk.plate,
+        start: bk.start,
+        end: bk.end,
+        startMile: startMileRaw,
+        endMile: endMileRaw
+      }, true, true);
+      if (!mileageValidation) return;
       const btn = document.getElementById('mile-submit-btn');
       btn.disabled = true;
       btn.textContent = 'กำลังบันทึก...';
@@ -3633,8 +3717,8 @@
         driver: bk.driver || getBookingDisplayName(bk),
         start: bk.start,
         end: bk.end,
-        startMile: isNaN(startMile) ? '' : startMile,
-        endMile: endMile,
+        startMile: mileageValidation.startMile,
+        endMile: mileageValidation.endMile,
         parkingSpot: parking,
         originalEmail: bk.userEmail || ''
       };
@@ -3814,6 +3898,16 @@
         originalEmail: origEmail || appData.currentUserEmail, 
         editReason: reason 
       };
+
+      const mileageValidation = validateMileagePayload(obj, false, false);
+      if (!mileageValidation) {
+        btn.innerText = 'บันทึกข้อมูล';
+        btn.disabled = false;
+        return;
+      }
+      obj.startMile = mileageValidation.startMile === null ? '' : mileageValidation.startMile;
+      obj.endMile = mileageValidation.endMile === null ? '' : mileageValidation.endMile;
+      obj.parkingSpot = mileageValidation.endMile !== null ? obj.parkingSpot : '';
 
       google.script.run.withSuccessHandler(res => {
         if(res.success) { 

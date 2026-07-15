@@ -38,6 +38,78 @@ function parseTimeSafe_(val) {
   return isNaN(fallback.getTime()) ? 0 : fallback.getTime();
 }
 
+function hasInputValue_(value) {
+  return value !== undefined && value !== null && String(value).trim() !== '';
+}
+
+function parseMileageNumberStrict_(value) {
+  if (!hasInputValue_(value)) return null;
+  const text = String(value).trim().replace(/,/g, '');
+  if (!/^\d+(\.\d+)?$/.test(text)) return null;
+  const n = Number(text);
+  return isFinite(n) ? n : null;
+}
+
+function normalizePlateKey_(value) {
+  return String(value || '').trim().toUpperCase().replace(/[^0-9A-Z\u0E00-\u0E7F]/g, '');
+}
+
+function validateBookingMileage_(form, bData, newStart, newEnd) {
+  const hasStart = hasInputValue_(form.startMile);
+  const hasEnd = hasInputValue_(form.endMile);
+  const startMile = parseMileageNumberStrict_(form.startMile);
+  const endMile = parseMileageNumberStrict_(form.endMile);
+
+  if (hasStart && (startMile === null || startMile <= 0)) {
+    return { success: false, msg: 'ไมล์ก่อนใช้ต้องเป็นตัวเลขมากกว่า 0' };
+  }
+  if (hasEnd && (endMile === null || endMile <= 0)) {
+    return { success: false, msg: 'ไมล์หลังใช้ต้องเป็นตัวเลขมากกว่า 0' };
+  }
+  if (startMile !== null && endMile !== null && startMile > endMile) {
+    return { success: false, msg: 'ไมล์ก่อนใช้ต้องไม่มากกว่าไมล์หลังใช้' };
+  }
+
+  const plateKey = normalizePlateKey_(form.plate);
+  const formId = String(form.id || '').trim();
+  const candidates = [];
+  if (startMile !== null) candidates.push({ label: 'ไมล์ก่อนใช้', value: startMile });
+  if (endMile !== null) candidates.push({ label: 'ไมล์หลังใช้', value: endMile });
+
+  if (plateKey && candidates.length) {
+    for (let i = 1; i < bData.length; i++) {
+      if (String(bData[i][0]).trim() === formId) continue;
+      if (normalizePlateKey_(bData[i][1]) !== plateKey) continue;
+
+      const exStart = parseTimeSafe_(bData[i][5]);
+      const exEnd = parseTimeSafe_(bData[i][6]);
+      if (!exStart || !exEnd || !(newStart < exEnd && newEnd > exStart)) continue;
+
+      const existing = [
+        { label: 'ไมล์ก่อนใช้', value: parseMileageNumberStrict_(bData[i][10]) },
+        { label: 'ไมล์หลังใช้', value: parseMileageNumberStrict_(bData[i][11]) }
+      ].filter(row => row.value !== null);
+
+      for (const candidate of candidates) {
+        const matched = existing.find(row => row.value === candidate.value);
+        if (matched) {
+          const userName = String((bData[i][2] || '') + ' ' + (bData[i][3] || '')).trim() || 'ผู้ใช้งานก่อนหน้า';
+          return {
+            success: false,
+            msg: `${candidate.label} ${candidate.value.toLocaleString('th-TH')} ซ้ำกับ${matched.label}ของ ${userName} ในช่วงเวลาใช้งานเดียวกัน`
+          };
+        }
+      }
+    }
+  }
+
+  return {
+    success: true,
+    startMile: startMile === null ? '' : startMile,
+    endMile: endMile === null ? '' : endMile
+  };
+}
+
 function clearAppCache_() {
   const cache = CacheService.getScriptCache();
   cache.remove(APP_DATA_CACHE_KEY);
@@ -716,8 +788,8 @@ function saveBooking(form, clientIp) {
         if(String(bData[i][1]).trim() === String(form.plate).trim() && String(bData[i][0]).trim() !== String(form.id).trim()) {
             
             // ✨ เพิ่มเช็คการคืนรถ: ถ้ากรอกเลขไมล์คืนรถแล้ว ไม่นับว่าซ้ำซ้อน
-            const exEndMile = bData[i][11]; // ไมล์หลังใช้ (Index 11)
-            if (exEndMile && parseFloat(exEndMile) > 0) continue;
+            const exEndMile = parseMileageNumberStrict_(bData[i][11]); // ไมล์หลังใช้ (Index 11)
+            if (exEndMile !== null && exEndMile > 0) continue;
 
             const exStart = parseTimeSafe_(bData[i][5]);
             const exEnd = parseTimeSafe_(bData[i][6]);
@@ -741,15 +813,19 @@ function saveBooking(form, clientIp) {
       if (!nData.includes(form.dept)) nSheet.appendRow(['', '', form.dept]);
     }
 
-    const endMileNum = parseFloat(form.endMile);
-    const hasPostTripMile = !isNaN(endMileNum) && endMileNum > 0;
+    const mileageValidation = validateBookingMileage_(form, bData, newStart, newEnd);
+    if (!mileageValidation.success) return mileageValidation;
+
+    const startMileValue = mileageValidation.startMile;
+    const endMileValue = mileageValidation.endMile;
+    const hasPostTripMile = endMileValue !== '' && endMileValue > 0;
     const bookingParking = hasPostTripMile ? (form.parkingSpot || '').trim() : '';
 
     const vData = vSheet.getDataRange().getValues();
     for (let i = 1; i < vData.length; i++) {
       if (String(vData[i][1]).trim() === String(form.plate).trim()) {
         if (hasPostTripMile) {
-          vSheet.getRange(i + 1, 8).setValue(form.endMile);
+          vSheet.getRange(i + 1, 8).setValue(endMileValue);
           if (bookingParking) vSheet.getRange(i + 1, 9).setValue(bookingParking);
         }
         break;
@@ -759,14 +835,14 @@ function saveBooking(form, clientIp) {
     if (form.id) {
       for (let i = 1; i < bData.length; i++) {
         if (String(bData[i][0]).trim() === String(form.id).trim()) {
-          bSheet.getRange(i + 1, 2, 1, 12).setValues([[form.plate, fname, lname, form.dept, "'" + form.start, "'" + form.end, form.dest, form.driver, form.originalEmail, form.startMile, form.endMile, bookingParking]]);
+          bSheet.getRange(i + 1, 2, 1, 12).setValues([[form.plate, fname, lname, form.dept, "'" + form.start, "'" + form.end, form.dest, form.driver, form.originalEmail, startMileValue, endMileValue, bookingParking]]);
           clearAppCache_();
-          appendLogRow_(logSheet, actionEmail, 'UPDATE_BOOKING', form.plate, `แก้ไข/คืนรถ (จุดจอด: ${bookingParking || '-'}, ไมล์: ${form.startMile} -> ${form.endMile})`, form.editReason || '-', ip);
+          appendLogRow_(logSheet, actionEmail, 'UPDATE_BOOKING', form.plate, `แก้ไข/คืนรถ (จุดจอด: ${bookingParking || '-'}, ไมล์: ${startMileValue || '-'} -> ${endMileValue || '-'})`, form.editReason || '-', ip);
           return {success: true, msg: 'อัปเดตการจองและจุดจอดเรียบร้อยครับ'};
         }
       }
     } else {
-      bSheet.appendRow(['B_' + new Date().getTime(), form.plate, fname, lname, form.dept, "'" + form.start, "'" + form.end, form.dest, form.driver, actionEmail, form.startMile, form.endMile, bookingParking]);
+      bSheet.appendRow(['B_' + new Date().getTime(), form.plate, fname, lname, form.dept, "'" + form.start, "'" + form.end, form.dest, form.driver, actionEmail, startMileValue, endMileValue, bookingParking]);
       clearAppCache_();
       appendLogRow_(logSheet, actionEmail, 'CREATE_BOOKING', form.plate, `จองไป ${form.dest}`, '-', ip);
       return {success: true, msg: 'บันทึกการจองสำเร็จครับ'};
