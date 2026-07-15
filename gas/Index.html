@@ -330,7 +330,7 @@
       
       <div class="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 space-y-4">
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div><label class="block text-sm font-medium mb-1">ทะเบียนรถ</label><select id="search-plate" class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600 bg-white"><option value="">-- ทั้งหมด --</option></select></div>
+          <div><label class="block text-sm font-medium mb-1">ทะเบียนรถ</label><div id="search-plate-list" class="h-32 overflow-y-auto rounded-lg border dark:bg-slate-700 dark:border-slate-600 bg-white p-2 space-y-1 text-sm"><p class="text-slate-400 text-center py-8">กำลังโหลดทะเบียนรถ...</p></div><p class="mt-1 text-xs text-slate-400">ติ๊กเลือกได้หลายคัน (ไม่เลือก = ทั้งหมด)</p></div>
           <div><label class="block text-sm font-medium mb-1">แผนก</label><select id="search-dept" class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600 bg-white"><option value="">-- ทั้งหมด --</option></select></div>
           <div><label class="block text-sm font-medium mb-1">ชื่อผู้ใช้งาน</label><input type="text" id="search-name" placeholder="ค้นหาด้วยชื่อ..." class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600 bg-white"></div>
           <div><label class="block text-sm font-medium mb-1">เลือกตามเดือน</label><select id="search-month" onchange="window.setMonthRange()" class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600 bg-white"><option value="">-- เลือกเดือน (พ.ศ.) --</option></select></div>
@@ -2319,9 +2319,28 @@
       searchBookings();
     }
 
+    function getSelectedSearchPlateOptions() {
+      const wrap = document.getElementById('search-plate-list');
+      if (!wrap) return [];
+      return Array.from(wrap.querySelectorAll('.search-plate-option:checked')).map(function (input) {
+        return { value: input.value, textContent: input.getAttribute('data-label') || input.value };
+      });
+    }
+
+    function getSelectedSearchPlateKeys() {
+      return getSelectedSearchPlateOptions().map(function (option) {
+        return normalizePlateForSearch(option.value);
+      });
+    }
+
+    function getSelectedSearchPlateLabels() {
+      return getSelectedSearchPlateOptions().map(function (option) {
+        return option.textContent || option.value;
+      });
+    }
+
     function searchBookings() {
-      const plateFilter = document.getElementById('search-plate').value;
-      const plateFilterKey = normalizePlateForSearch(plateFilter);
+      const plateFilterKeys = getSelectedSearchPlateKeys();
       const deptFilter = document.getElementById('search-dept').value;
       const nameFilter = document.getElementById('search-name').value.toLowerCase();
       
@@ -2335,7 +2354,7 @@
       tbody.innerHTML = '';
       
       const results = appData.bookings.filter(b => {
-        if (plateFilter && normalizePlateForSearch(b.plate) !== plateFilterKey) return false;
+        if (plateFilterKeys.length && !plateFilterKeys.includes(normalizePlateForSearch(b.plate))) return false;
         if (deptFilter && b.dept !== deptFilter) return false;
         const fullName = ((b.name || '') + ' ' + (b.surname || '')).toLowerCase();
         if (nameFilter && !fullName.includes(nameFilter)) return false;
@@ -2427,8 +2446,9 @@
       const monthEl = document.getElementById('search-month');
       const startDate = document.getElementById('search-start').value;
       const endDate = document.getElementById('search-end').value;
+      const plateLabels = getSelectedSearchPlateLabels();
       return {
-        plate: document.getElementById('search-plate').value || 'ทั้งหมด',
+        plate: plateLabels.length ? plateLabels.join(', ') : 'ทั้งหมด',
         dept: document.getElementById('search-dept').value || 'ทั้งหมด',
         name: document.getElementById('search-name').value || 'ทั้งหมด',
         month: monthEl && monthEl.value ? monthEl.options[monthEl.selectedIndex].text : 'ทั้งหมด',
@@ -2645,7 +2665,7 @@
     };
 
     window.clearSearchFilters = function() {
-      document.getElementById('search-plate').value = '';
+      document.querySelectorAll('#search-plate-list .search-plate-option').forEach(function (input) { input.checked = false; });
       document.getElementById('search-dept').value = '';
       document.getElementById('search-name').value = '';
       document.getElementById('search-month').value = '';
@@ -2663,7 +2683,9 @@
       const depts = [...new Set(names.map(n => n.dept).filter(Boolean))];
       document.getElementById('dept-list').innerHTML = depts.map(d => `<option value="${escapeHtml(d)}">`).join('');
       
-      document.getElementById('search-plate').innerHTML = '<option value="">-- ทั้งหมด --</option>' + vehicles.map(v => `<option value="${escapeHtml(v.plate)}">${escapeHtml(v.plate)}</option>`).join('');
+      document.getElementById('search-plate-list').innerHTML = vehicles.length
+        ? vehicles.map((v, idx) => `<label class="flex items-center gap-2 rounded-md px-2 py-1 hover:bg-purple-50 dark:hover:bg-slate-600 cursor-pointer"><input type="checkbox" class="search-plate-option accent-purple-500" value="${escapeHtml(v.plate)}" data-label="${escapeHtml(v.plate)}"><span>${escapeHtml(v.plate)}</span></label>`).join('')
+        : '<p class="text-slate-400 text-center py-8">ไม่พบทะเบียนรถ</p>';
       document.getElementById('search-dept').innerHTML = '<option value="">-- ทั้งหมด --</option>' + depts.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
       initBookingComboboxes();
     };
