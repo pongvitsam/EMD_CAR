@@ -21,6 +21,34 @@ function getSheetOrThrow_(ss, sheetName) {
   return sheet;
 }
 
+function parseLocalDateTimeSafe_(val) {
+  const clean = String(val || '').trim().replace('T', ' ').replace(/-/g, '/');
+  const match = clean.match(/^(\d{1,4})\/(\d{1,2})\/(\d{1,4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+  if (!match) return 0;
+
+  const first = match[1];
+  let year;
+  let month;
+  let day;
+  if (first.length === 4) {
+    year = parseInt(match[1], 10);
+    month = parseInt(match[2], 10);
+    day = parseInt(match[3], 10);
+  } else {
+    day = parseInt(match[1], 10);
+    month = parseInt(match[2], 10);
+    year = parseInt(match[3], 10);
+  }
+  if (year >= 2400) year -= 543;
+
+  const hour = parseInt(match[4] || '0', 10);
+  const minute = parseInt(match[5] || '0', 10);
+  const second = parseInt(match[6] || '0', 10);
+  const d = new Date(year, month - 1, day, hour, minute, second);
+  if (d.getFullYear() !== year || d.getMonth() !== month - 1 || d.getDate() !== day) return 0;
+  return d.getTime();
+}
+
 function parseTimeSafe_(val) {
   if (!val) return 0;
   if (val instanceof Date) return val.getTime();
@@ -30,6 +58,8 @@ function parseTimeSafe_(val) {
     const dIso = new Date(s);
     if (!isNaN(dIso.getTime())) return dIso.getTime();
   }
+  const localTime = parseLocalDateTimeSafe_(s);
+  if (localTime) return localTime;
   let clean = s.replace('T', ' ').replace(/-/g, '/');
   if (clean.length === 16) clean += ':00';
   const d = new Date(clean);
@@ -44,7 +74,9 @@ function hasInputValue_(value) {
 
 function parseMileageNumberStrict_(value) {
   if (!hasInputValue_(value)) return null;
-  const text = String(value).trim().replace(/,/g, '');
+  const raw = String(value).trim();
+  if (!/^(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d+)?$/.test(raw)) return null;
+  const text = raw.replace(/,/g, '');
   if (!/^\d+(\.\d+)?$/.test(text)) return null;
   const n = Number(text);
   return isFinite(n) ? n : null;
