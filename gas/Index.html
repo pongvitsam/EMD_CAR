@@ -2189,7 +2189,7 @@
         const upcomingBookings = appData.bookings.filter(b =>
           b.plate === car.plate &&
           parseTimeSafe(b.start) > nowTime &&
-          (!b.endMile || parseFloat(b.endMile) == 0)
+          !bookingHasPostTripData(b)
         ).sort((a, b) => parseTimeSafe(a.start) - parseTimeSafe(b.start));
 
         // ดึงคิวแรกสุดที่กำลังจะมาถึง
@@ -2555,8 +2555,9 @@
       dataToExport.forEach(b => {
         const startM = parseSearchReportMileNumber(b.startMile);
         const endM = parseSearchReportMileNumber(b.endMile);
-        const dist = (startM !== null && endM !== null && endM >= startM) ? (endM - startM) : '';
-        csvContent += `"${b.id}","${b.plate}","${(b.name||'')} ${(b.surname||'')}","${b.dept}","${formatThaiDateTime(b.start)}","${formatThaiDateTime(b.end)}","${b.dest}",${startM === null ? '' : startM},${endM === null ? '' : endM},${dist}\n`;
+        const hasCompleteMileage = startM !== null && endM !== null && endM >= startM;
+        const dist = hasCompleteMileage ? (endM - startM) : '';
+        csvContent += `"${b.id}","${b.plate}","${(b.name||'')} ${(b.surname||'')}","${b.dept}","${formatThaiDateTime(b.start)}","${formatThaiDateTime(b.end)}","${b.dest}",${hasCompleteMileage ? startM : ''},${hasCompleteMileage ? endM : ''},${dist}\n`;
       });
       
       const link = document.createElement("a"); 
