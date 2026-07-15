@@ -890,6 +890,11 @@
       const endMile = parseSearchReportMileNumber(b && b.endMile);
       return endMile !== null && endMile > 0;
     }
+    function bookingHasCompleteMileageData(b) {
+      const startMile = parseSearchReportMileNumber(b && b.startMile);
+      const endMile = parseSearchReportMileNumber(b && b.endMile);
+      return startMile !== null && startMile > 0 && endMile !== null && endMile > 0;
+    }
     function getCarIdleLabel(plate, nowTime) {
       const plateNorm = String(plate || '').trim();
       let lastFreeAt = 0;
@@ -2333,7 +2338,8 @@
           const displayName = getBookingDisplayName(b);
           const color = getColorForUser(b);
           const destText = escapeHtml(b.dest || '-');
-          const hasReturnInfo = bookingHasPostTripData(b);
+          const hasReturnInfo = bookingHasCompleteMileageData(b);
+          const hasPostTripData = bookingHasPostTripData(b);
           const returnInfoHtml = hasReturnInfo ? `
             <div class="bg-emerald-50 dark:bg-emerald-900/20 p-3 rounded-xl mt-3 space-y-1 border border-emerald-100 dark:border-emerald-800/40">
               <p><strong>🔧 คืนรถ / อัปเดตข้อมูล</strong></p>
@@ -2342,7 +2348,7 @@
               <p><strong>จุดจอดหลังใช้งาน:</strong> ${b.parkingSpot || '-'}</p>
             </div>
           ` : '';
-          const mileageUpdateButtonHtml = hasReturnInfo ? '' : `
+          const mileageUpdateButtonHtml = hasPostTripData ? '' : `
             <button type="button" onclick="window.openMileageUpdateModal('${escapeHtml(b.id)}')" class="mt-4 w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3 rounded-xl shadow-md transition">
               📍 อัปเดตเลขไมล์หลังใช้งาน
             </button>
