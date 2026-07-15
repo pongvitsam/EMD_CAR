@@ -2764,7 +2764,7 @@
       const topUser = stats.userRows[0] ? stats.userRows[0].label : '-';
       const detailNote = '<p class="note">ตารางรายละเอียดแสดงผลการค้นหาทั้งหมด ' + formatReportNumber(bookings.length, 0) + ' รายการ</p>';
       const totalKmKpiHtml = stats.mileageComplete > 0
-        ? '<div class="kpi"><div class="label">ระยะทางรวม (km)</div><div class="value">' + formatReportNumber(stats.totalKm, 0) + '</div></div>'
+        ? '<div class="kpi"><div class="label">ระยะทางรวม (km) เฉพาะที่มีผู้กรอกข้อมูล</div><div class="value">' + formatReportNumber(stats.totalKm, 0) + '</div></div>'
         : '';
 
       return `<!doctype html>
@@ -2828,7 +2828,7 @@
       <div class="kpi"><div class="label">เฉลี่ยใช้งาน/เดือน</div><div class="value">${formatReportNumber(stats.avgUsageDaysPerMonth, 1)} วัน</div></div>
       ${totalKmKpiHtml}
       <div class="kpi"><div class="label">ชั่วโมงใช้งานรวม</div><div class="value">${formatReportNumber(stats.totalHours, 1)}</div></div>
-      <div class="kpi"><div class="label">บันทึกไมล์ครบ</div><div class="value">${formatReportNumber(completedPct, 0)}%</div></div>
+      <div class="kpi"><div class="label">บันทึกไมล์ครบคิดเป็น</div><div class="value">${formatReportNumber(completedPct, 0)}%</div></div>
     </div>
 
     <div class="summary">
