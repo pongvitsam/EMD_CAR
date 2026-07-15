@@ -2534,9 +2534,8 @@
       }
 
       results.forEach(b => {
-        const startMile = parseSearchReportMileNumber(b.startMile);
-        const endMile = parseSearchReportMileNumber(b.endMile);
-        const dist = (startMile !== null && endMile !== null && endMile >= startMile) ? (endMile - startMile) : '-';
+        const km = getSearchBookingDistanceKm(b);
+        const dist = km !== null ? km : '-';
         const distCell = isAdmin ? `<td class="p-3 text-center">${dist}</td>` : '';
         tbody.innerHTML += `<tr class="dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50"><td class="p-3 font-semibold text-purple-600 dark:text-purple-400">${escapeHtml(b.plate)}</td><td class="p-3">${formatUserNameColored(b)} <span class="text-xs text-slate-400">(${escapeHtml(b.dept || '-')})</span></td><td class="p-3">${escapeHtml(b.dest || '-')}</td><td class="p-3">${formatThaiDateTime(b.start)}</td><td class="p-3">${formatThaiDateTime(b.end)}</td>${distCell}</tr>`;
       });
@@ -2555,8 +2554,8 @@
       dataToExport.forEach(b => {
         const startM = parseSearchReportMileNumber(b.startMile);
         const endM = parseSearchReportMileNumber(b.endMile);
-        const hasCompleteMileage = startM !== null && endM !== null && endM >= startM;
-        const dist = hasCompleteMileage ? (endM - startM) : '';
+        const dist = getSearchBookingDistanceKm(b);
+        const hasCompleteMileage = dist !== null;
         csvContent += `"${b.id}","${b.plate}","${(b.name||'')} ${(b.surname||'')}","${b.dept}","${formatThaiDateTime(b.start)}","${formatThaiDateTime(b.end)}","${b.dest}",${hasCompleteMileage ? startM : ''},${hasCompleteMileage ? endM : ''},${dist}\n`;
       });
       
@@ -2569,7 +2568,7 @@
     function getSearchBookingDistanceKm(b) {
       const startMile = parseSearchReportMileNumber(b && b.startMile);
       const endMile = parseSearchReportMileNumber(b && b.endMile);
-      if (startMile === null || endMile === null || endMile < startMile) return null;
+      if (startMile === null || endMile === null || startMile <= 0 || endMile <= 0 || endMile < startMile) return null;
       return endMile - startMile;
     }
 
