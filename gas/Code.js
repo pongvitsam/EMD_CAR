@@ -390,6 +390,7 @@ function dispatchApi_(action, args, token, clientIp) {
     case 'getAppData': return getAppData(!(args.length > 0 && args[0] === false));
     case 'getAppLogs': return getAppLogs_();
     case 'verifyAdminLogin': return verifyAdminLogin(args[0], args[1]);
+    case 'checkAdminSession': return checkAdminSession(args[0] || token);
     case 'saveAdminSettings': return saveAdminSettings(args[0]);
     case 'getNameManagementData': return getNameManagementData(token);
     case 'saveManagedName': return saveManagedName(token, args[0]);
@@ -530,6 +531,15 @@ function verifyAdminLogin(user, passText) {
   
   if(user === savedUser && txtHash === savedHash) return { success: true, token: createAdminSession_() };
   return { success: false, msg: 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง' };
+}
+
+function checkAdminSession(token) {
+  try {
+    requireAdminSession_(token);
+    return { success: true, token: token };
+  } catch (error) {
+    return { success: false, msg: error.message };
+  }
 }
 
 function getNameManagementData(token) {

@@ -609,6 +609,7 @@
     const APP_CACHE_KEY = 'emdcar_appdata_v3';
     const APP_CACHE_STALE_MS = 30 * 60 * 1000;
     const APP_CACHE_MAX_MS = 24 * 60 * 60 * 1000;
+    const ADMIN_SESSION_STORAGE_KEY = 'emdcar_admin_token_v1';
     let loadDataInflight = null;
     let loadDataSeq = 0;
     const escapeHtml = (value) => String(value || '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
@@ -1159,7 +1160,8 @@
       ensureChartJs();
       resolveClientIpOnce();
       initBookingComboboxes();
-      loadData();
+      restoreAdminSession();
+      loadData({ full: isAdmin });
     };
 
 
@@ -1863,6 +1865,69 @@
       hideLoading();
     }
 
+    function saveAdminSessionToken(token) {
+      try { sessionStorage.setItem(ADMIN_SESSION_STORAGE_KEY, token || ''); } catch (e) {}
+    }
+
+    function readAdminSessionToken() {
+      try { return sessionStorage.getItem(ADMIN_SESSION_STORAGE_KEY) || ''; } catch (e) { return ''; }
+    }
+
+    function clearAdminSessionToken() {
+      try { sessionStorage.removeItem(ADMIN_SESSION_STORAGE_KEY); } catch (e) {}
+    }
+
+    function setAdminUiState(enabled) {
+      document.getElementById('btn-login').classList.toggle('hidden', enabled);
+      document.getElementById('btn-logout').classList.toggle('hidden', !enabled);
+      document.getElementById('btn-settings').classList.toggle('hidden', !enabled);
+      document.getElementById('btn-add-car').classList.toggle('hidden', !enabled);
+      document.getElementById('tab-logs').classList.toggle('hidden', !enabled);
+      document.getElementById('tab-names').classList.toggle('hidden', !enabled);
+      document.getElementById('tab-vehicles').classList.toggle('hidden', !enabled);
+      document.getElementById('btn-export').classList.toggle('hidden', !enabled);
+      document.getElementById('btn-export-pdf').classList.toggle('hidden', !enabled);
+      document.getElementById('view-charts').classList.toggle('hidden', !enabled);
+      syncSearchReportDistanceColumn();
+    }
+
+    function activateAdminSession(token, options) {
+      options = options || {};
+      isAdmin = true;
+      adminToken = token || '';
+      saveAdminSessionToken(adminToken);
+      setAdminUiState(true);
+      renderCars(appData.vehicles);
+      if (!isChartsRendered && options.renderCharts !== false) renderCharts();
+      loadLogsIfNeeded();
+      refreshNameManager();
+      refreshSearchReportForAdmin();
+    }
+
+    function deactivateAdminSession(switchHome) {
+      isAdmin = false;
+      adminToken = '';
+      nameManagerRows = [];
+      clearAdminSessionToken();
+      setAdminUiState(false);
+      renderCars(appData.vehicles);
+      refreshSearchReportForAdmin();
+      if (switchHome) switchTab('dashboard');
+    }
+
+    function restoreAdminSession() {
+      const token = readAdminSessionToken();
+      if (!token) return;
+      isAdmin = true;
+      adminToken = token;
+      setAdminUiState(true);
+      apiCall('checkAdminSession', [token], token).then(function (res) {
+        if (!res || !res.success) deactivateAdminSession(false);
+      }).catch(function () {
+        deactivateAdminSession(false);
+      });
+    }
+
     window.promptLogin = async function() {
       const { value: formValues } = await Swal.fire({
         title: 'ผู้ดูแลระบบ (Admin)',
@@ -1878,24 +1943,8 @@
       });
 
       if (formValues && formValues.success) {
-        isAdmin = true;
-        adminToken = formValues.token || '';
-        document.getElementById('btn-login').classList.add('hidden');
-        document.getElementById('btn-logout').classList.remove('hidden');
-        document.getElementById('btn-settings').classList.remove('hidden');
-        document.getElementById('btn-add-car').classList.remove('hidden');
-        document.getElementById('tab-logs').classList.remove('hidden');
-        document.getElementById('tab-names').classList.remove('hidden');
-        document.getElementById('tab-vehicles').classList.remove('hidden');
-        document.getElementById('btn-export').classList.remove('hidden'); 
-        document.getElementById('btn-export-pdf').classList.remove('hidden');
-        document.getElementById('view-charts').classList.remove('hidden'); 
-        renderCars(appData.vehicles); 
-        if (!isChartsRendered) renderCharts();
-        loadLogsIfNeeded();
+        activateAdminSession(formValues.token || '');
         loadData({ full: true, silent: true });
-        refreshNameManager();
-        refreshSearchReportForAdmin();
         Swal.fire({ icon: 'success', title: 'สำเร็จ', text: 'เข้าสู่ระบบ Admin แล้ว', timer: 1500, showConfirmButton: false });
       } else if (formValues && !formValues.success) {
         Swal.fire({ icon: 'error', title: 'ข้อผิดพลาด', text: formValues.msg || 'ข้อมูลไม่ถูกต้อง', confirmButtonColor: '#3b82f6' });
@@ -1903,22 +1952,7 @@
     };
 
     window.logoutAdmin = function() {
-      isAdmin = false;
-      adminToken = '';
-      nameManagerRows = [];
-      document.getElementById('btn-login').classList.remove('hidden');
-      document.getElementById('btn-logout').classList.add('hidden');
-      document.getElementById('btn-settings').classList.add('hidden');
-      document.getElementById('btn-add-car').classList.add('hidden');
-      document.getElementById('tab-logs').classList.add('hidden');
-      document.getElementById('tab-names').classList.add('hidden');
-      document.getElementById('tab-vehicles').classList.add('hidden');
-      document.getElementById('btn-export').classList.add('hidden'); 
-      document.getElementById('btn-export-pdf').classList.add('hidden');
-      document.getElementById('view-charts').classList.add('hidden'); 
-      renderCars(appData.vehicles); 
-      refreshSearchReportForAdmin();
-      switchTab('dashboard');
+      deactivateAdminSession(true);
     }
 
     function renderMileageExemptCheckboxes() {
@@ -2337,6 +2371,11 @@
               <p><strong>จุดจอดหลังใช้งาน:</strong> ${b.parkingSpot || '-'}</p>
             </div>
           ` : '';
+          const mileageUpdateButtonHtml = hasReturnInfo ? '' : `
+            <button type="button" onclick="window.openMileageUpdateModal('${escapeHtml(b.id)}')" class="mt-4 w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3 rounded-xl shadow-md transition">
+              📍 อัปเดตเลขไมล์หลังใช้งาน
+            </button>
+          `;
 
           document.getElementById('cal-details').innerHTML = `
             <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-700/60 mb-4 border border-slate-200 dark:border-slate-600" style="border-left: 4px solid ${color}">
@@ -2351,9 +2390,7 @@
               <p><strong>🏁 สิ้นสุด:</strong> <br>${formatThaiDateTime(b.end)}</p>
             </div>
             ${returnInfoHtml}
-            <button type="button" onclick="window.openMileageUpdateModal('${escapeHtml(b.id)}')" class="mt-4 w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3 rounded-xl shadow-md transition">
-              📍 อัปเดตเลขไมล์หลังใช้งาน
-            </button>
+            ${mileageUpdateButtonHtml}
             <button type="button" onclick="window.openBookingModal('${escapeHtml(b.id)}')" class="mt-2 w-full bg-purple-500 hover:bg-purple-600 text-white font-medium py-3 rounded-xl shadow-md transition">
               ✏️ แก้ไขการจอง / ยกเลิก
             </button>
@@ -2912,10 +2949,17 @@
       document.getElementById('user-list').innerHTML = names.map(n => `<option value="${escapeHtml(n.fullName)}">`).join('');
       const depts = [...new Set(names.map(n => n.dept).filter(Boolean))];
       document.getElementById('dept-list').innerHTML = depts.map(d => `<option value="${escapeHtml(d)}">`).join('');
+      const selectedPlateKeys = new Set(getSelectedSearchPlateKeys());
+      const plateList = document.getElementById('search-plate-list');
+      const plateListScrollTop = plateList ? plateList.scrollTop : 0;
       
-      document.getElementById('search-plate-list').innerHTML = vehicles.length
-        ? vehicles.map((v, idx) => `<label class="flex items-center gap-2 rounded-md px-2 py-1 hover:bg-purple-50 dark:hover:bg-slate-600 cursor-pointer"><input type="checkbox" class="search-plate-option accent-purple-500" value="${escapeHtml(v.plate)}" data-label="${escapeHtml(v.plate)}"><span>${escapeHtml(v.plate)}</span></label>`).join('')
+      plateList.innerHTML = vehicles.length
+        ? vehicles.map((v, idx) => {
+          const checked = selectedPlateKeys.has(normalizePlateForSearch(v.plate)) ? ' checked' : '';
+          return `<label class="flex items-center gap-2 rounded-md px-2 py-1 hover:bg-purple-50 dark:hover:bg-slate-600 cursor-pointer"><input type="checkbox" class="search-plate-option accent-purple-500" value="${escapeHtml(v.plate)}" data-label="${escapeHtml(v.plate)}"${checked}><span>${escapeHtml(v.plate)}</span></label>`;
+        }).join('')
         : '<p class="text-slate-400 text-center py-8">ไม่พบทะเบียนรถ</p>';
+      plateList.scrollTop = plateListScrollTop;
       document.getElementById('search-dept').innerHTML = '<option value="">-- ทั้งหมด --</option>' + depts.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
       initBookingComboboxes();
     };
