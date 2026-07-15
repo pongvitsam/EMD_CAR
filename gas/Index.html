@@ -2422,6 +2422,48 @@
       return (endMs - startMs) / (1000 * 60 * 60);
     }
 
+    function getReportDateKey(dateObj) {
+      const y = dateObj.getFullYear();
+      const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+      const d = String(dateObj.getDate()).padStart(2, '0');
+      return y + '-' + m + '-' + d;
+    }
+
+    function getReportMonthKey(dateObj) {
+      const y = dateObj.getFullYear();
+      const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+      return y + '-' + m;
+    }
+
+    function formatReportMonthLabel(monthKey) {
+      const parts = String(monthKey || '').split('-');
+      const d = new Date(Number(parts[0] || 0), Number(parts[1] || 1) - 1, 1);
+      if (isNaN(d.getTime())) return monthKey || '-';
+      return d.toLocaleDateString(TH_BUDDHIST_LOCALE, { month: 'long', year: 'numeric' });
+    }
+
+    function getBookingUsageDayEntries(b) {
+      const startMs = parseTimeSafe(b && b.start);
+      const endMs = parseTimeSafe(b && b.end);
+      if (!startMs || !endMs || endMs < startMs) return [];
+
+      const plateKey = normalizePlateForSearch(b && b.plate ? b.plate : 'ไม่ระบุ');
+      const startDay = new Date(startMs);
+      const endDay = new Date(endMs);
+      startDay.setHours(0, 0, 0, 0);
+      endDay.setHours(0, 0, 0, 0);
+
+      const rows = [];
+      for (let d = new Date(startDay); d <= endDay; d.setDate(d.getDate() + 1)) {
+        const dateKey = getReportDateKey(d);
+        rows.push({
+          monthKey: getReportMonthKey(d),
+          dayKey: plateKey + '|' + dateKey
+        });
+      }
+      return rows;
+    }
+
     function formatReportNumber(value, digits) {
       const n = parseFloat(value) || 0;
       return n.toLocaleString('th-TH', {
@@ -2467,6 +2509,8 @@
       const vehicleMap = {};
       const deptMap = {};
       const userMap = {};
+      const monthMap = {};
+      const allUsageDayKeys = {};
       let totalKm = 0;
       let totalHours = 0;
       let mileageComplete = 0;
@@ -2474,6 +2518,11 @@
       bookings.forEach(function (b) {
         const km = getSearchBookingDistanceKm(b);
         const hours = getSearchBookingDurationHours(b);
+        getBookingUsageDayEntries(b).forEach(function (entry) {
+          if (!monthMap[entry.monthKey]) monthMap[entry.monthKey] = { monthKey: entry.monthKey, label: formatReportMonthLabel(entry.monthKey), dayKeys: {} };
+          monthMap[entry.monthKey].dayKeys[entry.dayKey] = true;
+          allUsageDayKeys[entry.dayKey] = true;
+        });
         if (km !== null) totalKm += km;
         totalHours += hours;
         if (km !== null) mileageComplete += 1;
@@ -2483,12 +2532,25 @@
         addReportGroupStat(userMap, getBookingFullName(b) || userName, userName, km, hours);
       });
 
+      const monthRows = Object.keys(monthMap).sort().map(function (monthKey) {
+        const row = monthMap[monthKey];
+        return {
+          monthKey: monthKey,
+          label: row.label,
+          days: Object.keys(row.dayKeys).length
+        };
+      });
+      const totalUsageDays = Object.keys(allUsageDayKeys).length;
+
       return {
         totalBookings: bookings.length,
         totalKm: totalKm,
         totalHours: totalHours,
         avgKm: bookings.length ? totalKm / bookings.length : 0,
         mileageComplete: mileageComplete,
+        totalUsageDays: totalUsageDays,
+        avgUsageDaysPerMonth: monthRows.length ? totalUsageDays / monthRows.length : 0,
+        monthRows: monthRows,
         vehicleRows: sortReportGroupRows(vehicleMap),
         deptRows: sortReportGroupRows(deptMap),
         userRows: sortReportGroupRows(userMap)
@@ -2503,6 +2565,16 @@
           '<td>' + escapeHtml(row.label) + '</td>' +
           '<td class="num">' + formatReportNumber(row.count, 0) + '</td>' +
           '<td class="num">' + (row.mileageComplete > 0 ? formatReportNumber(row.km, 0) : '-') + '</td>' +
+          '</tr>';
+      }).join('');
+    }
+
+    function buildReportMonthRows(rows) {
+      if (!rows.length) return '<tr><td colspan="2" class="empty">ไม่มีข้อมูล</td></tr>';
+      return rows.map(function (row) {
+        return '<tr>' +
+          '<td>' + escapeHtml(row.label) + '</td>' +
+          '<td class="num">' + formatReportNumber(row.days, 0) + ' วัน</td>' +
           '</tr>';
       }).join('');
     }
@@ -2597,6 +2669,7 @@
 
     <div class="kpis">
       <div class="kpi"><div class="label">จำนวนครั้งใช้งาน</div><div class="value">${formatReportNumber(stats.totalBookings, 0)}</div></div>
+      <div class="kpi"><div class="label">เฉลี่ยใช้งาน/เดือน</div><div class="value">${formatReportNumber(stats.avgUsageDaysPerMonth, 1)} วัน</div></div>
       ${totalKmKpiHtml}
       <div class="kpi"><div class="label">ชั่วโมงใช้งานรวม</div><div class="value">${formatReportNumber(stats.totalHours, 1)}</div></div>
       <div class="kpi"><div class="label">บันทึกไมล์ครบ</div><div class="value">${formatReportNumber(completedPct, 0)}%</div></div>
@@ -2607,6 +2680,11 @@
       <div class="summary-card"><strong>แผนกที่ใช้มากสุด</strong><br>${escapeHtml(topDept)}</div>
       <div class="summary-card"><strong>ผู้ใช้งานที่ใช้มากสุด</strong><br>${escapeHtml(topUser)}</div>
     </div>
+
+    <section>
+      <h2>สรุปจำนวนวันใช้งานรายเดือน</h2>
+      <table><thead><tr><th>เดือน</th><th class="num">จำนวนวันใช้งาน</th></tr></thead><tbody>${buildReportMonthRows(stats.monthRows)}</tbody></table>
+    </section>
 
     <div class="grid-2">
       <section>
