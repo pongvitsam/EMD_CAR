@@ -2406,9 +2406,12 @@
     };
 
     function getSearchBookingDistanceKm(b) {
+      const hasStartMile = b && b.startMile !== undefined && b.startMile !== null && String(b.startMile).trim() !== '';
+      const hasEndMile = b && b.endMile !== undefined && b.endMile !== null && String(b.endMile).trim() !== '';
+      if (!hasStartMile || !hasEndMile) return null;
       const startMile = parseFloat(b && b.startMile);
       const endMile = parseFloat(b && b.endMile);
-      if (!isFinite(startMile) || !isFinite(endMile) || endMile < startMile) return 0;
+      if (!isFinite(startMile) || !isFinite(endMile) || endMile < startMile) return null;
       return endMile - startMile;
     }
 
@@ -2429,9 +2432,12 @@
 
     function addReportGroupStat(map, key, display, distanceKm, durationHours) {
       const safeKey = key || 'ไม่ระบุ';
-      if (!map[safeKey]) map[safeKey] = { label: display || safeKey, count: 0, km: 0, hours: 0 };
+      if (!map[safeKey]) map[safeKey] = { label: display || safeKey, count: 0, km: 0, hours: 0, mileageComplete: 0 };
       map[safeKey].count += 1;
-      map[safeKey].km += distanceKm || 0;
+      if (distanceKm !== null) {
+        map[safeKey].km += distanceKm;
+        map[safeKey].mileageComplete += 1;
+      }
       map[safeKey].hours += durationHours || 0;
     }
 
@@ -2468,9 +2474,9 @@
       bookings.forEach(function (b) {
         const km = getSearchBookingDistanceKm(b);
         const hours = getSearchBookingDurationHours(b);
-        totalKm += km;
+        if (km !== null) totalKm += km;
         totalHours += hours;
-        if (km > 0) mileageComplete += 1;
+        if (km !== null) mileageComplete += 1;
         addReportGroupStat(vehicleMap, b.plate || 'ไม่ระบุ', b.plate || 'ไม่ระบุ', km, hours);
         addReportGroupStat(deptMap, b.dept || 'ไม่ระบุ', b.dept || 'ไม่ระบุ', km, hours);
         const userName = getBookingDisplayName(b) || 'ไม่ระบุ';
@@ -2496,13 +2502,13 @@
           '<td>' + (idx + 1) + '</td>' +
           '<td>' + escapeHtml(row.label) + '</td>' +
           '<td class="num">' + formatReportNumber(row.count, 0) + '</td>' +
-          '<td class="num">' + formatReportNumber(row.km, 0) + '</td>' +
+          '<td class="num">' + (row.mileageComplete > 0 ? formatReportNumber(row.km, 0) : '-') + '</td>' +
           '</tr>';
       }).join('');
     }
 
     function buildReportDetailRows(bookings) {
-      if (!bookings.length) return '<tr><td colspan="7" class="empty">ไม่มีข้อมูล</td></tr>';
+      if (!bookings.length) return '<tr><td colspan="8" class="empty">ไม่มีข้อมูล</td></tr>';
       return bookings.slice().sort(function (a, b) {
         return parseTimeSafe(b.start) - parseTimeSafe(a.start);
       }).map(function (b, idx) {
@@ -2514,7 +2520,8 @@
           '<td>' + escapeHtml(b.dept || '-') + '</td>' +
           '<td>' + escapeHtml(b.dest || '-') + '</td>' +
           '<td>' + escapeHtml(formatThaiDateTime(b.start)) + '</td>' +
-          '<td class="num">' + (km > 0 ? formatReportNumber(km, 0) : '-') + '</td>' +
+          '<td>' + escapeHtml(formatThaiDateTime(b.end)) + '</td>' +
+          '<td class="num">' + (km !== null ? formatReportNumber(km, 0) : '-') + '</td>' +
           '</tr>';
       }).join('');
     }
@@ -2528,6 +2535,9 @@
       const topDept = stats.deptRows[0] ? stats.deptRows[0].label : '-';
       const topUser = stats.userRows[0] ? stats.userRows[0].label : '-';
       const detailNote = '<p class="note">ตารางรายละเอียดแสดงผลการค้นหาทั้งหมด ' + formatReportNumber(bookings.length, 0) + ' รายการ</p>';
+      const totalKmKpiHtml = stats.mileageComplete > 0
+        ? '<div class="kpi"><div class="label">ระยะทางรวม (km)</div><div class="value">' + formatReportNumber(stats.totalKm, 0) + '</div></div>'
+        : '';
 
       return `<!doctype html>
 <html lang="th">
@@ -2587,7 +2597,7 @@
 
     <div class="kpis">
       <div class="kpi"><div class="label">จำนวนครั้งใช้งาน</div><div class="value">${formatReportNumber(stats.totalBookings, 0)}</div></div>
-      <div class="kpi"><div class="label">ระยะทางรวม (km)</div><div class="value">${formatReportNumber(stats.totalKm, 0)}</div></div>
+      ${totalKmKpiHtml}
       <div class="kpi"><div class="label">ชั่วโมงใช้งานรวม</div><div class="value">${formatReportNumber(stats.totalHours, 1)}</div></div>
       <div class="kpi"><div class="label">บันทึกไมล์ครบ</div><div class="value">${formatReportNumber(completedPct, 0)}%</div></div>
     </div>
@@ -2612,7 +2622,7 @@
     <section>
       <h2>รายการใช้งานล่าสุด</h2>
       <table>
-        <thead><tr><th>#</th><th>ทะเบียนรถ</th><th>ผู้ใช้งาน</th><th>แผนก</th><th>จุดหมาย</th><th>เวลาเริ่ม</th><th class="num">km</th></tr></thead>
+        <thead><tr><th>#</th><th>ทะเบียนรถ</th><th>ผู้ใช้งาน</th><th>แผนก</th><th>จุดหมาย</th><th>เวลาเริ่ม</th><th>เวลาสิ้นสุด</th><th class="num">km</th></tr></thead>
         <tbody>${buildReportDetailRows(bookings)}</tbody>
       </table>
       ${detailNote}
