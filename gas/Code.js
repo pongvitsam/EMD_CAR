@@ -46,6 +46,17 @@ function clearAppCache_() {
   cache.remove(LEGACY_APP_DATA_CACHE_KEY);
 }
 
+function putCacheSafe_(cache, key, value, ttlSec) {
+  try {
+    const text = String(value || '');
+    if (text.length > 90000) return false;
+    cache.put(key, text, ttlSec);
+    return true;
+  } catch (err) {
+    return false;
+  }
+}
+
 function createAdminSession_() {
   const token = Utilities.getUuid();
   CacheService.getScriptCache().put(ADMIN_SESSION_CACHE_PREFIX + token, '1', 7200);
@@ -380,10 +391,10 @@ function getAppData(includeLogs) {
   const ss = getSpreadsheet_();
   setupDatabase();
   const normalized = JSON.parse(JSON.stringify(buildAppPayload_(ss, wantLogs)));
-  cache.put(cacheKey, JSON.stringify(normalized), CACHE_TTL_SEC);
+  putCacheSafe_(cache, cacheKey, JSON.stringify(normalized), CACHE_TTL_SEC);
   if (wantLogs) {
     const coreOnly = Object.assign({}, normalized, { logs: [] });
-    cache.put(APP_DATA_CORE_CACHE_KEY, JSON.stringify(coreOnly), CACHE_TTL_SEC);
+    putCacheSafe_(cache, APP_DATA_CORE_CACHE_KEY, JSON.stringify(coreOnly), CACHE_TTL_SEC);
   }
   return attachCurrentUser_(normalized);
 }

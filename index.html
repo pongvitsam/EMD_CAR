@@ -321,10 +321,11 @@
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
           <div><label class="block text-sm font-medium mb-1">ตั้งแต่วันที่</label><input type="date" id="search-start" class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600 bg-white"></div>
           <div><label class="block text-sm font-medium mb-1">ถึงวันที่</label><input type="date" id="search-end" class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600 bg-white"></div>
-          <div class="lg:col-span-2 flex gap-2 w-full">
+          <div class="lg:col-span-2 flex flex-col sm:flex-row gap-2 w-full">
             <button onclick="searchBookings()" class="flex-1 bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-lg transition shadow font-medium">🔍 ค้นหา</button>
             <button onclick="window.clearSearchFilters()" class="flex-1 bg-slate-400 hover:bg-slate-500 text-white px-4 py-2 rounded-lg transition shadow font-medium">🔄 ล้างค่า</button>
             <button id="btn-export" onclick="window.exportCSV()" class="hidden flex-1 bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg transition shadow font-medium">📥 Export CSV</button>
+            <button id="btn-export-pdf" onclick="window.exportPDFReport()" class="hidden flex-1 bg-rose-500 hover:bg-rose-600 text-white px-4 py-2 rounded-lg transition shadow font-medium">📄 Export PDF</button>
           </div>
         </div>
       </div>
@@ -605,7 +606,7 @@
     let dashboardAvailRangeStep = 'start';
     let statsSelectedMonth = '';
     let hasViewedCalendarBookingDetail = false;
-    const APP_CACHE_KEY = 'emdcar_appdata_v2';
+    const APP_CACHE_KEY = 'emdcar_appdata_v3';
     const APP_CACHE_STALE_MS = 30 * 60 * 1000;
     const APP_CACHE_MAX_MS = 24 * 60 * 60 * 1000;
     let loadDataInflight = null;
@@ -1859,6 +1860,7 @@
         document.getElementById('tab-names').classList.remove('hidden');
         document.getElementById('tab-vehicles').classList.remove('hidden');
         document.getElementById('btn-export').classList.remove('hidden'); 
+        document.getElementById('btn-export-pdf').classList.remove('hidden');
         document.getElementById('view-charts').classList.remove('hidden'); 
         renderCars(appData.vehicles); 
         if (!isChartsRendered) renderCharts();
@@ -1884,6 +1886,7 @@
       document.getElementById('tab-names').classList.add('hidden');
       document.getElementById('tab-vehicles').classList.add('hidden');
       document.getElementById('btn-export').classList.add('hidden'); 
+      document.getElementById('btn-export-pdf').classList.add('hidden');
       document.getElementById('view-charts').classList.add('hidden'); 
       renderCars(appData.vehicles); 
       refreshSearchReportForAdmin();
@@ -2411,6 +2414,246 @@
       link.setAttribute("href", encodeURI(csvContent)); 
       link.setAttribute("download", `EMDCAR_Report_${new Date().toISOString().split('T')[0]}.csv`);
       document.body.appendChild(link); link.click(); document.body.removeChild(link);
+    };
+
+    function getSearchBookingDistanceKm(b) {
+      const startMile = parseFloat(b && b.startMile);
+      const endMile = parseFloat(b && b.endMile);
+      if (!isFinite(startMile) || !isFinite(endMile) || endMile < startMile) return 0;
+      return endMile - startMile;
+    }
+
+    function getSearchBookingDurationHours(b) {
+      const startMs = parseTimeSafe(b && b.start);
+      const endMs = parseTimeSafe(b && b.end);
+      if (!startMs || !endMs || endMs < startMs) return 0;
+      return (endMs - startMs) / (1000 * 60 * 60);
+    }
+
+    function formatReportNumber(value, digits) {
+      const n = parseFloat(value) || 0;
+      return n.toLocaleString('th-TH', {
+        minimumFractionDigits: digits || 0,
+        maximumFractionDigits: digits || 0
+      });
+    }
+
+    function addReportGroupStat(map, key, display, distanceKm, durationHours) {
+      const safeKey = key || 'ไม่ระบุ';
+      if (!map[safeKey]) map[safeKey] = { label: display || safeKey, count: 0, km: 0, hours: 0 };
+      map[safeKey].count += 1;
+      map[safeKey].km += distanceKm || 0;
+      map[safeKey].hours += durationHours || 0;
+    }
+
+    function sortReportGroupRows(map) {
+      return Object.keys(map).map(function (key) { return map[key]; }).sort(function (a, b) {
+        if (b.count !== a.count) return b.count - a.count;
+        return b.km - a.km;
+      });
+    }
+
+    function getSearchReportFilterSummary() {
+      const monthEl = document.getElementById('search-month');
+      const startDate = document.getElementById('search-start').value;
+      const endDate = document.getElementById('search-end').value;
+      return {
+        plate: document.getElementById('search-plate').value || 'ทั้งหมด',
+        dept: document.getElementById('search-dept').value || 'ทั้งหมด',
+        name: document.getElementById('search-name').value || 'ทั้งหมด',
+        month: monthEl && monthEl.value ? monthEl.options[monthEl.selectedIndex].text : 'ทั้งหมด',
+        start: startDate ? formatThaiDate(startDate) : 'ไม่ระบุ',
+        end: endDate ? formatThaiDate(endDate) : 'ไม่ระบุ'
+      };
+    }
+
+    function buildExecutiveReportStats(bookings) {
+      const vehicleMap = {};
+      const deptMap = {};
+      const userMap = {};
+      let totalKm = 0;
+      let totalHours = 0;
+      let mileageComplete = 0;
+
+      bookings.forEach(function (b) {
+        const km = getSearchBookingDistanceKm(b);
+        const hours = getSearchBookingDurationHours(b);
+        totalKm += km;
+        totalHours += hours;
+        if (km > 0) mileageComplete += 1;
+        addReportGroupStat(vehicleMap, b.plate || 'ไม่ระบุ', b.plate || 'ไม่ระบุ', km, hours);
+        addReportGroupStat(deptMap, b.dept || 'ไม่ระบุ', b.dept || 'ไม่ระบุ', km, hours);
+        const userName = getBookingDisplayName(b) || 'ไม่ระบุ';
+        addReportGroupStat(userMap, getBookingFullName(b) || userName, userName, km, hours);
+      });
+
+      return {
+        totalBookings: bookings.length,
+        totalKm: totalKm,
+        totalHours: totalHours,
+        avgKm: bookings.length ? totalKm / bookings.length : 0,
+        mileageComplete: mileageComplete,
+        vehicleRows: sortReportGroupRows(vehicleMap),
+        deptRows: sortReportGroupRows(deptMap),
+        userRows: sortReportGroupRows(userMap)
+      };
+    }
+
+    function buildReportTopRows(rows) {
+      if (!rows.length) return '<tr><td colspan="4" class="empty">ไม่มีข้อมูล</td></tr>';
+      return rows.slice(0, 8).map(function (row, idx) {
+        return '<tr>' +
+          '<td>' + (idx + 1) + '</td>' +
+          '<td>' + escapeHtml(row.label) + '</td>' +
+          '<td class="num">' + formatReportNumber(row.count, 0) + '</td>' +
+          '<td class="num">' + formatReportNumber(row.km, 0) + '</td>' +
+          '</tr>';
+      }).join('');
+    }
+
+    function buildReportDetailRows(bookings) {
+      if (!bookings.length) return '<tr><td colspan="7" class="empty">ไม่มีข้อมูล</td></tr>';
+      return bookings.slice().sort(function (a, b) {
+        return parseTimeSafe(b.start) - parseTimeSafe(a.start);
+      }).map(function (b, idx) {
+        const km = getSearchBookingDistanceKm(b);
+        return '<tr>' +
+          '<td>' + (idx + 1) + '</td>' +
+          '<td>' + escapeHtml(b.plate || '-') + '</td>' +
+          '<td>' + escapeHtml(getBookingDisplayName(b) || '-') + '</td>' +
+          '<td>' + escapeHtml(b.dept || '-') + '</td>' +
+          '<td>' + escapeHtml(b.dest || '-') + '</td>' +
+          '<td>' + escapeHtml(formatThaiDateTime(b.start)) + '</td>' +
+          '<td class="num">' + (km > 0 ? formatReportNumber(km, 0) : '-') + '</td>' +
+          '</tr>';
+      }).join('');
+    }
+
+    function buildExecutivePdfReportHtml(bookings) {
+      const filters = getSearchReportFilterSummary();
+      const stats = buildExecutiveReportStats(bookings);
+      const generatedAt = formatThaiDateTime(new Date());
+      const completedPct = stats.totalBookings ? (stats.mileageComplete / stats.totalBookings) * 100 : 0;
+      const topVehicle = stats.vehicleRows[0] ? stats.vehicleRows[0].label : '-';
+      const topDept = stats.deptRows[0] ? stats.deptRows[0].label : '-';
+      const topUser = stats.userRows[0] ? stats.userRows[0].label : '-';
+      const detailNote = '<p class="note">ตารางรายละเอียดแสดงผลการค้นหาทั้งหมด ' + formatReportNumber(bookings.length, 0) + ' รายการ</p>';
+
+      return `<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <title>EMD CAR Executive Report</title>
+  <style>
+    @page { size: A4; margin: 12mm; }
+    * { box-sizing: border-box; }
+    body { margin: 0; color: #0f172a; font-family: "Tahoma", "Kanit", sans-serif; font-size: 12px; line-height: 1.45; background: #f8fafc; }
+    .page { max-width: 1100px; margin: 0 auto; padding: 22px; background: #fff; }
+    .header { display: flex; justify-content: space-between; gap: 18px; border-bottom: 3px solid #7c3aed; padding-bottom: 14px; margin-bottom: 16px; }
+    h1 { margin: 0 0 6px; color: #5b21b6; font-size: 24px; }
+    h2 { margin: 18px 0 8px; color: #5b21b6; font-size: 15px; }
+    .muted { color: #64748b; }
+    .filters { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px 14px; margin: 12px 0 16px; padding: 10px; border: 1px solid #ddd6fe; border-radius: 12px; background: #faf5ff; }
+    .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
+    .kpi { padding: 12px; border: 1px solid #e9d5ff; border-radius: 14px; background: linear-gradient(135deg, #faf5ff, #fff); min-height: 82px; }
+    .kpi .label { color: #64748b; font-size: 11px; }
+    .kpi .value { color: #4c1d95; font-size: 24px; font-weight: 700; margin-top: 4px; }
+    .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px; }
+    .summary-card { padding: 10px 12px; border-radius: 12px; background: #f1f5f9; }
+    table { width: 100%; border-collapse: collapse; background: #fff; page-break-inside: auto; }
+    th, td { border: 1px solid #e2e8f0; padding: 7px 8px; vertical-align: top; }
+    th { background: #ede9fe; color: #4c1d95; text-align: left; font-weight: 700; }
+    tr { page-break-inside: avoid; page-break-after: auto; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .num { text-align: right; white-space: nowrap; }
+    .empty { text-align: center; color: #94a3b8; }
+    .note { color: #64748b; font-size: 11px; margin: 6px 0 0; }
+    .footer { margin-top: 18px; padding-top: 10px; border-top: 1px solid #e2e8f0; color: #64748b; font-size: 11px; }
+    @media print {
+      body { background: #fff; }
+      .page { padding: 0; max-width: none; }
+      .no-print { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="header">
+      <div>
+        <h1>สรุปประวัติการใช้รถสำหรับผู้บริหาร</h1>
+        <div class="muted">EMD CAR Export Report</div>
+      </div>
+      <div class="muted" style="text-align:right">สร้างรายงาน: ${escapeHtml(generatedAt)}<br>จำนวนข้อมูล: ${formatReportNumber(stats.totalBookings, 0)} รายการ</div>
+    </div>
+
+    <div class="filters">
+      <div><strong>ทะเบียนรถ:</strong> ${escapeHtml(filters.plate)}</div>
+      <div><strong>แผนก:</strong> ${escapeHtml(filters.dept)}</div>
+      <div><strong>ผู้ใช้งาน:</strong> ${escapeHtml(filters.name)}</div>
+      <div><strong>เดือน:</strong> ${escapeHtml(filters.month)}</div>
+      <div><strong>ตั้งแต่วันที่:</strong> ${escapeHtml(filters.start)}</div>
+      <div><strong>ถึงวันที่:</strong> ${escapeHtml(filters.end)}</div>
+    </div>
+
+    <div class="kpis">
+      <div class="kpi"><div class="label">จำนวนครั้งใช้งาน</div><div class="value">${formatReportNumber(stats.totalBookings, 0)}</div></div>
+      <div class="kpi"><div class="label">ระยะทางรวม (km)</div><div class="value">${formatReportNumber(stats.totalKm, 0)}</div></div>
+      <div class="kpi"><div class="label">ชั่วโมงใช้งานรวม</div><div class="value">${formatReportNumber(stats.totalHours, 1)}</div></div>
+      <div class="kpi"><div class="label">บันทึกไมล์ครบ</div><div class="value">${formatReportNumber(completedPct, 0)}%</div></div>
+    </div>
+
+    <div class="summary">
+      <div class="summary-card"><strong>รถที่ถูกใช้มากสุด</strong><br>${escapeHtml(topVehicle)}</div>
+      <div class="summary-card"><strong>แผนกที่ใช้มากสุด</strong><br>${escapeHtml(topDept)}</div>
+      <div class="summary-card"><strong>ผู้ใช้งานที่ใช้มากสุด</strong><br>${escapeHtml(topUser)}</div>
+    </div>
+
+    <div class="grid-2">
+      <section>
+        <h2>อันดับรถที่ถูกใช้งาน</h2>
+        <table><thead><tr><th>#</th><th>ทะเบียนรถ</th><th class="num">ครั้ง</th><th class="num">km</th></tr></thead><tbody>${buildReportTopRows(stats.vehicleRows)}</tbody></table>
+      </section>
+      <section>
+        <h2>อันดับแผนกที่ใช้งาน</h2>
+        <table><thead><tr><th>#</th><th>แผนก</th><th class="num">ครั้ง</th><th class="num">km</th></tr></thead><tbody>${buildReportTopRows(stats.deptRows)}</tbody></table>
+      </section>
+    </div>
+
+    <section>
+      <h2>รายการใช้งานล่าสุด</h2>
+      <table>
+        <thead><tr><th>#</th><th>ทะเบียนรถ</th><th>ผู้ใช้งาน</th><th>แผนก</th><th>จุดหมาย</th><th>เวลาเริ่ม</th><th class="num">km</th></tr></thead>
+        <tbody>${buildReportDetailRows(bookings)}</tbody>
+      </table>
+      ${detailNote}
+    </section>
+
+    <div class="footer">หมายเหตุ: ระยะทางคำนวณจากไมล์ก่อนใช้และไมล์หลังใช้ เฉพาะรายการที่มีการบันทึกไมล์ครบถ้วน</div>
+  </div>
+</body>
+</html>`;
+    }
+
+    window.exportPDFReport = function() {
+      if (!isAdmin) return;
+      const dataToExport = window.filteredBookingsForExport || [];
+      if (dataToExport.length === 0) {
+        showToast('ไม่มีข้อมูลสำหรับ Export PDF กรุณากดค้นหาก่อน', false);
+        return;
+      }
+
+      const reportWindow = window.open('', '_blank');
+      if (!reportWindow) {
+        showToast('เบราว์เซอร์บล็อกหน้าต่างรายงาน กรุณาอนุญาต popup แล้วลองใหม่', false);
+        return;
+      }
+      reportWindow.document.open();
+      reportWindow.document.write(buildExecutivePdfReportHtml(dataToExport));
+      reportWindow.document.close();
+      setTimeout(function () {
+        reportWindow.focus();
+        reportWindow.print();
+      }, 350);
     };
 
     window.setMonthRange = function() {
