@@ -211,6 +211,15 @@ body.emd-glass {
   backdrop-filter: blur(12px);
 }
 
+/* Light slate buttons keep pale bg while text-slate-* is remapped to light — force dark glass style */
+.emd-glass .bg-slate-200,
+.emd-glass .hover\:bg-slate-300:hover {
+  background: rgba(51, 65, 85, 0.75) !important;
+  color: var(--emd-text) !important;
+  border: 1px solid var(--emd-glass-border-bright);
+  backdrop-filter: blur(12px);
+}
+
 /* Nav & tab bar */
 .emd-nav {
   background: linear-gradient(135deg, rgba(15, 40, 80, 0.75), rgba(8, 24, 48, 0.88)) !important;
@@ -311,7 +320,8 @@ body.emd-glass {
 
 .emd-glass input::placeholder,
 .emd-glass textarea::placeholder {
-  color: #64748b;
+  color: #94a3b8;
+  opacity: 1;
 }
 
 /* Tables */
