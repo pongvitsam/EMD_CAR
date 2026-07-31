@@ -14,6 +14,7 @@ const LINE_REMINDER_CACHE_PREFIX = 'LINE_REMINDER_';
 const LINE_MESSAGE_FOOTER = '\n\nสามารถดูตารางการใช้รถทั้งหมดได้ ที่ https://pongvitsam.github.io/EMD_CAR/\nlog in ด้วยรหัส TC และกรุณานำรถมาส่งก่อนถึงเวลาอย่างน้อย 3 ชั่วโมง';
 const EMD_ACCESS_CODE = 'emd2';
 const COMPANY_USERNAME = 'tc';
+const COMPANY_BOOKING_VISIBLE_FROM = '2026-07-29';
 const SESSION_TTL_SEC = 21600;
 const VEHICLE_HEADERS = ['Vehicle_ID', 'ทะเบียน', 'รูปรถ(URL)', 'ประเภท', 'Email', 'Password', 'ระยะ Service (km)', 'ไมล์ล่าสุด (km)', 'จุดจอดล่าสุด', 'พรบ.หมดอายุ', 'หมายเหตุ', 'สถานะ', 'วันคืนรถ/หมดสัญญา', 'วันที่เช็คระยะล่าสุด', 'กม.เช็คระยะล่าสุด', 'ผู้นำเข้าเช็คระยะ', 'ระยะกม.ต่อรอบ', 'ประวัติเช็คระยะ(JSON)', 'แผนรอบถัดไป(JSON)', 'หมายเหตุบำรุงรักษา', 'ManagedBy', 'VehicleGroup'];
 const DEFAULT_VEHICLE_GROUP_ALL = 'ALL';
@@ -251,6 +252,7 @@ function filterHiddenVehiclesFromPayload_(payload) {
 }
 
 function filterPayloadForCompany_(payload) {
+  const companyVisibleFromMs = parseTimeSafe_(COMPANY_BOOKING_VISIBLE_FROM + ' 00:00:00');
   const vehicles = (payload.vehicles || []).filter(function (v) {
     if (String(v.status || '') === 'HIDDEN') return false;
     if (String(v.managedBy || '').toUpperCase() !== 'COMPANY') return false;
@@ -278,7 +280,9 @@ function filterPayloadForCompany_(payload) {
     companyPlates[normalizePlateKey_(v.plate)] = true;
   });
   const bookings = (payload.bookings || []).filter(function (b) {
-    return companyPlates[normalizePlateKey_(b.plate)];
+    if (!companyPlates[normalizePlateKey_(b.plate)]) return false;
+    const startMs = parseTimeSafe_(b.start);
+    return startMs && startMs >= companyVisibleFromMs;
   });
   const companyGroupIds = {};
   vehicles.forEach(function (v) {
@@ -1458,6 +1462,12 @@ function recordVehicleHandover(form, clientIp, token) {
     if (String(row[17] || '').trim() || String(row[16] || '').trim()) {
       return { success: false, msg: 'ส่งมอบกุญแจรถครั้งนี้แล้ว' };
     }
+    const startMs = parseTimeSafe_(row[5]);
+    const endMs = parseTimeSafe_(row[6]);
+    if (!startMs || !endMs) return { success: false, msg: 'ข้อมูลเวลาการจองไม่ถูกต้อง' };
+    if (Date.now() > endMs) return { success: false, msg: 'การจองนี้สิ้นสุดแล้ว' };
+    const visibleFromMs = parseTimeSafe_(COMPANY_BOOKING_VISIBLE_FROM + ' 00:00:00');
+    if (startMs < visibleFromMs) return { success: false, msg: 'ไม่สามารถส่งมอบการจองนี้ได้' };
 
     const handoverAt = new Date();
     bSheet.getRange(rowIndex, 15, 1, 4).setValues([[parking, battery, recipient, handoverAt]]);
