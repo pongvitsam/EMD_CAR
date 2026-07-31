@@ -11,6 +11,7 @@ const ADMIN_SESSION_CACHE_PREFIX = 'ADMIN_SESSION_';
 const EMD_SESSION_CACHE_PREFIX = 'EMD_SESSION_';
 const COMPANY_SESSION_CACHE_PREFIX = 'COMPANY_SESSION_';
 const LINE_REMINDER_CACHE_PREFIX = 'LINE_REMINDER_';
+const LINE_MESSAGE_FOOTER = '\n\nสามารถดูตารางการใช้รถทั้งหมดได้ ที่ https://pongvitsam.github.io/EMD_CAR/\nlog in ด้วยรหัส TC และกรุณานำรถมาส่งก่อนถึงเวลาอย่างน้อย 3 ชั่วโมง';
 const EMD_ACCESS_CODE = 'emd2';
 const COMPANY_USERNAME = 'tc';
 const SESSION_TTL_SEC = 7200;
@@ -259,7 +260,11 @@ function filterPayloadForCompany_(payload) {
       status: v.status,
       managedBy: v.managedBy,
       vehicleGroup: v.vehicleGroup,
-      currentMile: v.currentMile
+      currentMile: parseFloat(v.currentMile) || 0,
+      serviceMile: parseFloat(v.serviceMile) || 0,
+      actExpiry: v.actExpiry,
+      serviceIntervalKm: parseFloat(v.serviceIntervalKm) || 0,
+      serviceLastKm: parseFloat(v.serviceLastKm) || 0
     };
   });
   const companyPlates = {};
@@ -452,7 +457,14 @@ function requiresBookingPhone_(plate) {
 }
 
 function validateBookingPhone_(plate, phone) {
-  return { success: true, phone: normalizeContactPhone_(phone) };
+  if (!requiresBookingPhone_(plate)) {
+    return { success: true, phone: normalizeContactPhone_(phone) };
+  }
+  const normalized = normalizeContactPhone_(phone);
+  if (!normalized) {
+    return { success: false, msg: 'กรุณาระบุเบอร์โทรติดต่อสำหรับรถงานเฉพาะ (บริษัทใช้ติดต่อตอนส่งรถ)' };
+  }
+  return { success: true, phone: normalized };
 }
 
 function validateVehicleGroupBooking_(plate, dept, dest) {
@@ -1425,6 +1437,13 @@ function getLineConfig_() {
   return { token: token, groupId: groupId, reminderMin: reminderMin };
 }
 
+function appendLineMessageFooter_(text) {
+  const body = String(text || '').trim();
+  if (!body) return body;
+  if (body.indexOf('pongvitsam.github.io/EMD_CAR') >= 0) return body;
+  return body + LINE_MESSAGE_FOOTER;
+}
+
 function sendLineMessage_(text, cfgOverride) {
   const sent = sendLineMessageDetailed_(text, cfgOverride);
   return sent.success;
@@ -1442,7 +1461,7 @@ function sendLineMessageDetailed_(text, cfgOverride) {
       headers: { Authorization: 'Bearer ' + cfg.token },
       payload: JSON.stringify({
         to: cfg.groupId,
-        messages: [{ type: 'text', text: String(text).slice(0, 5000) }]
+        messages: [{ type: 'text', text: String(appendLineMessageFooter_(text)).slice(0, 5000) }]
       }),
       muteHttpExceptions: true
     });

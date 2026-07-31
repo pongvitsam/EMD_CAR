@@ -500,7 +500,11 @@
           </div>
         </div>
 
-        <input type="hidden" id="bk-phone" value="">
+        <div id="bk-phone-wrap" class="hidden bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl border border-blue-200 dark:border-blue-800/40">
+          <label class="block text-sm font-medium mb-1 text-blue-700 dark:text-blue-300">📞 เบอร์โทรติดต่อ <span class="text-red-500">*</span></label>
+          <input type="tel" id="bk-phone" inputmode="tel" autocomplete="tel" placeholder="08x-xxx-xxxx" class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600">
+          <p class="text-xs text-slate-500 mt-1">บังคับเมื่อจองรถงานเฉพาะ — บริษัทใช้ติดต่อตอนส่งรถ</p>
+        </div>
 
         <p class="text-xs text-center text-slate-500 dark:text-slate-400 -mt-2">อัปเดตไมล์หลังใช้รถได้ที่ <strong>ปฏิทิน</strong> → คลิกวันใช้รถ → ปุ่มอัปเดตเลขไมล์</p>
         <div id="bk-return-section" class="hidden" aria-hidden="true">
@@ -823,9 +827,18 @@
         info.el.style.borderColor = color;
       }
     }
+    function buildVehiclePlateKeySet(vehicles) {
+      const keys = {};
+      (vehicles || []).forEach(function (v) {
+        keys[normalizePlateForSearch(v.plate)] = true;
+      });
+      return keys;
+    }
+
     function refreshCalendarEvents(bookings) {
       if (!calendar) return;
       const list = bookings || getCalendarBookings();
+      calendar.getEventSources().forEach(function (source) { source.remove(); });
       calendar.removeAllEvents();
       calendar.addEventSource(list.map(mapBookingToCalendarEvent));
       setTimeout(() => calendar.updateSize(), 80);
@@ -835,16 +848,13 @@
       if (userRole !== 'COMPANY' && !isAdmin) {
         bookings = getVisibleBookings(bookings, appData.vehicles);
       }
-      if (userRole !== 'COMPANY') return bookings;
-      const projectPlateKeys = {};
-      (appData.vehicles || []).forEach(function (v) {
-        if ((v.vehicleGroup || 'ALL') !== 'ALL') {
-          projectPlateKeys[normalizePlateForSearch(v.plate)] = true;
-        }
-      });
-      return bookings.filter(function (b) {
-        return projectPlateKeys[normalizePlateForSearch(b.plate)];
-      });
+      if (userRole === 'COMPANY') {
+        const allowedPlates = buildVehiclePlateKeySet(appData.vehicles);
+        bookings = bookings.filter(function (b) {
+          return allowedPlates[normalizePlateForSearch(b.plate)];
+        });
+      }
+      return bookings;
     }
     window.filteredBookingsForExport = [];
     function getCalendarInitialDetailHtml() {
@@ -1268,8 +1278,14 @@
 
     function saveSessionToken(role, token) {
       try {
-        if (role === 'EMD') sessionStorage.setItem(EMD_SESSION_STORAGE_KEY, token || '');
-        if (role === 'COMPANY') sessionStorage.setItem(COMPANY_SESSION_STORAGE_KEY, token || '');
+        if (role === 'EMD') {
+          sessionStorage.setItem(EMD_SESSION_STORAGE_KEY, token || '');
+          sessionStorage.removeItem(COMPANY_SESSION_STORAGE_KEY);
+        }
+        if (role === 'COMPANY') {
+          sessionStorage.setItem(COMPANY_SESSION_STORAGE_KEY, token || '');
+          sessionStorage.removeItem(EMD_SESSION_STORAGE_KEY);
+        }
       } catch (e) {}
     }
 
@@ -1347,6 +1363,7 @@
       sessionToken = token || '';
       saveSessionToken(role, sessionToken);
       isReadOnly = role === 'COMPANY';
+      try { localStorage.removeItem(getAppCacheStorageKey()); } catch (e) {}
       hideLoginGate();
       setRoleUiState();
       setAdminUiState(isAdmin);
@@ -1357,6 +1374,12 @@
       sessionToken = '';
       isReadOnly = false;
       clearStoredSession();
+      try { localStorage.removeItem(getAppCacheStorageKey('COMPANY')); localStorage.removeItem(getAppCacheStorageKey('EMD')); } catch (e) {}
+      if (calendar) {
+        calendar.destroy();
+        calendar = null;
+      }
+      isCalendarInitialized = false;
       showLoginGate();
     };
 
@@ -1424,9 +1447,10 @@
       const todayEnd = new Date();
       todayEnd.setHours(23, 59, 59, 999);
       const tomorrowEnd = new Date(todayEnd.getTime() + dayMs);
+      const allowedPlates = buildVehiclePlateKeySet(appData.vehicles);
       const upcoming = (appData.bookings || []).filter(function (b) {
         const start = parseTimeSafe(b.start);
-        return start >= now && start <= tomorrowEnd.getTime();
+        return start >= now && start <= tomorrowEnd.getTime() && allowedPlates[normalizePlateForSearch(b.plate)];
       }).sort(function (a, b) { return parseTimeSafe(a.start) - parseTimeSafe(b.start); });
       if (!upcoming.length) {
         wrap.innerHTML = '<p class="text-slate-500">ไม่มีรายการส่งรถวันนี้/พรุ่งนี้</p>';
@@ -2055,8 +2079,9 @@
             isCalendarInitialized = true;
             if (calendar) setTimeout(function () { calendar.render(); }, 100);
           });
-        } else if (calendar) {
-          setTimeout(function () { calendar.render(); }, 100);
+        } else {
+          refreshCalendarEvents();
+          if (calendar) setTimeout(function () { calendar.render(); }, 100);
         }
       } else if (tabId === 'vehicles') {
         renderVehicleManager();
@@ -2637,13 +2662,15 @@
         else if (daysLeft < 0) actAlert = '<p class="text-xs text-white bg-red-500 px-2 py-1 rounded mt-1 font-bold shadow">❌ พ.ร.บ. หมดอายุแล้ว!</p>';
       }
 
+      const currentMile = parseFloat(car.currentMile) || 0;
+      const serviceMile = parseFloat(car.serviceMile) || 0;
       const mileDisplay = isAdmin
-        ? '<button onclick="window.promptEditMileage(\'' + car.id + '\', \'' + escapeHtml(car.plate) + '\', ' + car.currentMile + ')" class="font-bold text-purple-600 bg-purple-100 hover:bg-purple-200 dark:text-purple-300 dark:bg-purple-900/40 px-2 py-0.5 rounded cursor-pointer transition shadow-sm">' + car.currentMile.toLocaleString() + ' ✏️</button>'
-        : '<span class="font-bold text-purple-600 dark:text-purple-300">' + car.currentMile.toLocaleString() + '</span>';
-      let serviceHtml = '<p class="text-sm text-slate-500 dark:text-slate-400 mb-1">ไมล์ล่าสุด: ' + mileDisplay + ' / ' + car.serviceMile.toLocaleString() + '</p>';
+        ? '<button onclick="window.promptEditMileage(\'' + car.id + '\', \'' + escapeHtml(car.plate) + '\', ' + currentMile + ')" class="font-bold text-purple-600 bg-purple-100 hover:bg-purple-200 dark:text-purple-300 dark:bg-purple-900/40 px-2 py-0.5 rounded cursor-pointer transition shadow-sm">' + currentMile.toLocaleString() + ' ✏️</button>'
+        : '<span class="font-bold text-purple-600 dark:text-purple-300">' + currentMile.toLocaleString() + '</span>';
+      let serviceHtml = '<p class="text-sm text-slate-500 dark:text-slate-400 mb-1">ไมล์ล่าสุด: ' + mileDisplay + ' / ' + serviceMile.toLocaleString() + '</p>';
       const svcInfo = getVehicleServiceInfo(car);
       if (car.status === 'ACTIVE') serviceHtml += formatLastParkingUpdateLine(car, nowTime);
-      if (car.serviceMile > 0 && car.status === 'ACTIVE') {
+      if (serviceMile > 0 && car.status === 'ACTIVE') {
         if (svcInfo.isOverdue) {
           serviceHtml += '<div class="mt-1 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded text-center">🚨 เลยระยะ Service แล้ว!</div>';
           borderClass = 'border-red-500 border-2 shadow-red-100 shadow-md dark:shadow-red-900/20';
@@ -2801,7 +2828,7 @@
         eventDidMount: mountCalendarEventStyle,
         events: calendarBookings.map(mapBookingToCalendarEvent),
         eventClick: info => {
-          const b = appData.bookings.find(x => x.id === info.event.id);
+          const b = getCalendarBookings().find(x => x.id === info.event.id);
           if (!b) return;
           hasViewedCalendarBookingDetail = true;
           const displayName = getBookingDisplayName(b);
@@ -3795,6 +3822,22 @@
       }
     };
 
+    function requiresBookingPhoneForPlate(plate) {
+      const car = (appData.vehicles || []).find(function (v) { return v.plate === plate; });
+      return car && (car.vehicleGroup || 'ALL') !== 'ALL';
+    }
+
+    function syncBookingPhoneField() {
+      const wrap = document.getElementById('bk-phone-wrap');
+      const input = document.getElementById('bk-phone');
+      const plate = document.getElementById('bk-plate').value;
+      if (!wrap || !input) return;
+      const needPhone = requiresBookingPhoneForPlate(plate);
+      wrap.classList.toggle('hidden', !needPhone);
+      input.required = needPhone;
+      if (!needPhone) input.value = '';
+    }
+
     window.updateCarImage = function() {
       const car = appData.vehicles.find(v => v.plate === document.getElementById('bk-plate').value);
       const img = document.getElementById('bk-car-img');
@@ -3816,6 +3859,7 @@
           remarksEl.classList.add('hidden');
         }
       }
+      syncBookingPhoneField();
     };
 
     function getVehicleGroupLabel(car) {
@@ -4013,6 +4057,7 @@
       window.toggleDept();
       document.getElementById('bk-plate').innerHTML = '<option value="">-- กรุณาระบุเวลาด้านบนเพื่อค้นหารถ --</option>';
       document.getElementById('bk-phone').value = '';
+      syncBookingPhoneField();
       document.getElementById('bk-submit-btn').disabled = true;
 
       const fpStart = document.getElementById('bk-start')._flatpickr;
@@ -4517,15 +4562,19 @@
       setTimeout(() => t.classList.replace('toast-enter', 'toast-leave'), 4000);
     };
 
+    function getAppCacheStorageKey(role) {
+      return APP_CACHE_KEY + '_' + (role || userRole || 'anon');
+    }
+
     function writeCache(data) {
       try {
-        localStorage.setItem(APP_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: data }));
+        localStorage.setItem(getAppCacheStorageKey(), JSON.stringify({ ts: Date.now(), data: data }));
       } catch (e) {}
     }
 
     function readCache(allowStale) {
       try {
-        const raw = localStorage.getItem(APP_CACHE_KEY);
+        const raw = localStorage.getItem(getAppCacheStorageKey());
         if (!raw) return null;
         const parsed = JSON.parse(raw);
         if (!parsed || !parsed.data) return null;
@@ -4668,6 +4717,17 @@
       obj.endMile = mileageValidation.endMile === null ? '' : mileageValidation.endMile;
       obj.parkingSpot = mileageValidation.endMile !== null ? obj.parkingSpot : '';
       obj.contactPhone = document.getElementById('bk-phone').value || '';
+
+      if (requiresBookingPhoneForPlate(plate)) {
+        const phoneDigits = String(obj.contactPhone).replace(/\D/g, '');
+        if (phoneDigits.length < 9) {
+          Swal.fire('กรุณาระบุเบอร์โทร', 'รถงานเฉพาะต้องใส่เบอร์ติดต่อสำหรับบริษัทส่งรถ', 'warning');
+          btn.innerText = 'บันทึกข้อมูล';
+          btn.disabled = false;
+          return;
+        }
+        obj.contactPhone = phoneDigits;
+      }
 
       apiCall('saveBooking', [obj]).then(res => {
         if(res.success) { 
