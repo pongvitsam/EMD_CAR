@@ -1328,8 +1328,8 @@ function saveBooking(form, clientIp, token) {
           bSheet.getRange(i + 1, 2, 1, 13).setValues([[form.plate, fname, lname, form.dept, "'" + form.start, "'" + form.end, form.dest, form.driver, form.originalEmail, startMileValue, endMileValue, bookingParking, contactPhone]]);
           clearAppCache_();
           appendLogRow_(logSheet, actionEmail, 'UPDATE_BOOKING', form.plate, `แก้ไข/คืนรถ (จุดจอด: ${bookingParking || '-'}, ไมล์: ${startMileValue || '-'} -> ${endMileValue || '-'}, โทร: ${contactPhone || '-'})`, form.editReason || '-', ip);
-          notifyCompanyBookingLine_(ss, 'UPDATE', buildBookingNotifyObject_(form, fname, lname, form.id, contactPhone), { skip: form.skipLineNotify });
-          return {success: true, msg: 'อัปเดตการจองและจุดจอดเรียบร้อยครับ'};
+          const lineNotify = notifyCompanyBookingLine_(ss, 'UPDATE', buildBookingNotifyObject_(form, fname, lname, form.id, contactPhone), { skip: form.skipLineNotify });
+          return { success: true, msg: 'อัปเดตการจองและจุดจอดเรียบร้อยครับ', lineNotify: lineNotify };
         }
       }
     } else {
@@ -1337,8 +1337,8 @@ function saveBooking(form, clientIp, token) {
       bSheet.appendRow([newBookingId, form.plate, fname, lname, form.dept, "'" + form.start, "'" + form.end, form.dest, form.driver, actionEmail, startMileValue, endMileValue, bookingParking, contactPhone]);
       clearAppCache_();
       appendLogRow_(logSheet, actionEmail, 'CREATE_BOOKING', form.plate, `จองไป ${form.dest} (โทร: ${contactPhone || '-'})`, '-', ip);
-      notifyCompanyBookingLine_(ss, 'NEW', buildBookingNotifyObject_(form, fname, lname, newBookingId, contactPhone));
-      return {success: true, msg: 'บันทึกการจองสำเร็จครับ'};
+      const lineNotify = notifyCompanyBookingLine_(ss, 'NEW', buildBookingNotifyObject_(form, fname, lname, newBookingId, contactPhone));
+      return { success: true, msg: 'บันทึกการจองสำเร็จครับ', lineNotify: lineNotify };
     }
   } catch (error) { return {success: false, msg: error.message}; }
 }
@@ -1510,9 +1510,35 @@ function formatBookingLineMessage_(eventType, booking) {
 }
 
 function notifyCompanyBookingLine_(ss, eventType, booking, options) {
+  const result = tryNotifyCompanyBookingLine_(ss, eventType, booking, options);
+  return result;
+}
+
+function tryNotifyCompanyBookingLine_(ss, eventType, booking, options) {
   options = options || {};
-  if (options.skip || !booking || !isCompanyManagedPlate_(ss, booking.plate)) return;
-  sendLineMessage_(formatBookingLineMessage_(eventType, booking));
+  if (options.skip) return { status: 'skipped', reason: 'skip_flag' };
+  if (!booking || !booking.plate) return { status: 'skipped', reason: 'no_booking' };
+  if (!isCompanyManagedPlate_(ss, booking.plate)) {
+    return {
+      status: 'skipped',
+      reason: 'not_company_car',
+      msg: 'รถคันนี้ไม่ได้ตั้งเป็นเก็บ/ส่งโดยบริษัท (TC) — ไม่ส่ง LINE'
+    };
+  }
+  const cfg = getLineConfig_();
+  if (!cfg.token || !cfg.groupId) {
+    return {
+      status: 'failed',
+      reason: 'missing_config',
+      msg: 'ยังไม่ได้บันทึก LINE Token / Group ID ใน Admin → ตั้งค่าระบบ'
+    };
+  }
+  const sendResult = sendLineMessageDetailed_(formatBookingLineMessage_(eventType, booking));
+  return {
+    status: sendResult.success ? 'sent' : 'failed',
+    reason: sendResult.success ? 'ok' : 'line_api',
+    msg: sendResult.msg
+  };
 }
 
 function getCompanyManagedPlates_(ss) {

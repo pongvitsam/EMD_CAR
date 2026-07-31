@@ -621,13 +621,13 @@
         </div>
         <div class="border-t border-slate-200 dark:border-slate-600 pt-4 mt-2">
           <label class="block text-sm font-medium mb-1 text-green-700 dark:text-green-300">LINE Messaging API</label>
-          <p class="text-xs text-slate-500 mb-2">แจ้งเตือนกลุ่ม LINE เมื่อมีการจองรถที่ตั้งเป็น "เก็บ/ส่งโดยบริษัท"</p>
+          <p class="text-xs text-slate-500 mb-2">แจ้ง LINE เมื่อจอง/แก้/ยกเลิกรถที่ติ๊ก <strong>เก็บ/ส่งโดยบริษัท (TC)</strong> — ต้องกดบันทึกการตั้งค่าหลังใส่ Token</p>
           <input type="text" id="st-line-token" placeholder="Channel Access Token" class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600 mb-2 text-sm">
           <input type="text" id="st-line-group" placeholder="Group ID" class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600 mb-2 text-sm">
           <input type="number" id="st-line-reminder" min="5" max="480" placeholder="180" class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600 text-sm">
           <p class="text-xs text-slate-400 mt-1">เตือนก่อนส่งรถ (นาที) — ค่าเริ่มต้น 180 (3 ชม.)</p>
           <button type="button" id="st-line-test-btn" onclick="window.testLineUpcomingSummary()" class="w-full bg-green-500 hover:bg-green-600 disabled:bg-slate-400 text-white font-medium py-2.5 rounded-xl mt-3 transition text-sm">🧪 ทดสอบ LINE — สรุปการจองที่กำลังมาถึง</button>
-          <p class="text-xs text-slate-400 mt-1">ส่งสรุปรถ TC ที่เริ่มใช้ใน 7 วันข้างหน้า (ใช้ค่าในช่องด้านบน ไม่ต้องบันทึกก่อน)</p>
+          <p class="text-xs text-slate-400 mt-1">ทดสอบส่งเข้ากลุ่มได้ทันที — การจองจริงใช้ค่าที่ <strong>บันทึกแล้ว</strong> ในชีต Settings</p>
         </div>
         <div class="border-t border-slate-200 dark:border-slate-600 pt-4 mt-2">
           <label class="block text-sm font-medium mb-1 text-orange-700 dark:text-orange-300">ยกเว้นแจ้งเตือนไมล์ (ไม่เด้งเตือนคนเหล่านี้)</label>
@@ -4558,7 +4558,18 @@
       if (loader) loader.style.display = 'none';
     }
 
-   window.submitBooking = async function(e) {
+    function showBookingLineNotifyFeedback(lineNotify) {
+      if (!lineNotify) return;
+      if (lineNotify.status === 'sent') {
+        showToast('ส่งแจ้งเตือน LINE แล้ว', true);
+        return;
+      }
+      if (lineNotify.status === 'failed') {
+        Swal.fire('จองสำเร็จ แต่ LINE ไม่ส่ง', lineNotify.msg || 'ตรวจสอบ Token / Group ID / OA ในกลุ่ม', 'warning');
+      }
+    }
+
+    window.submitBooking = async function(e) {
       e.preventDefault();
       const plate = document.getElementById('bk-plate').value;
       const currId = document.getElementById('bk-id').value;
@@ -4661,6 +4672,7 @@
       apiCall('saveBooking', [obj]).then(res => {
         if(res.success) { 
           showToast(res.msg); 
+          showBookingLineNotifyFeedback(res.lineNotify);
           window.closeModal('booking-modal'); 
           reloadAfterMutation(); 
           resetCalendarDetailHint();
