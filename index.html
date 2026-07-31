@@ -535,6 +535,7 @@
         <div><label class="block text-sm font-medium mb-1">ไมล์หลังใช้ <span class="text-red-500">*</span></label><input type="number" id="mile-end" required class="w-full px-3 py-3 text-base rounded-xl border outline-none dark:bg-slate-700 dark:border-slate-600"></div>
         <div><label class="block text-sm font-medium mb-1 text-purple-700 dark:text-purple-300">📍 จุดจอดหลังใช้งาน</label><input type="text" id="mile-parking" autocomplete="off" class="w-full px-3 py-3 text-base rounded-xl border outline-none dark:bg-slate-700 dark:border-slate-600" placeholder="พิมพ์ชั้น/ช่องจอดเอง"></div>
         <button type="submit" id="mile-submit-btn" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3.5 rounded-xl">บันทึกไมล์</button>
+        <button type="button" id="mile-skip-btn" class="hidden w-full bg-orange-100 hover:bg-orange-200 text-orange-800 font-semibold py-3 rounded-xl border border-orange-200" onclick="window.skipMileageForCurrentBooking()">ข้ามทะเบียนนี้ (ไม่ต้องกรอกไมล์)</button>
       </form>
     </div>
   </div>
@@ -616,7 +617,7 @@
            <div id="vh-managed-company-wrap" class="md:col-span-2 hidden">
              <label class="flex items-start gap-2 cursor-pointer">
                <input type="checkbox" id="vh-managed-company" class="rounded text-blue-500 mt-1">
-               <span class="text-sm font-medium text-blue-700 dark:text-blue-300">แจ้ง LINE + ให้ TC เห็นรถคันนี้<br><span class="text-xs font-normal text-slate-500">เมื่อเปิด: บริษัทเห็นรถ/ปฏิทิน และได้รับแจ้งเตือน LINE ตอนจอง · ใช้ได้เฉพาะรถงานเฉพาะ</span></span>
+               <span class="text-sm font-medium text-blue-700 dark:text-blue-300">แจ้ง LINE + ให้ TC เห็นรถคันนี้<br><span class="text-xs font-normal text-slate-500">เมื่อเปิด: บริษัทเห็นรถ/ปฏิทิน และได้รับแจ้ง LINE · ใช้ได้เฉพาะรถงานการประปา</span></span>
              </label>
            </div>
         </div>
@@ -731,6 +732,7 @@
     const EMD_SESSION_STORAGE_KEY = 'emdcar_emd_token_v1';
     const COMPANY_SESSION_STORAGE_KEY = 'emdcar_company_token_v1';
     const COMPANY_BOOKING_VISIBLE_FROM_MS = new Date('2026-07-29T00:00:00+07:00').getTime();
+    const COMPANY_VISIBLE_VEHICLE_GROUP = 'pwa';
     let loadDataInflight = null;
     let loadDataSeq = 0;
     const escapeHtml = (value) => String(value || '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
@@ -2848,8 +2850,71 @@
     }
 
     function isVehicleTcLineEnabled(car) {
-      return isProjectSpecificCar(car) && car.managedBy === 'COMPANY';
+      return car && (car.vehicleGroup || 'ALL') === COMPANY_VISIBLE_VEHICLE_GROUP && car.managedBy === 'COMPANY';
     }
+
+    function isBookingMileageSkippable(b) {
+      if (!b) return false;
+      const car = (appData.vehicles || []).find(function (v) { return String(v.plate).trim() === String(b.plate).trim(); });
+      return car && (car.vehicleGroup || 'ALL') !== 'ALL';
+    }
+
+    function getMileageSkipStorageKey(bookingId) {
+      return 'emd_mile_skip_' + String(bookingId || '').trim();
+    }
+
+    function isBookingMileageSkipped(b) {
+      if (!b || !b.id) return false;
+      try {
+        return localStorage.getItem(getMileageSkipStorageKey(b.id)) === '1';
+      } catch (e) { return false; }
+    }
+
+    function setBookingMileageSkipped(bookingId) {
+      try {
+        localStorage.setItem(getMileageSkipStorageKey(bookingId), '1');
+      } catch (e) {}
+    }
+
+    function skipPendingMileageForPlate(plate, bookerName) {
+      getPendingMileageBookingsForBooker(bookerName, '').filter(function (b) {
+        return isBookingMileageSkippable(b) && String(b.plate).trim() === String(plate).trim();
+      }).forEach(function (b) {
+        setBookingMileageSkipped(b.id);
+      });
+    }
+
+    window.skipPendingMileagePlate = function (plate) {
+      const bookerName = window._mileageSkipBookerName || '';
+      if (!bookerName || !plate) return;
+      skipPendingMileageForPlate(plate, bookerName);
+      window._mileagePlateSkipped = true;
+      Swal.close();
+    };
+
+    window.skipMileageForCurrentBooking = function () {
+      const bookingId = document.getElementById('mile-booking-id').value;
+      const bk = (appData.bookings || []).find(function (b) { return String(b.id) === String(bookingId); });
+      if (!bk || !isBookingMileageSkippable(bk)) return;
+      Swal.fire({
+        icon: 'question',
+        title: 'ข้ามทะเบียน ' + (bk.plate || '-'),
+        text: 'ใช้เมื่อจองรถงานเฉพาะแต่ไม่ได้ใช้คันนี้ — จะไม่ต้องกรอกเลขไมล์สำหรับการจองนี้',
+        showCancelButton: true,
+        confirmButtonText: 'ข้ามทะเบียนนี้',
+        cancelButtonText: 'ยกเลิก',
+        confirmButtonColor: '#ea580c'
+      }).then(function (res) {
+        if (!res.isConfirmed) return;
+        setBookingMileageSkipped(bk.id);
+        const booker = getBookingDisplayName(bk);
+        if (!getPendingMileageBookingsForBooker(booker, bk.id).length) {
+          clearMileageEscAttempt(booker);
+        }
+        window.closeModal('mileage-modal');
+        showToast('ข้ามการกรอกไมล์สำหรับ ' + (bk.plate || ''), true);
+      });
+    };
 
     window.syncVehicleTcLineCheckbox = function () {
       const groupSel = document.getElementById('vh-vehicle-group');
@@ -2857,7 +2922,10 @@
       const cb = document.getElementById('vh-managed-company');
       if (!groupSel || !wrap || !cb) return;
       const isProject = (groupSel.value || 'ALL') !== 'ALL';
-      wrap.classList.toggle('hidden', !isProject);
+      const isPwa = (groupSel.value || 'ALL') === COMPANY_VISIBLE_VEHICLE_GROUP;
+      wrap.classList.toggle('hidden', !isProject || !isPwa);
+      cb.disabled = !isPwa;
+      if (!isPwa) cb.checked = false;
       if (!isProject) cb.checked = false;
     };
 
@@ -2867,12 +2935,12 @@
       if (!panel || !wrap) return;
       panel.classList.toggle('hidden', !isAdmin);
       if (!isAdmin) return;
-      const groups = getSortedVehicleGroups().filter(function (g) { return g.id !== 'ALL'; });
+      const groups = getSortedVehicleGroups().filter(function (g) { return g.id === COMPANY_VISIBLE_VEHICLE_GROUP; });
       const projectCars = (appData.vehicles || []).filter(function (v) {
-        return isProjectSpecificCar(v) && String(v.status || '') !== 'HIDDEN';
+        return (v.vehicleGroup || 'ALL') === COMPANY_VISIBLE_VEHICLE_GROUP && String(v.status || '') !== 'HIDDEN';
       });
       if (!projectCars.length) {
-        wrap.innerHTML = '<p class="text-slate-500">ยังไม่มีรถงานเฉพาะ — ตั้งกลุ่มงานที่ไม่ใช่ "ทุกงาน" ในแต่ละคันก่อน</p>';
+        wrap.innerHTML = '<p class="text-slate-500">ยังไม่มีรถงานการประปา — ตั้งกลุ่มงานเป็นการประปาในแต่ละคันก่อน</p>';
         return;
       }
       let html = '';
@@ -3071,22 +3139,13 @@
 
       if (userRole === 'COMPANY') {
         const companyCars = (vehicles || []).filter(function (v) {
-          return (v.vehicleGroup || 'ALL') !== 'ALL';
+          return (v.vehicleGroup || 'ALL') === COMPANY_VISIBLE_VEHICLE_GROUP;
         });
-        const restrictedGroups = getSortedVehicleGroups().filter(function (g) { return g.id !== 'ALL'; });
-        let html = '';
-
-        restrictedGroups.forEach(function (group, idx) {
-          const groupCars = companyCars.filter(function (v) { return v.vehicleGroup === group.id; });
-          if (!groupCars.length) return;
-          html += renderCarGroupSection(
-            (idx + 1) + '. รถที่จองเฉพาะใช้ใน' + group.name + 'เท่านั้น',
-            'รถงานเฉพาะที่บริษัทดูแล/ส่งมอบ',
-            groupCars
-          );
-        });
-
-        container.innerHTML = html || '<p class="text-center text-slate-400">ไม่พบรถงานเฉพาะของบริษัทในระบบ</p>';
+        const pwaGroup = (appData.vehicleGroups || []).find(function (g) { return g.id === COMPANY_VISIBLE_VEHICLE_GROUP; });
+        const groupName = pwaGroup ? pwaGroup.name : 'รถเฉพาะงานการประปา';
+        container.innerHTML = companyCars.length
+          ? renderCarGroupSection('1. ' + groupName, 'รถงานการประปาที่บริษัทดูแล/ส่งมอบ', companyCars)
+          : '<p class="text-center text-slate-400">ไม่พบรถงานการประปาที่บริษัทดูแลในระบบ</p>';
         return;
       }
 
@@ -4604,6 +4663,7 @@
         if (excludeBookingId && String(b.id) === String(excludeBookingId)) return false;
         if (getBookingFullName(b) !== key) return false;
         if (!isBookingInMileageReminderWindow(b)) return false;
+        if (isBookingMileageSkipped(b)) return false;
         return !isMileageReturnComplete(b);
       }).sort(function (a, b) { return parseTimeSafe(b.end) - parseTimeSafe(a.end); });
     }
@@ -4702,6 +4762,25 @@
         MILEAGE_REMINDER_MESSAGES[idx] + '</p>';
     }
 
+    function buildPendingMileageSkipButtonsHtml(bookings) {
+      const plateMap = {};
+      bookings.forEach(function (b) {
+        if (!isBookingMileageSkippable(b)) return;
+        const plate = String(b.plate || '').trim();
+        if (!plate) return;
+        plateMap[plate] = true;
+      });
+      const plates = Object.keys(plateMap);
+      if (!plates.length) return '';
+      return '<div class="mt-3 pt-3 border-t border-slate-200 dark:border-slate-600 text-left">' +
+        '<p class="text-xs text-slate-500 mb-2">จองรถงานเฉพาะแต่ใช้คันอื่น — ข้ามไม่ต้องกรอกไมล์ (ทะเบียนละปุ่ม):</p>' +
+        '<div class="flex flex-wrap gap-2 justify-center">' +
+        plates.map(function (plate) {
+          return '<button type="button" class="px-3 py-1.5 rounded-lg bg-orange-100 text-orange-800 text-sm font-medium hover:bg-orange-200 border border-orange-200" onclick="window.skipPendingMileagePlate(\'' + escapeHtml(plate) + '\')">ข้าม ' + escapeHtml(plate) + '</button>';
+        }).join('') +
+        '</div></div>';
+    }
+
     function buildPendingMileageAlertHtml(bookings, opts) {
       opts = opts || {};
       const dates = buildPendingMileageDateText(bookings);
@@ -4711,7 +4790,8 @@
       return getMileageReminderMessageHtml(opts.reminderAttempt || 0) +
         monthNote +
         '<p class="text-left">มีการใช้รถภายใน <strong>1 เดือนที่ผ่านมา</strong> ที่ยังไม่ได้บันทึกไมล์ กรุณาอัปเดตเลขไมล์ ก่อน/หลังใช้งานในวันที่ <strong>' + escapeHtml(dates) + '</strong> เพื่อปิดการแจ้งเตือน</p>' +
-        '<ul class="text-sm list-disc pl-5 my-2 text-left">' + formatPendingMileageListHtml(bookings) + '</ul>';
+        '<ul class="text-sm list-disc pl-5 my-2 text-left">' + formatPendingMileageListHtml(bookings) + '</ul>' +
+        buildPendingMileageSkipButtonsHtml(bookings);
     }
 
     function isPendingMileageAcked(ackKey) {
@@ -4725,72 +4805,82 @@
 
     async function requirePendingMileageCountdown(allBookings, options) {
       options = options || {};
-      if (!allBookings || !allBookings.length) return true;
-      const ackKey = getPendingMileageAckKey(allBookings);
-      if (isPendingMileageAcked(ackKey)) return true;
-      if (window._mileageReminderModalPromise) return window._mileageReminderModalPromise;
+      const bookerName = options.bookerName || (allBookings && allBookings[0] ? getBookingFullName(allBookings[0]) : '');
+      while (true) {
+        const fresh = getPendingMileageBookingsForBooker(bookerName, options.excludeBookingId);
+        if (!fresh.length) return true;
+        const ackKey = getPendingMileageAckKey(fresh);
+        if (isPendingMileageAcked(ackKey)) return true;
+        if (window._mileageReminderModalPromise) return window._mileageReminderModalPromise;
 
-      const run = (async function () {
-        const bookerName = options.bookerName || getBookingFullName(allBookings[0]);
-        const display = filterPendingMileageForDisplay(allBookings);
-        const bookings = display.bookings;
-        const doneLabel = options.doneLabel || 'จองต่อ';
-        const waitDoneText = options.waitDoneText || 'แล้วจองต่อได้';
-        const attempt = getMileageEscAttempt(bookerName);
-        let seconds = computeMileageCountdownSec(bookerName, allBookings);
-        const result = await Swal.fire({
-        icon: 'warning',
-        title: 'ยังไม่ได้อัปเดตเลขไมล์',
-        html: buildPendingMileageAlertHtml(bookings, {
-          prevMonthCollapsed: display.prevMonthCollapsed,
-          reminderAttempt: attempt
-        }) +
-          '<p id="mile-countdown" class="text-lg font-bold text-red-600 dark:text-red-400 mt-3">รอ ' + seconds + ' วินาที ' + waitDoneText + '...</p>' + MILEAGE_HOWTO_HTML,
-        confirmButtonText: doneLabel + ' (' + seconds + ')',
-        showCancelButton: !!options.showCancel,
-        cancelButtonText: options.cancelText || 'ยกเลิก',
-        allowOutsideClick: false,
-        allowEscapeKey: false,
-        confirmButtonColor: '#3b82f6',
-        didOpen: function () {
-          const btn = Swal.getConfirmButton();
-          btn.disabled = true;
-          const el = document.getElementById('mile-countdown');
-          window._mileageCountdownIv = setInterval(function () {
-            seconds -= 1;
-            if (el) {
-              el.textContent = seconds > 0
-                ? 'รอ ' + seconds + ' วินาที ' + waitDoneText + '...'
-                : 'ดำเนินการต่อได้แล้ว';
-            }
-            btn.textContent = seconds > 0 ? doneLabel + ' (' + seconds + ')' : doneLabel;
-            if (seconds <= 0) {
+        window._mileagePlateSkipped = false;
+        window._mileageSkipBookerName = bookerName;
+
+        const run = (async function () {
+          const display = filterPendingMileageForDisplay(fresh);
+          const bookings = display.bookings;
+          const doneLabel = options.doneLabel || 'จองต่อ';
+          const waitDoneText = options.waitDoneText || 'แล้วจองต่อได้';
+          const attempt = getMileageEscAttempt(bookerName);
+          let seconds = computeMileageCountdownSec(bookerName, fresh);
+          const result = await Swal.fire({
+          icon: 'warning',
+          title: 'ยังไม่ได้อัปเดตเลขไมล์',
+          html: buildPendingMileageAlertHtml(bookings, {
+            prevMonthCollapsed: display.prevMonthCollapsed,
+            reminderAttempt: attempt
+          }) +
+            '<p id="mile-countdown" class="text-lg font-bold text-red-600 dark:text-red-400 mt-3">รอ ' + seconds + ' วินาที ' + waitDoneText + '...</p>' + MILEAGE_HOWTO_HTML,
+          confirmButtonText: doneLabel + ' (' + seconds + ')',
+          showCancelButton: !!options.showCancel,
+          cancelButtonText: options.cancelText || 'ยกเลิก',
+          allowOutsideClick: false,
+          allowEscapeKey: false,
+          confirmButtonColor: '#3b82f6',
+          didOpen: function () {
+            const btn = Swal.getConfirmButton();
+            btn.disabled = true;
+            const el = document.getElementById('mile-countdown');
+            window._mileageCountdownIv = setInterval(function () {
+              seconds -= 1;
+              if (el) {
+                el.textContent = seconds > 0
+                  ? 'รอ ' + seconds + ' วินาที ' + waitDoneText + '...'
+                  : 'ดำเนินการต่อได้แล้ว';
+              }
+              btn.textContent = seconds > 0 ? doneLabel + ' (' + seconds + ')' : doneLabel;
+              if (seconds <= 0) {
+                clearInterval(window._mileageCountdownIv);
+                window._mileageCountdownIv = null;
+                btn.disabled = false;
+              }
+            }, 1000);
+          },
+          willClose: function () {
+            if (window._mileageCountdownIv) {
               clearInterval(window._mileageCountdownIv);
               window._mileageCountdownIv = null;
-              btn.disabled = false;
             }
-          }, 1000);
-        },
-        willClose: function () {
-          if (window._mileageCountdownIv) {
-            clearInterval(window._mileageCountdownIv);
-            window._mileageCountdownIv = null;
           }
-        }
-      });
-        if (result.isConfirmed) {
-          setPendingMileageAcked(ackKey);
-          setMileageEscAttempt(bookerName, getMileageEscAttempt(bookerName) + 1);
-          return true;
-        }
-        return false;
-      })();
+        });
+          if (window._mileagePlateSkipped) return 'skipped';
+          if (result.isConfirmed) {
+            setPendingMileageAcked(ackKey);
+            setMileageEscAttempt(bookerName, getMileageEscAttempt(bookerName) + 1);
+            return true;
+          }
+          return false;
+        })();
 
-      window._mileageReminderModalPromise = run;
-      try {
-        return await run;
-      } finally {
-        if (window._mileageReminderModalPromise === run) window._mileageReminderModalPromise = null;
+        window._mileageReminderModalPromise = run;
+        let outcome;
+        try {
+          outcome = await run;
+        } finally {
+          if (window._mileageReminderModalPromise === run) window._mileageReminderModalPromise = null;
+        }
+        if (outcome === 'skipped') continue;
+        return !!outcome;
       }
     }
 
@@ -4806,6 +4896,8 @@
       document.getElementById('mile-start').value = startMile > 0 ? startMile : '';
       document.getElementById('mile-end').value = bookingHasPostTripData(bk) ? bk.endMile : '';
       document.getElementById('mile-parking').value = '';
+      const skipBtn = document.getElementById('mile-skip-btn');
+      if (skipBtn) skipBtn.classList.toggle('hidden', !isBookingMileageSkippable(bk));
       document.getElementById('mileage-modal').style.display = 'flex';
       setTimeout(function () { document.getElementById('mile-end').focus(); }, 150);
     };
@@ -5097,7 +5189,7 @@
         remarks: document.getElementById('vh-remarks').value,
         status: document.getElementById('vh-is-active').value,
         leaseExpiry: document.getElementById('vh-lease').value,
-        managedBy: (vehicleGroup !== 'ALL' && document.getElementById('vh-managed-company').checked) ? 'COMPANY' : 'EMD',
+        managedBy: (vehicleGroup === COMPANY_VISIBLE_VEHICLE_GROUP && document.getElementById('vh-managed-company').checked) ? 'COMPANY' : 'EMD',
         vehicleGroup: vehicleGroup
       };
       apiCall('saveVehicle', [obj]).then(res => { 

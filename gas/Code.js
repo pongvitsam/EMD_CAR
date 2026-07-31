@@ -15,6 +15,7 @@ const LINE_MESSAGE_FOOTER = '\n\nสามารถดูตารางกา�
 const EMD_ACCESS_CODE = 'emd2';
 const COMPANY_USERNAME = 'tc';
 const COMPANY_BOOKING_VISIBLE_FROM = '2026-07-29';
+const COMPANY_VISIBLE_VEHICLE_GROUP = 'pwa';
 const SESSION_TTL_SEC = 21600;
 const VEHICLE_HEADERS = ['Vehicle_ID', 'ทะเบียน', 'รูปรถ(URL)', 'ประเภท', 'Email', 'Password', 'ระยะ Service (km)', 'ไมล์ล่าสุด (km)', 'จุดจอดล่าสุด', 'พรบ.หมดอายุ', 'หมายเหตุ', 'สถานะ', 'วันคืนรถ/หมดสัญญา', 'วันที่เช็คระยะล่าสุด', 'กม.เช็คระยะล่าสุด', 'ผู้นำเข้าเช็คระยะ', 'ระยะกม.ต่อรอบ', 'ประวัติเช็คระยะ(JSON)', 'แผนรอบถัดไป(JSON)', 'หมายเหตุบำรุงรักษา', 'ManagedBy', 'VehicleGroup'];
 const DEFAULT_VEHICLE_GROUP_ALL = 'ALL';
@@ -256,7 +257,7 @@ function filterPayloadForCompany_(payload) {
   const vehicles = (payload.vehicles || []).filter(function (v) {
     if (String(v.status || '') === 'HIDDEN') return false;
     if (String(v.managedBy || '').toUpperCase() !== 'COMPANY') return false;
-    return normalizeVehicleGroupId_(v.vehicleGroup) !== DEFAULT_VEHICLE_GROUP_ALL;
+    return normalizeVehicleGroupId_(v.vehicleGroup) === COMPANY_VISIBLE_VEHICLE_GROUP;
   }).map(function (v) {
     return {
       id: v.id,
@@ -554,13 +555,14 @@ function normalizeServiceHistoryItem_(item, fallbackIntervalKm) {
 function resolveManagedByForVehicle_(managedByInput, vehicleGroupId) {
   const groupId = normalizeVehicleGroupId_(vehicleGroupId);
   if (groupId === DEFAULT_VEHICLE_GROUP_ALL) return 'EMD';
+  if (groupId !== COMPANY_VISIBLE_VEHICLE_GROUP) return 'EMD';
   return String(managedByInput || '').trim().toUpperCase() === 'COMPANY' ? 'COMPANY' : 'EMD';
 }
 
 function isTcLineVisibleVehicleRow_(row) {
   if (!row) return false;
   if (String(row[20] || '').toUpperCase() !== 'COMPANY') return false;
-  return normalizeVehicleGroupId_(row[21]) !== DEFAULT_VEHICLE_GROUP_ALL;
+  return normalizeVehicleGroupId_(row[21]) === COMPANY_VISIBLE_VEHICLE_GROUP;
 }
 
 function buildVehicleRowValues_(form, row, imgUrl, activeStatus) {
@@ -1281,6 +1283,9 @@ function setVehicleTcLineNotify(token, vehicleId, enabled) {
       const groupId = normalizeVehicleGroupId_(data[i][21]);
       if (groupId === DEFAULT_VEHICLE_GROUP_ALL) {
         return { success: false, msg: 'รถทุกงาน (ALL) ไม่สามารถเปิดแจ้ง LINE / TC ได้' };
+      }
+      if (groupId !== COMPANY_VISIBLE_VEHICLE_GROUP) {
+        return { success: false, msg: 'เฉพาะรถงานการประปาเท่านั้นที่เปิดให้ TC เห็นและแจ้ง LINE ได้' };
       }
       const managedBy = wantOn ? 'COMPANY' : 'EMD';
       sheet.getRange(i + 1, 21).setValue(managedBy);
