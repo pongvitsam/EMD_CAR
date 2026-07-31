@@ -542,12 +542,13 @@
   <div id="handover-modal" class="fixed inset-0 bg-slate-900/60 hidden items-center justify-center z-50 px-4">
     <div class="bg-white dark:bg-slate-800 rounded-3xl p-6 w-full max-w-md shadow-2xl relative border-t-4 border-blue-500">
       <button type="button" onclick="window.closeModal('handover-modal')" class="absolute top-4 right-4 text-slate-400 hover:text-blue-600 text-2xl">&times;</button>
-      <h3 class="text-xl font-semibold text-blue-600 dark:text-blue-400 mb-1 text-center">🔑 ส่งมอบกุญแจรถ</h3>
-      <p class="text-xs text-slate-500 dark:text-slate-400 text-center mb-3">บริษัท (TC) บันทึกข้อมูลเมื่อส่งมอบให้ผู้ใช้รถ</p>
+      <h3 id="handover-modal-title" class="text-xl font-semibold text-blue-600 dark:text-blue-400 mb-1 text-center">🔑 ส่งมอบกุญแจรถ</h3>
+      <p id="handover-modal-subtitle" class="text-xs text-slate-500 dark:text-slate-400 text-center mb-3">บริษัท (TC) บันทึกข้อมูลเมื่อส่งมอบให้ผู้ใช้รถ</p>
       <p id="handover-summary" class="text-sm text-slate-500 dark:text-slate-400 text-center mb-3"></p>
       <div id="handover-car-user" class="mb-4 p-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800/40 text-sm space-y-1"></div>
       <form id="handover-form" onsubmit="window.submitVehicleHandover(event)" class="space-y-4">
         <input type="hidden" id="handover-booking-id">
+        <input type="hidden" id="handover-is-edit" value="0">
         <div>
           <label class="block text-sm font-medium mb-1">📍 จุดจอดรถ <span class="text-red-500">*</span></label>
           <input type="text" id="handover-parking" required autocomplete="off" placeholder="กรอกจุดจอดตอนส่งมอบ เช่น ชั้น 2 ช่อง A-12" class="w-full px-3 py-3 text-base rounded-xl border outline-none dark:bg-slate-700 dark:border-slate-600">
@@ -1533,15 +1534,32 @@
       return isCompanyBookingStartVisible(b);
     }
 
+    function canCompanyEditHandoverBooking(b) {
+      if (!b || !bookingHasHandover(b) || userRole !== 'COMPANY') return false;
+      const end = parseTimeSafe(b.end);
+      if (!end || Date.now() > end) return false;
+      return isCompanyBookingStartVisible(b);
+    }
+
     function buildHandoverDetailHtml(b) {
       if (!bookingHasHandover(b)) return '';
-      return '<div class="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-xl mt-2 space-y-1 border border-blue-100 dark:border-blue-800/40 text-sm">' +
+      let html = '<div class="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-xl mt-2 space-y-1 border border-blue-100 dark:border-blue-800/40 text-sm">' +
         '<p><strong>🔑 ส่งมอบกุญแจแล้ว</strong></p>' +
         '<p><strong>จุดจอด:</strong> ' + escapeHtml(b.handoverParking || '-') + '</p>' +
         '<p><strong>แบตคงเหลือ:</strong> ' + escapeHtml(b.handoverBattery || '-') + '</p>' +
         '<p><strong>ผู้ใช้รถ (ผู้รับกุญแจ):</strong> ' + escapeHtml(b.handoverRecipient || '-') + '</p>' +
         (b.handoverAt ? '<p><strong>เวลา:</strong> ' + escapeHtml(formatThaiDateTime(b.handoverAt)) + '</p>' : '') +
       '</div>';
+      if (canCompanyEditHandoverBooking(b)) {
+        html += buildCompanyHandoverEditButtonHtml(b.id, 'mt-2 w-full bg-slate-600 hover:bg-slate-700 text-white font-semibold py-2 rounded-xl shadow-md transition text-sm');
+      }
+      return html;
+    }
+
+    function buildCompanyHandoverEditButtonHtml(bookingId, className) {
+      return '<button type="button" onclick="window.openHandoverModal(\'' + escapeHtml(bookingId) + '\', true)" class="' +
+        (className || 'mt-2 w-full bg-slate-600 hover:bg-slate-700 text-white font-semibold py-2.5 rounded-xl shadow-md transition text-sm') +
+        '">✏️ แก้ไขข้อมูลส่งมอบ</button>';
     }
 
     function buildCompanyHandoverButtonHtml(bookingId, className) {
@@ -1605,26 +1623,58 @@
         phoneLine;
     }
 
-    window.openHandoverModal = function (bookingId) {
+    function setHandoverModalMode(isEdit) {
+      const titleEl = document.getElementById('handover-modal-title');
+      const subtitleEl = document.getElementById('handover-modal-subtitle');
+      const submitBtn = document.getElementById('handover-submit-btn');
+      const editEl = document.getElementById('handover-is-edit');
+      if (editEl) editEl.value = isEdit ? '1' : '0';
+      if (titleEl) titleEl.textContent = isEdit ? '✏️ แก้ไขข้อมูลส่งมอบกุญแจ' : '🔑 ส่งมอบกุญแจรถ';
+      if (subtitleEl) subtitleEl.textContent = isEdit
+        ? 'แก้ไขจุดจอด แบตเตอรี่ หรือผู้ใช้รถที่รับกุญแจ'
+        : 'บริษัท (TC) บันทึกข้อมูลเมื่อส่งมอบให้ผู้ใช้รถ';
+      if (submitBtn) submitBtn.textContent = isEdit ? 'บันทึกการแก้ไขและแจ้ง LINE' : 'บันทึกและแจ้ง LINE';
+    }
+
+    window.openHandoverModal = function (bookingId, isEdit) {
       if (userRole !== 'COMPANY') return;
+      isEdit = !!isEdit;
       const bk = (appData.bookings || []).find(function (b) { return String(b.id) === String(bookingId); });
       if (!bk) {
         Swal.fire('ไม่พบข้อมูล', 'ไม่พบการจองนี้', 'warning');
         return;
       }
-      if (bookingHasHandover(bk)) {
-        Swal.fire('ส่งมอบแล้ว', 'รายการนี้บันทึกส่งมอบกุญแจแล้ว', 'info');
-        return;
-      }
-      if (!canCompanyHandoverBooking(bk)) {
-        Swal.fire('ไม่สามารถส่งมอบ', 'การจองนี้สิ้นสุดแล้วหรือส่งมอบครั้งแล้ว', 'info');
-        return;
+      if (isEdit) {
+        if (!bookingHasHandover(bk)) {
+          Swal.fire('ยังไม่ส่งมอบ', 'ยังไม่มีข้อมูลส่งมอบให้แก้ไข', 'info');
+          return;
+        }
+        if (!canCompanyEditHandoverBooking(bk)) {
+          Swal.fire('ไม่สามารถแก้ไข', 'การจองนี้สิ้นสุดแล้ว', 'info');
+          return;
+        }
+      } else {
+        if (bookingHasHandover(bk)) {
+          Swal.fire('ส่งมอบแล้ว', 'ใช้ปุ่มแก้ไขข้อมูลส่งมอบแทน', 'info');
+          return;
+        }
+        if (!canCompanyHandoverBooking(bk)) {
+          Swal.fire('ไม่สามารถส่งมอบ', 'การจองนี้สิ้นสุดแล้ว', 'info');
+          return;
+        }
       }
       document.getElementById('handover-form').reset();
       document.getElementById('handover-booking-id').value = bk.id || '';
+      setHandoverModalMode(isEdit);
       const car = (appData.vehicles || []).find(function (v) { return v.plate === bk.plate; });
-      document.getElementById('handover-parking').value = (car && car.parkingSpot) ? car.parkingSpot : '';
-      document.getElementById('handover-recipient').value = getBookingCarUserName(bk);
+      if (isEdit) {
+        document.getElementById('handover-parking').value = bk.handoverParking || '';
+        document.getElementById('handover-battery').value = bk.handoverBattery || '';
+        document.getElementById('handover-recipient').value = bk.handoverRecipient || '';
+      } else {
+        document.getElementById('handover-parking').value = (car && car.parkingSpot) ? car.parkingSpot : '';
+        document.getElementById('handover-recipient').value = getBookingCarUserName(bk);
+      }
       document.getElementById('handover-summary').textContent =
         (bk.plate || '-') + ' · ' + formatThaiDateTime(bk.start) + ' → ' + (bk.dest || '-');
       const carUserEl = document.getElementById('handover-car-user');
@@ -1640,18 +1690,20 @@
       e.preventDefault();
       if (userRole !== 'COMPANY') return;
       const btn = document.getElementById('handover-submit-btn');
+      const isEdit = document.getElementById('handover-is-edit').value === '1';
       const obj = {
         bookingId: document.getElementById('handover-booking-id').value,
         handoverParking: document.getElementById('handover-parking').value.trim(),
         handoverBattery: document.getElementById('handover-battery').value.trim(),
-        handoverRecipient: document.getElementById('handover-recipient').value.trim()
+        handoverRecipient: document.getElementById('handover-recipient').value.trim(),
+        edit: isEdit
       };
       if (!obj.handoverParking || !obj.handoverBattery || !obj.handoverRecipient) {
         Swal.fire('กรุณากรอกข้อมูล', 'บริษัท (TC) ต้องกรอกจุดจอด แบตเตอรี่ และผู้ใช้รถที่รับกุญแจให้ครบ', 'warning');
         return;
       }
       btn.disabled = true;
-      btn.textContent = 'กำลังบันทึก...';
+      btn.textContent = isEdit ? 'กำลังบันทึกการแก้ไข...' : 'กำลังบันทึก...';
       apiCall('recordVehicleHandover', [obj]).then(function (res) {
         if (res && res.success) {
           showToast(res.msg);
@@ -1665,7 +1717,7 @@
         Swal.fire('ผิดพลาด', err.message || 'บันทึกไม่สำเร็จ', 'error');
       }).finally(function () {
         btn.disabled = false;
-        btn.textContent = 'บันทึกและแจ้ง LINE';
+        setHandoverModalMode(document.getElementById('handover-is-edit').value === '1');
       });
     };
 

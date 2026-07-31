@@ -1435,6 +1435,7 @@ function recordVehicleHandover(form, clientIp, token) {
     const parking = String((form && form.handoverParking) || '').trim();
     const battery = String((form && form.handoverBattery) || '').trim();
     const recipient = String((form && form.handoverRecipient) || '').trim();
+    const isEdit = !!(form && form.edit);
     if (!bookingId) return { success: false, msg: 'ไม่พบรหัสการจอง' };
     if (!parking) return { success: false, msg: 'กรุณาระบุจุดจอดรถ' };
     if (!battery) return { success: false, msg: 'กรุณาระบุแบตเตอรี่คงเหลือ' };
@@ -1459,8 +1460,11 @@ function recordVehicleHandover(form, clientIp, token) {
     if (!isCompanyManagedPlate_(ss, plate)) {
       return { success: false, msg: 'รถคันนี้ไม่ใช่รถที่บริษัทดูแล' };
     }
-    if (String(row[17] || '').trim() || String(row[16] || '').trim()) {
-      return { success: false, msg: 'ส่งมอบกุญแจรถครั้งนี้แล้ว' };
+    const hasExisting = String(row[17] || '').trim() || String(row[16] || '').trim();
+    if (isEdit) {
+      if (!hasExisting) return { success: false, msg: 'ยังไม่มีข้อมูลส่งมอบให้แก้ไข' };
+    } else if (hasExisting) {
+      return { success: false, msg: 'ส่งมอบกุญแจรถครั้งนี้แล้ว — ใช้แก้ไขข้อมูลแทน' };
     }
     const startMs = parseTimeSafe_(row[5]);
     const endMs = parseTimeSafe_(row[6]);
@@ -1469,7 +1473,7 @@ function recordVehicleHandover(form, clientIp, token) {
     const visibleFromMs = parseTimeSafe_(COMPANY_BOOKING_VISIBLE_FROM + ' 00:00:00');
     if (startMs < visibleFromMs) return { success: false, msg: 'ไม่สามารถส่งมอบการจองนี้ได้' };
 
-    const handoverAt = new Date();
+    const handoverAt = isEdit ? (row[17] || new Date()) : new Date();
     bSheet.getRange(rowIndex, 15, 1, 4).setValues([[parking, battery, recipient, handoverAt]]);
 
     const vSheet = getSheetOrThrow_(ss, 'Vehicles');
@@ -1484,8 +1488,8 @@ function recordVehicleHandover(form, clientIp, token) {
     clearAppCache_();
     const ip = resolveClientIp_(clientIp, form);
     const logSheet = getSheetOrThrow_(ss, 'Logs');
-    appendLogRow_(logSheet, 'TC Company', 'HANDOVER', plate,
-      'ส่งมอบกุญแจ จุดจอด: ' + parking + ', แบต: ' + battery + ', ผู้รับ: ' + recipient, '-', ip);
+    appendLogRow_(logSheet, 'TC Company', isEdit ? 'HANDOVER_EDIT' : 'HANDOVER', plate,
+      (isEdit ? 'แก้ไขส่งมอบ' : 'ส่งมอบกุญแจ') + ' จุดจอด: ' + parking + ', แบต: ' + battery + ', ผู้รับ: ' + recipient, '-', ip);
 
     const notifyBooking = {
       id: bookingId,
@@ -1503,10 +1507,12 @@ function recordVehicleHandover(form, clientIp, token) {
       handoverRecipient: recipient,
       handoverAt: handoverAt
     };
-    const lineNotify = notifyCompanyHandoverLine_(ss, notifyBooking);
+    const lineNotify = notifyCompanyHandoverLine_(ss, notifyBooking, isEdit);
     return {
       success: true,
-      msg: lineNotify.status === 'sent' ? 'บันทึกส่งมอบกุญแจและแจ้ง LINE แล้ว' : 'บันทึกส่งมอบกุญแจแล้ว',
+      msg: isEdit
+        ? (lineNotify.status === 'sent' ? 'แก้ไขข้อมูลส่งมอบและแจ้ง LINE แล้ว' : 'แก้ไขข้อมูลส่งมอบแล้ว')
+        : (lineNotify.status === 'sent' ? 'บันทึกส่งมอบกุญแจและแจ้ง LINE แล้ว' : 'บันทึกส่งมอบกุญแจแล้ว'),
       lineNotify: lineNotify
     };
   } catch (error) {
@@ -1664,11 +1670,11 @@ function isCompanyManagedPlate_(ss, plate) {
   return false;
 }
 
-function formatHandoverLineMessage_(booking) {
+function formatHandoverLineMessage_(booking, isEdit) {
   const userName = String((booking.name || '') + ' ' + (booking.surname || '')).trim() || '-';
   const driverName = String(booking.driver || '').trim();
   const lines = [
-    '🔑 บริษัทส่งมอบกุญแจให้ผู้ใช้รถแล้ว',
+    isEdit ? '✏️ แก้ไขข้อมูลส่งมอบกุญแจ' : '🔑 บริษัทส่งมอบกุญแจให้ผู้ใช้รถแล้ว',
     'ทะเบียน: ' + (booking.plate || '-'),
     'ผู้จอง: ' + userName + (booking.dept ? ' (' + booking.dept + ')' : ''),
     driverName ? ('ผู้ขับขี่: ' + driverName) : '',
@@ -1687,7 +1693,7 @@ function formatHandoverLineMessage_(booking) {
   return lines.join('\n');
 }
 
-function notifyCompanyHandoverLine_(ss, booking) {
+function notifyCompanyHandoverLine_(ss, booking, isEdit) {
   if (!booking || !booking.plate) return { status: 'skipped', reason: 'no_booking' };
   if (!isCompanyManagedPlate_(ss, booking.plate)) {
     return { status: 'skipped', reason: 'not_company_car', msg: 'รถคันนี้ไม่ใช่รถ TC' };
@@ -1696,7 +1702,7 @@ function notifyCompanyHandoverLine_(ss, booking) {
   if (!cfg.token || !cfg.groupId) {
     return { status: 'failed', reason: 'missing_config', msg: 'ยังไม่ได้บันทึก LINE Token / Group ID' };
   }
-  const sendResult = sendLineMessageDetailed_(formatHandoverLineMessage_(booking));
+  const sendResult = sendLineMessageDetailed_(formatHandoverLineMessage_(booking, isEdit));
   return {
     status: sendResult.success ? 'sent' : 'failed',
     reason: sendResult.success ? 'ok' : 'line_api',
