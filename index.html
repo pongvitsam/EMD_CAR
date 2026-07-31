@@ -378,6 +378,11 @@
         <h2 class="text-2xl font-semibold text-purple-500 dark:text-purple-400">🛠️ จัดการยานพาหนะ</h2>
         <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">ดูเหลือกี่กม.ถึงรอบ · บันทึกเข้าศูนย์ · ตั้งแผนรอบ · ประวัติย้อนหลัง (ไมล์ล่าสุดจากระบบจอง)</p>
       </div>
+      <div id="tc-line-settings-panel" class="hidden bg-blue-50 dark:bg-slate-800 border border-blue-200 dark:border-slate-600 rounded-2xl p-5">
+        <h3 class="text-lg font-semibold text-blue-700 dark:text-blue-300 mb-1">📲 รถงานเฉพาะ — แจ้ง LINE / ให้ TC เห็น</h3>
+        <p class="text-xs text-slate-500 dark:text-slate-400 mb-3">เปิดเฉพาะคันที่ต้องการให้บริษัท (TC) เห็นในแอปและปฏิทิน พร้อมแจ้งเตือน LINE เมื่อมีการจอง</p>
+        <div id="tc-line-settings-content" class="space-y-2 text-sm"></div>
+      </div>
       <div id="vehicle-manager-list" class="space-y-4">
         <p class="text-center text-slate-400 py-8">กรุณาเข้าสู่ระบบ Admin</p>
       </div>
@@ -598,16 +603,16 @@
              <label class="block text-sm font-medium mb-1 text-blue-600 dark:text-blue-400">📌 หมายเหตุ / เหตุผลการปิด</label>
              <input type="text" id="vh-remarks" placeholder="เช่น แอร์ไม่เย็น, ส่งซ่อมศูนย์..." class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600">
            </div>
-           <div id="vh-managed-company-wrap" class="md:col-span-2">
-             <label class="flex items-center gap-2 cursor-pointer">
-               <input type="checkbox" id="vh-managed-company" class="rounded text-blue-500">
-               <span class="text-sm font-medium text-blue-700 dark:text-blue-300">เก็บ/ส่งโดยบริษัท (TC) — แจ้งเตือน LINE เมื่อมีการจอง</span>
-             </label>
-           </div>
            <div id="vh-vehicle-group-wrap" class="md:col-span-2">
              <label class="block text-sm font-medium mb-1 text-purple-700 dark:text-purple-300">กลุ่มงานที่จองได้</label>
-             <select id="vh-vehicle-group" class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600"></select>
+             <select id="vh-vehicle-group" onchange="window.syncVehicleTcLineCheckbox()" class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600"></select>
              <p class="text-xs text-slate-400 mt-1">เลือก "ทุกงาน" หรือกลุ่มเฉพาะ เช่น การประปา</p>
+           </div>
+           <div id="vh-managed-company-wrap" class="md:col-span-2 hidden">
+             <label class="flex items-start gap-2 cursor-pointer">
+               <input type="checkbox" id="vh-managed-company" class="rounded text-blue-500 mt-1">
+               <span class="text-sm font-medium text-blue-700 dark:text-blue-300">แจ้ง LINE + ให้ TC เห็นรถคันนี้<br><span class="text-xs font-normal text-slate-500">เมื่อเปิด: บริษัทเห็นรถ/ปฏิทิน และได้รับแจ้งเตือน LINE ตอนจอง · ใช้ได้เฉพาะรถงานเฉพาะ</span></span>
+             </label>
            </div>
         </div>
 
@@ -649,7 +654,7 @@
         </div>
         <div class="border-t border-slate-200 dark:border-slate-600 pt-4 mt-2">
           <label class="block text-sm font-medium mb-1 text-green-700 dark:text-green-300">LINE Messaging API</label>
-          <p class="text-xs text-slate-500 mb-2">แจ้ง LINE เมื่อจอง/แก้/ยกเลิกรถที่ติ๊ก <strong>เก็บ/ส่งโดยบริษัท (TC)</strong> — ต้องกดบันทึกการตั้งค่าหลังใส่ Token</p>
+          <p class="text-xs text-slate-500 mb-2">แจ้ง LINE เมื่อจองรถที่ Admin เปิด <strong>แจ้ง LINE + TC</strong> (เฉพาะรถงานเฉพาะ) — ต้องกดบันทึกการตั้งค่าหลังใส่ Token</p>
           <input type="text" id="st-line-token" placeholder="Channel Access Token" class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600 mb-2 text-sm">
           <input type="text" id="st-line-group" placeholder="Group ID" class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600 mb-2 text-sm">
           <input type="number" id="st-line-reminder" min="5" max="480" placeholder="180" class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600 text-sm">
@@ -1989,6 +1994,7 @@
     }
 
     function renderVehicleManager() {
+      renderTcLineSettingsPanel();
       const wrap = document.getElementById('vehicle-manager-list');
       if (!wrap) return;
       if (!isAdmin) {
@@ -2754,6 +2760,73 @@
       });
     }
 
+    function isProjectSpecificCar(car) {
+      return car && (car.vehicleGroup || 'ALL') !== 'ALL';
+    }
+
+    function isVehicleTcLineEnabled(car) {
+      return isProjectSpecificCar(car) && car.managedBy === 'COMPANY';
+    }
+
+    window.syncVehicleTcLineCheckbox = function () {
+      const groupSel = document.getElementById('vh-vehicle-group');
+      const wrap = document.getElementById('vh-managed-company-wrap');
+      const cb = document.getElementById('vh-managed-company');
+      if (!groupSel || !wrap || !cb) return;
+      const isProject = (groupSel.value || 'ALL') !== 'ALL';
+      wrap.classList.toggle('hidden', !isProject);
+      if (!isProject) cb.checked = false;
+    };
+
+    function renderTcLineSettingsPanel() {
+      const panel = document.getElementById('tc-line-settings-panel');
+      const wrap = document.getElementById('tc-line-settings-content');
+      if (!panel || !wrap) return;
+      panel.classList.toggle('hidden', !isAdmin);
+      if (!isAdmin) return;
+      const groups = getSortedVehicleGroups().filter(function (g) { return g.id !== 'ALL'; });
+      const projectCars = (appData.vehicles || []).filter(function (v) {
+        return isProjectSpecificCar(v) && String(v.status || '') !== 'HIDDEN';
+      });
+      if (!projectCars.length) {
+        wrap.innerHTML = '<p class="text-slate-500">ยังไม่มีรถงานเฉพาะ — ตั้งกลุ่มงานที่ไม่ใช่ "ทุกงาน" ในแต่ละคันก่อน</p>';
+        return;
+      }
+      let html = '';
+      groups.forEach(function (group) {
+        const cars = projectCars.filter(function (v) { return v.vehicleGroup === group.id; });
+        if (!cars.length) return;
+        html += '<div class="mb-3"><p class="text-xs font-semibold text-blue-600 dark:text-blue-300 mb-1">' + escapeHtml(group.name) + '</p>';
+        html += cars.map(function (car) {
+          const on = isVehicleTcLineEnabled(car);
+          return '<div class="flex items-center justify-between gap-3 py-2 px-3 rounded-xl bg-white/80 dark:bg-slate-700/50 border border-blue-100 dark:border-slate-600">' +
+            '<div><span class="font-semibold">' + escapeHtml(car.plate) + '</span>' +
+            '<span class="text-xs text-slate-500 ml-2">' + (on ? 'TC เห็น + LINE' : 'TC ไม่เห็น') + '</span></div>' +
+            '<label class="inline-flex items-center gap-2 cursor-pointer shrink-0">' +
+            '<input type="checkbox" class="rounded text-blue-500" ' + (on ? 'checked' : '') +
+            ' onchange="window.toggleVehicleTcLineNotify(\'' + escapeHtml(car.id) + '\', this.checked)">' +
+            '<span class="text-xs">แจ้ง LINE</span></label></div>';
+        }).join('');
+        html += '</div>';
+      });
+      wrap.innerHTML = html || '<p class="text-slate-500">ไม่มีรถงานเฉพาะในกลุ่มที่ตั้งไว้</p>';
+    }
+
+    window.toggleVehicleTcLineNotify = function (vehicleId, enabled) {
+      if (!isAdmin) return;
+      apiCall('setVehicleTcLineNotify', [vehicleId, enabled]).then(function (res) {
+        showToast((res && res.msg) || '', !!(res && res.success));
+        if (res && res.success) reloadAfterMutation();
+        else {
+          Swal.fire('ผิดพลาด', (res && res.msg) || 'บันทึกไม่สำเร็จ', 'error');
+          renderTcLineSettingsPanel();
+        }
+      }).catch(function (err) {
+        Swal.fire('ผิดพลาด', err.message || 'บันทึกไม่สำเร็จ', 'error');
+        renderTcLineSettingsPanel();
+      });
+    };
+
     function populateVehicleGroupSelects() {
       const sel = document.getElementById('vh-vehicle-group');
       if (!sel) return;
@@ -2866,7 +2939,7 @@
       }
 
       let settingBtn = isReadOnly ? '' : '<button onclick="window.openVehicleModal(\'' + car.id + '\')" class="absolute top-2 right-2 bg-white/95 hover:bg-white text-purple-600 px-3 py-1 rounded-full shadow-md text-xs font-bold border border-purple-200 z-10 transition backdrop-blur-sm">อัปเดตข้อมูล</button>';
-      if (car.managedBy === 'COMPANY' && !isReadOnly) {
+      if (car.managedBy === 'COMPANY' && isProjectSpecificCar(car) && !isReadOnly) {
         settingBtn += '<span class="absolute top-2 left-2 bg-blue-500 text-white px-2 py-0.5 rounded-full text-xs font-bold z-10">TC</span>';
       }
       const groupBadge = (car.vehicleGroup && car.vehicleGroup !== 'ALL')
@@ -4334,7 +4407,10 @@
       if (managedCb) {
         managedCb.checked = false;
         managedCb.disabled = isReadonly;
-        managedCb.closest('#vh-managed-company-wrap').classList.toggle('hidden', isReadonly);
+      }
+      window.syncVehicleTcLineCheckbox();
+      if (managedCb) {
+        managedCb.closest('#vh-managed-company-wrap').classList.toggle('hidden', isReadonly || !isProjectSpecificCar({ vehicleGroup: (document.getElementById('vh-vehicle-group') || {}).value }));
       }
       document.getElementById('img-upload-div').style.display = isReadonly ? 'none' : 'block';
 
@@ -4365,8 +4441,9 @@
           document.getElementById('vh-remarks').value = v.remarks || '';
           document.getElementById('vh-existing-img').value = v.img || ''; 
           document.getElementById('vh-is-active').value = v.status || 'ACTIVE';
-          if (managedCb) managedCb.checked = v.managedBy === 'COMPANY';
+          if (managedCb) managedCb.checked = isVehicleTcLineEnabled(v);
           if (groupSel) groupSel.value = v.vehicleGroup || 'ALL';
+          window.syncVehicleTcLineCheckbox();
           
           if(v.actExpiry && fpAct) {
             fpAct.setDate(new Date(v.actExpiry));
@@ -4924,6 +5001,7 @@
     window.submitVehicle = function(e) {
       e.preventDefault(); 
       const btn = document.getElementById('vh-submit-btn'); btn.innerText = 'กำลังบันทึก...'; btn.disabled = true;
+      const vehicleGroup = document.getElementById('vh-vehicle-group').value || 'ALL';
       const obj = { 
         id: document.getElementById('vh-id').value, 
         plate: document.getElementById('vh-plate').value, 
@@ -4936,8 +5014,8 @@
         remarks: document.getElementById('vh-remarks').value,
         status: document.getElementById('vh-is-active').value,
         leaseExpiry: document.getElementById('vh-lease').value,
-        managedBy: document.getElementById('vh-managed-company').checked ? 'COMPANY' : 'EMD',
-        vehicleGroup: document.getElementById('vh-vehicle-group').value || 'ALL'
+        managedBy: (vehicleGroup !== 'ALL' && document.getElementById('vh-managed-company').checked) ? 'COMPANY' : 'EMD',
+        vehicleGroup: vehicleGroup
       };
       apiCall('saveVehicle', [obj]).then(res => { 
         showToast(res.msg, res.success); 

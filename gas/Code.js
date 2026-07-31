@@ -547,14 +547,26 @@ function normalizeServiceHistoryItem_(item, fallbackIntervalKm) {
   };
 }
 
+function resolveManagedByForVehicle_(managedByInput, vehicleGroupId) {
+  const groupId = normalizeVehicleGroupId_(vehicleGroupId);
+  if (groupId === DEFAULT_VEHICLE_GROUP_ALL) return 'EMD';
+  return String(managedByInput || '').trim().toUpperCase() === 'COMPANY' ? 'COMPANY' : 'EMD';
+}
+
+function isTcLineVisibleVehicleRow_(row) {
+  if (!row) return false;
+  if (String(row[20] || '').toUpperCase() !== 'COMPANY') return false;
+  return normalizeVehicleGroupId_(row[21]) !== DEFAULT_VEHICLE_GROUP_ALL;
+}
+
 function buildVehicleRowValues_(form, row, imgUrl, activeStatus) {
   const safeEmail = vehicleFormField_(form, 'email', row, 4, '');
   const safePass = vehicleFormField_(form, 'pass', row, 5, '');
   const intervalKm = parseFloat(vehicleFormField_(form, 'serviceIntervalKm', row, 16, DEFAULT_SERVICE_INTERVAL_KM)) || DEFAULT_SERVICE_INTERVAL_KM;
   const historyJson = vehicleFormField_(form, 'serviceHistoryJson', row, 17, '[]');
   const roundPlanJson = vehicleFormField_(form, 'serviceRoundPlanJson', row, 18, '[]');
-  const managedBy = String(vehicleFormField_(form, 'managedBy', row, 20, 'EMD') || 'EMD').trim().toUpperCase() === 'COMPANY' ? 'COMPANY' : 'EMD';
   const vehicleGroup = normalizeVehicleGroupId_(vehicleFormField_(form, 'vehicleGroup', row, 21, DEFAULT_VEHICLE_GROUP_ALL));
+  const managedBy = resolveManagedByForVehicle_(vehicleFormField_(form, 'managedBy', row, 20, 'EMD'), vehicleGroup);
   return [
     vehicleFormField_(form, 'plate', row, 1, ''),
     imgUrl,
@@ -687,6 +699,7 @@ function dispatchApi_(action, args, token, clientIp) {
     case 'deleteVehicleGroup': return deleteVehicleGroup(token, args[0]);
     case 'testLineUpcomingSummary': return testLineUpcomingSummary(token, args[0]);
     case 'recordVehicleHandover': return recordVehicleHandover(args[0], clientIp, token);
+    case 'setVehicleTcLineNotify': return setVehicleTcLineNotify(token, args[0], args[1]);
     default: throw new Error('Unknown action: ' + action);
   }
 }
@@ -1249,6 +1262,38 @@ function saveVehicle(form, clientIp, token) {
   } catch (error) { return {success: false, msg: error.message}; }
 }
 
+function setVehicleTcLineNotify(token, vehicleId, enabled) {
+  try {
+    requireAdminSession_(token);
+    const ss = getSpreadsheet_();
+    setupDatabase();
+    const sheet = getSheetOrThrow_(ss, 'Vehicles');
+    const data = sheet.getDataRange().getValues();
+    const logSheet = getSheetOrThrow_(ss, 'Logs');
+    const actionEmail = Session.getActiveUser().getEmail() || 'Unknown User';
+    const wantOn = enabled === true || String(enabled).toLowerCase() === 'true' || enabled === 1 || enabled === '1';
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0] || '').trim() !== String(vehicleId || '').trim()) continue;
+      const groupId = normalizeVehicleGroupId_(data[i][21]);
+      if (groupId === DEFAULT_VEHICLE_GROUP_ALL) {
+        return { success: false, msg: 'รถทุกงาน (ALL) ไม่สามารถเปิดแจ้ง LINE / TC ได้' };
+      }
+      const managedBy = wantOn ? 'COMPANY' : 'EMD';
+      sheet.getRange(i + 1, 21).setValue(managedBy);
+      clearAppCache_();
+      appendLogRow_(logSheet, actionEmail, 'UPDATE_VEHICLE', data[i][1],
+        wantOn ? 'เปิดแจ้ง LINE + ให้ TC เห็น' : 'ปิดแจ้ง LINE / ซ่อนจาก TC', '-', '-');
+      return {
+        success: true,
+        msg: wantOn ? 'เปิดแจ้ง LINE และให้ TC เห็นรถคันนี้แล้ว' : 'ปิดแจ้ง LINE และซ่อนรถคันนี้จาก TC แล้ว'
+      };
+    }
+    return { success: false, msg: 'ไม่พบรถ' };
+  } catch (error) {
+    return { success: false, msg: error.message };
+  }
+}
+
 function deleteVehicle(id, mode, clientIp, token) {
   try {
     requireMutationAccess_(token);
@@ -1603,7 +1648,7 @@ function isCompanyManagedPlate_(ss, plate) {
   const vData = getSheetOrThrow_(ss, 'Vehicles').getDataRange().getValues();
   for (let i = 1; i < vData.length; i++) {
     if (normalizePlateKey_(vData[i][1]) === normalizePlateKey_(plate)) {
-      return String(vData[i][20] || '').toUpperCase() === 'COMPANY';
+      return isTcLineVisibleVehicleRow_(vData[i]);
     }
   }
   return false;
@@ -1706,7 +1751,7 @@ function getCompanyManagedPlates_(ss) {
   const vData = getSheetOrThrow_(ss, 'Vehicles').getDataRange().getValues();
   const plates = {};
   for (let i = 1; i < vData.length; i++) {
-    if (String(vData[i][20] || '').toUpperCase() === 'COMPANY') {
+    if (isTcLineVisibleVehicleRow_(vData[i])) {
       plates[normalizePlateKey_(vData[i][1])] = vData[i][1];
     }
   }
