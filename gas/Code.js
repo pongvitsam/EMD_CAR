@@ -231,7 +231,9 @@ function requireAppSession_(token) {
 
 function filterPayloadForCompany_(payload) {
   const vehicles = (payload.vehicles || []).filter(function (v) {
-    return String(v.managedBy || '').toUpperCase() === 'COMPANY' && String(v.status || '') !== 'HIDDEN';
+    if (String(v.status || '') === 'HIDDEN') return false;
+    if (String(v.managedBy || '').toUpperCase() !== 'COMPANY') return false;
+    return normalizeVehicleGroupId_(v.vehicleGroup) !== DEFAULT_VEHICLE_GROUP_ALL;
   }).map(function (v) {
     return {
       id: v.id,
@@ -436,29 +438,10 @@ function requiresBookingPhone_(plate) {
 }
 
 function validateBookingPhone_(plate, phone) {
-  if (!requiresBookingPhone_(plate)) {
-    return { success: true, phone: normalizeContactPhone_(phone) };
-  }
-  const normalized = normalizeContactPhone_(phone);
-  if (!normalized) {
-    return { success: false, msg: 'กรุณาระบุเบอร์โทรติดต่อสำหรับรถโครงการเฉพาะ (บริษัทใช้ติดต่อตอนส่งรถ)' };
-  }
-  return { success: true, phone: normalized };
+  return { success: true, phone: normalizeContactPhone_(phone) };
 }
 
 function validateVehicleGroupBooking_(plate, dept, dest) {
-  const ss = getSpreadsheet_();
-  const vData = getSheetOrThrow_(ss, 'Vehicles').getDataRange().getValues();
-  for (let i = 1; i < vData.length; i++) {
-    if (normalizePlateKey_(vData[i][1]) !== normalizePlateKey_(plate)) continue;
-    const groupId = normalizeVehicleGroupId_(vData[i][21]);
-    if (isVehicleBookableForContext_(groupId, dept, dest)) return { success: true };
-    const group = getVehicleGroupById_(groupId);
-    return {
-      success: false,
-      msg: 'รถคันนี้จองได้เฉพาะงาน: ' + (group ? group.name : groupId)
-    };
-  }
   return { success: true };
 }
 
@@ -658,6 +641,7 @@ function dispatchApi_(action, args, token, clientIp) {
     case 'getVehicleGroupManagementData': return getVehicleGroupManagementData(token);
     case 'saveVehicleGroup': return saveVehicleGroup(token, args[0]);
     case 'deleteVehicleGroup': return deleteVehicleGroup(token, args[0]);
+    case 'testLineUpcomingSummary': return testLineUpcomingSummary(token, args[0]);
     default: throw new Error('Unknown action: ' + action);
   }
 }
@@ -1423,9 +1407,16 @@ function getLineConfig_() {
   return { token: token, groupId: groupId, reminderMin: reminderMin };
 }
 
-function sendLineMessage_(text) {
-  const cfg = getLineConfig_();
-  if (!cfg.token || !cfg.groupId || !text) return false;
+function sendLineMessage_(text, cfgOverride) {
+  const sent = sendLineMessageDetailed_(text, cfgOverride);
+  return sent.success;
+}
+
+function sendLineMessageDetailed_(text, cfgOverride) {
+  const cfg = Object.assign({}, getLineConfig_(), cfgOverride || {});
+  if (!cfg.token) return { success: false, msg: 'ยังไม่ได้ตั้ง Channel Access Token' };
+  if (!cfg.groupId) return { success: false, msg: 'ยังไม่ได้ตั้ง Group ID' };
+  if (!text) return { success: false, msg: 'ไม่มีข้อความที่จะส่ง' };
   try {
     const res = UrlFetchApp.fetch('https://api.line.me/v2/bot/message/push', {
       method: 'post',
@@ -1437,9 +1428,11 @@ function sendLineMessage_(text) {
       }),
       muteHttpExceptions: true
     });
-    return res.getResponseCode() >= 200 && res.getResponseCode() < 300;
+    const code = res.getResponseCode();
+    if (code >= 200 && code < 300) return { success: true, msg: 'ส่งข้อความ LINE สำเร็จ' };
+    return { success: false, msg: 'LINE API ตอบกลับ ' + code + ': ' + String(res.getContentText() || '').slice(0, 300) };
   } catch (err) {
-    return false;
+    return { success: false, msg: String(err.message || err) };
   }
 }
 
@@ -1591,6 +1584,79 @@ function dailyDeliverySummary() {
     .concat(items.map(function (item, idx) { return (idx + 1) + '. ' + item.line; }))
     .join('\n');
   sendLineMessage_(body);
+}
+
+function collectUpcomingCompanyBookingItems_(ss, horizonMs) {
+  const companyPlates = getCompanyManagedPlates_(ss);
+  const bData = getSheetOrThrow_(ss, 'Bookings').getDataRange().getValues();
+  const now = Date.now();
+  const cutoff = now + (horizonMs || 7 * 24 * 60 * 60 * 1000);
+  const items = [];
+  for (let i = 1; i < bData.length; i++) {
+    const plateKey = normalizePlateKey_(bData[i][1]);
+    if (!companyPlates[plateKey]) continue;
+    const startMs = parseTimeSafe_(bData[i][5]);
+    if (!startMs || startMs <= now || startMs > cutoff) continue;
+    items.push({
+      startMs: startMs,
+      booking: {
+        id: String(bData[i][0] || ''),
+        plate: bData[i][1],
+        name: bData[i][2],
+        surname: bData[i][3],
+        dept: bData[i][4],
+        start: bData[i][5],
+        end: bData[i][6],
+        dest: bData[i][7],
+        driver: bData[i][8],
+        contactPhone: bData[i][13] || ''
+      }
+    });
+  }
+  items.sort(function (a, b) { return a.startMs - b.startMs; });
+  return items;
+}
+
+function buildUpcomingCompanyBookingsSummaryText_(items, cfg, options) {
+  options = options || {};
+  const prefix = options.testPrefix ? '🧪 ทดสอบ LINE\n' : '';
+  const title = prefix + '📋 สรุปการจองที่กำลังมาถึง (บริษัท)';
+  if (!items.length) return title + '\nไม่มีรายการใน 7 วันข้างหน้า';
+  const now = Date.now();
+  const reminderMs = (cfg.reminderMin || 180) * 60 * 1000;
+  const lines = [title + ' (' + items.length + ' รายการ)'];
+  items.forEach(function (item, idx) {
+    const b = item.booking;
+    const userName = String((b.name || '') + ' ' + (b.surname || '')).trim() || '-';
+    let line = (idx + 1) + '. ' + formatLineDateTime_(b.start) + ' ' + (b.plate || '-') + ' — ' + userName;
+    if (b.dept) line += ' (' + b.dept + ')';
+    line += ' → ' + (b.dest || '-');
+    if (b.contactPhone) line += ' | 📞 ' + b.contactPhone;
+    if (item.startMs - now <= reminderMs) line += ' ⏰';
+    lines.push(line);
+  });
+  return lines.join('\n');
+}
+
+function testLineUpcomingSummary(token, form) {
+  try {
+    requireAdminSession_(token);
+    const ss = getSpreadsheet_();
+    setupDatabase();
+    const cfg = getLineConfig_();
+    const cfgOverride = {};
+    if (form && form.lineChannelAccessToken) cfgOverride.token = String(form.lineChannelAccessToken || '').trim();
+    if (form && form.lineGroupId) cfgOverride.groupId = String(form.lineGroupId || '').trim();
+    const effectiveCfg = Object.assign({}, cfg, cfgOverride);
+    if (!effectiveCfg.token || !effectiveCfg.groupId) {
+      return { success: false, msg: 'กรุณาใส่ Channel Access Token และ Group ID ก่อนทดสอบ' };
+    }
+    const items = collectUpcomingCompanyBookingItems_(ss);
+    const text = buildUpcomingCompanyBookingsSummaryText_(items, effectiveCfg, { testPrefix: true });
+    return sendLineMessageDetailed_(text, cfgOverride);
+  } catch (err) {
+    return { success: false, msg: String(err.message || err) };
+  }
 }
 
 function dailyExpiryCheck() {

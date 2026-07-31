@@ -411,7 +411,7 @@
         <h2 class="text-2xl font-semibold text-purple-500 dark:text-purple-400">🏷️ จัดการกลุ่มงานรถ</h2>
         <button type="button" onclick="window.openVehicleGroupModal()" class="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-xl text-sm font-medium">+ เพิ่มกลุ่มงาน</button>
       </div>
-      <p class="text-sm text-slate-500">กลุ่ม "ทุกงาน" เป็นค่าเริ่มต้น — กลุ่มอื่นกำหนดคำค้นแผนก/จุดหมายเพื่อให้จองรถเฉพาะงานได้</p>
+      <p class="text-sm text-slate-500">หมวด 1 「ทุกงาน」เป็นค่าเริ่มต้น (บริษัทไม่เห็น) — หมวด 2 แอดมินตั้งชื่อกลุ่มงานเฉพาะได้เอง เช่น การประปา</p>
       <div class="overflow-x-auto bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700">
         <table class="w-full text-left text-sm">
           <thead class="bg-purple-50 dark:bg-slate-700 text-purple-700 dark:text-purple-300">
@@ -482,14 +482,14 @@
               </label>
             </label>
             <div class="emd-combobox">
-              <input type="text" id="bk-dept" oninput="window.onBookingContextChanged()" onfocus="window.showBookingCombobox('bk-dept')" required autocomplete="off" class="w-full px-3 py-2 rounded-lg border bg-slate-50 outline-none dark:bg-slate-700 dark:border-slate-600">
+              <input type="text" id="bk-dept" onfocus="window.showBookingCombobox('bk-dept')" required autocomplete="off" class="w-full px-3 py-2 rounded-lg border bg-slate-50 outline-none dark:bg-slate-700 dark:border-slate-600">
               <div id="bk-dept-menu" class="emd-combobox-menu hidden" role="listbox"></div>
             </div>
           </div>
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div><label class="block text-sm font-medium mb-1">จุดหมาย</label><input type="text" id="bk-dest" oninput="window.onBookingContextChanged()" required class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600"></div>
+          <div><label class="block text-sm font-medium mb-1">จุดหมาย</label><input type="text" id="bk-dest" required class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600"></div>
           <div><label class="block text-sm font-medium mb-1">ผู้ขับขี่</label>
             <div class="emd-combobox">
               <input type="text" id="bk-driver" onfocus="window.showBookingCombobox('bk-driver')" required autocomplete="off" class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600">
@@ -498,11 +498,7 @@
           </div>
         </div>
 
-        <div id="bk-phone-wrap" class="hidden bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl border border-blue-200 dark:border-blue-800/40">
-          <label class="block text-sm font-medium mb-1 text-blue-700 dark:text-blue-300">📞 เบอร์โทรติดต่อ <span class="text-red-500">*</span></label>
-          <input type="tel" id="bk-phone" inputmode="tel" autocomplete="tel" placeholder="08x-xxx-xxxx" class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600">
-          <p class="text-xs text-slate-500 mt-1">สำหรับบริษัทติดต่อเมื่อส่งรถ (รถโครงการเฉพาะ)</p>
-        </div>
+        <input type="hidden" id="bk-phone" value="">
 
         <p class="text-xs text-center text-slate-500 dark:text-slate-400 -mt-2">อัปเดตไมล์หลังใช้รถได้ที่ <strong>ปฏิทิน</strong> → คลิกวันใช้รถ → ปุ่มอัปเดตเลขไมล์</p>
         <div id="bk-return-section" class="hidden" aria-hidden="true">
@@ -598,7 +594,7 @@
       <form id="group-form" onsubmit="window.submitVehicleGroup(event)" class="space-y-4">
         <input type="hidden" id="vg-row"><input type="hidden" id="vg-id">
         <div><label class="block text-sm font-medium mb-1">ชื่อกลุ่ม</label><input type="text" id="vg-name" required placeholder="เช่น งานการประปา" class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600"></div>
-        <div><label class="block text-sm font-medium mb-1">คำค้นงาน (คั่นด้วย comma)</label><input type="text" id="vg-keywords" placeholder="การประปา, ประปา, กปน" class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600"><p class="text-xs text-slate-400 mt-1">ใช้จับคู่จากแผนกหรือจุดหมายตอนจอง</p></div>
+        <div><label class="block text-sm font-medium mb-1">คำค้นงาน (คั่นด้วย comma)</label><input type="text" id="vg-keywords" placeholder="การประปา, ประปา, กปน" class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600"><p class="text-xs text-slate-400 mt-1">เก็บไว้อ้างอิงใน Admin (ไม่บังคับตอนจอง)</p></div>
         <div><label class="block text-sm font-medium mb-1">ลำดับแสดง</label><input type="number" id="vg-sort" min="1" value="10" class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600"></div>
         <button type="submit" id="vg-submit-btn" class="w-full bg-purple-500 hover:bg-purple-600 text-white font-medium py-3 rounded-xl transition">บันทึกกลุ่ม</button>
       </form>
@@ -628,6 +624,8 @@
           <input type="text" id="st-line-group" placeholder="Group ID" class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600 mb-2 text-sm">
           <input type="number" id="st-line-reminder" min="5" max="480" placeholder="180" class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600 text-sm">
           <p class="text-xs text-slate-400 mt-1">เตือนก่อนส่งรถ (นาที) — ค่าเริ่มต้น 180 (3 ชม.)</p>
+          <button type="button" id="st-line-test-btn" onclick="window.testLineUpcomingSummary()" class="w-full bg-green-500 hover:bg-green-600 disabled:bg-slate-400 text-white font-medium py-2.5 rounded-xl mt-3 transition text-sm">🧪 ทดสอบ LINE — สรุปการจองที่กำลังมาถึง</button>
+          <p class="text-xs text-slate-400 mt-1">ส่งสรุปรถ TC ที่เริ่มใช้ใน 7 วันข้างหน้า (ใช้ค่าในช่องด้านบน ไม่ต้องบันทึกก่อน)</p>
         </div>
         <div class="border-t border-slate-200 dark:border-slate-600 pt-4 mt-2">
           <label class="block text-sm font-medium mb-1 text-orange-700 dark:text-orange-300">ยกเว้นแจ้งเตือนไมล์ (ไม่เด้งเตือนคนเหล่านี้)</label>
@@ -1320,7 +1318,7 @@
       const dashboardCarsTitle = document.getElementById('dashboard-cars-title');
       if (dashboardCarsTitle) {
         dashboardCarsTitle.textContent = isCompany
-          ? '🚙 รถของบริษัทและสถานะปัจจุบัน'
+          ? '🚙 รถงานเฉพาะของบริษัท'
           : '🚙 รถในโครงการและสถานะปัจจุบัน';
       }
       const overviewTitle = document.getElementById('dashboard-overview-title');
@@ -2334,6 +2332,25 @@
       });
     };
 
+    window.testLineUpcomingSummary = function () {
+      const btn = document.getElementById('st-line-test-btn');
+      if (btn) { btn.disabled = true; btn.textContent = 'กำลังส่ง...'; }
+      const payload = {
+        lineChannelAccessToken: document.getElementById('st-line-token').value,
+        lineGroupId: document.getElementById('st-line-group').value
+      };
+      apiCall('testLineUpcomingSummary', [payload], adminToken).then(function (res) {
+        showToast((res && res.msg) || (res && res.success ? 'ส่งสำเร็จ' : 'ส่งไม่สำเร็จ'), !!(res && res.success));
+      }).catch(function (err) {
+        showToast(err.message || 'ส่ง LINE ไม่สำเร็จ', false);
+      }).finally(function () {
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = '🧪 ทดสอบ LINE — สรุปการจองที่กำลังมาถึง';
+        }
+      });
+    };
+
     function renderDashboard() {
       const isCompanyView = userRole === 'COMPANY';
       const now = new Date();
@@ -2535,25 +2552,6 @@
       });
     }
 
-    function matchesGroupKeywords(dept, dest, keywords) {
-      const keys = (keywords || []).map(function (k) { return String(k || '').trim().toLowerCase(); }).filter(Boolean);
-      if (!keys.length) return false;
-      const haystack = (String(dept || '') + ' ' + String(dest || '')).toLowerCase();
-      return keys.some(function (k) { return haystack.indexOf(k) >= 0; });
-    }
-
-    function isCarBookableForCurrentContext(car) {
-      const groupId = car.vehicleGroup || 'ALL';
-      if (groupId === 'ALL') return true;
-      const group = (appData.vehicleGroups || []).find(function (g) { return g.id === groupId; });
-      if (!group) return false;
-      const deptEl = document.getElementById('bk-dept');
-      const destEl = document.getElementById('bk-dest');
-      const dept = deptEl ? deptEl.value : '';
-      const dest = destEl ? destEl.value : '';
-      return matchesGroupKeywords(dept, dest, group.keywords);
-    }
-
     function populateVehicleGroupSelects() {
       const sel = document.getElementById('vh-vehicle-group');
       if (!sel) return;
@@ -2690,31 +2688,23 @@
       if (!container) return;
 
       if (userRole === 'COMPANY') {
-        const companyCars = vehicles || [];
+        const companyCars = (vehicles || []).filter(function (v) {
+          return (v.vehicleGroup || 'ALL') !== 'ALL';
+        });
         const restrictedGroups = getSortedVehicleGroups().filter(function (g) { return g.id !== 'ALL'; });
-        const generalCars = companyCars.filter(function (v) { return (v.vehicleGroup || 'ALL') === 'ALL'; });
         let html = '';
 
-        if (generalCars.length) {
-          html += renderCarGroupSection('รถของบริษัท', 'รถที่บริษัทดูแล/ส่งมอบ', generalCars);
-        }
-
-        restrictedGroups.forEach(function (group) {
+        restrictedGroups.forEach(function (group, idx) {
           const groupCars = companyCars.filter(function (v) { return v.vehicleGroup === group.id; });
           if (!groupCars.length) return;
-          const kwText = (group.keywords || []).join(', ');
           html += renderCarGroupSection(
-            'รถที่ใช้ใน' + group.name,
-            kwText ? ('งานเฉพาะ: ' + kwText) : '',
+            (idx + 1) + '. รถที่จองเฉพาะใช้ใน' + group.name + 'เท่านั้น',
+            'รถงานเฉพาะที่บริษัทดูแล/ส่งมอบ',
             groupCars
           );
         });
 
-        if (!html && companyCars.length) {
-          html = renderCarGroupSection('รถของบริษัท', '', companyCars);
-        }
-
-        container.innerHTML = html || '<p class="text-center text-slate-400">ไม่พบรถของบริษัทในระบบ</p>';
+        container.innerHTML = html || '<p class="text-center text-slate-400">ไม่พบรถงานเฉพาะของบริษัทในระบบ</p>';
         return;
       }
 
@@ -2734,7 +2724,7 @@
         const kwText = (group.keywords || []).join(', ');
         html += renderCarGroupSection(
           (idx + 2) + '. รถที่จองเฉพาะใช้ใน' + group.name + 'เท่านั้น',
-          kwText ? ('จองได้เมื่อแผนก/จุดหมายมีคำ: ' + kwText) : '',
+          kwText ? ('งาน: ' + kwText) : '',
           groupCars
         );
       });
@@ -3774,22 +3764,6 @@
       }
     };
 
-    function requiresBookingPhoneForPlate(plate) {
-      const car = (appData.vehicles || []).find(function (v) { return v.plate === plate; });
-      return car && (car.vehicleGroup || 'ALL') !== 'ALL';
-    }
-
-    function syncBookingPhoneField() {
-      const wrap = document.getElementById('bk-phone-wrap');
-      const input = document.getElementById('bk-phone');
-      const plate = document.getElementById('bk-plate').value;
-      if (!wrap || !input) return;
-      const needPhone = requiresBookingPhoneForPlate(plate);
-      wrap.classList.toggle('hidden', !needPhone);
-      input.required = needPhone;
-      if (!needPhone) input.value = '';
-    }
-
     window.updateCarImage = function() {
       const car = appData.vehicles.find(v => v.plate === document.getElementById('bk-plate').value);
       const img = document.getElementById('bk-car-img');
@@ -3810,15 +3784,6 @@
           remarksEl.innerHTML = '';
           remarksEl.classList.add('hidden');
         }
-      }
-      syncBookingPhoneField();
-    };
-
-    window.onBookingContextChanged = function () {
-      const startEl = document.getElementById('bk-start');
-      const endEl = document.getElementById('bk-end');
-      if (startEl && endEl && startEl.value && endEl.value) {
-        window.filterAvailableCars();
       }
     };
 
@@ -3885,39 +3850,26 @@
       });
 
       const sorted = sortVehiclesForBookingDropdown(availableVehicles);
-      let hasBookable = false;
       let html = '<option value="">-- เลือกรถที่ว่าง --</option>';
 
       sorted.forEach(function (v) {
         const groupLabel = getVehicleGroupLabel(v);
         const label = escapeHtml(v.plate) + ' (' + escapeHtml(groupLabel) + ')';
-        if (isCarBookableForCurrentContext(v)) {
-          html += '<option value="' + escapeHtml(v.plate) + '">' + label + '</option>';
-          hasBookable = true;
-        } else {
-          html += '<option value="" disabled>' + label + '</option>';
-        }
+        html += '<option value="' + escapeHtml(v.plate) + '">' + label + '</option>';
       });
 
       if (!availableVehicles.length) {
          plateSelect.innerHTML = '<option value="">❌ ไม่มีรถว่างในช่วงเวลานี้</option>';
          if (hintEl) { hintEl.classList.add('hidden'); hintEl.textContent = ''; }
          submitBtn.disabled = true;
-      } else if (!hasBookable) {
-         plateSelect.innerHTML = html;
-         if (hintEl) {
-           hintEl.textContent = '⚠️ กรอกแผนก/จุดหมายให้ตรงงานเพื่อเลือกรถเฉพาะกลุ่ม (เช่น การประปา)';
-           hintEl.classList.remove('hidden');
-         }
-         submitBtn.disabled = true;
       } else {
          plateSelect.innerHTML = html;
          if (hintEl) {
-           hintEl.textContent = 'รถกลุ่มเฉพาะงานจะเลือกได้เมื่อแผนก/จุดหมายตรงกับงานนั้น';
+           hintEl.textContent = 'ดูชื่อกลุ่มงานในวงเล็บ แล้วเลือกรถให้ตรงงานที่ต้องการ';
            hintEl.classList.remove('hidden');
          }
          submitBtn.disabled = false;
-         if (prevSelected && availableVehicles.some(function (v) { return v.plate === prevSelected && isCarBookableForCurrentContext(v); })) {
+         if (prevSelected && availableVehicles.some(function (v) { return v.plate === prevSelected; })) {
              plateSelect.value = prevSelected;
          }
       }
@@ -4030,7 +3982,6 @@
       window.toggleDept();
       document.getElementById('bk-plate').innerHTML = '<option value="">-- กรุณาระบุเวลาด้านบนเพื่อค้นหารถ --</option>';
       document.getElementById('bk-phone').value = '';
-      syncBookingPhoneField();
       document.getElementById('bk-submit-btn').disabled = true;
 
       const fpStart = document.getElementById('bk-start')._flatpickr;
@@ -4675,17 +4626,6 @@
       obj.endMile = mileageValidation.endMile === null ? '' : mileageValidation.endMile;
       obj.parkingSpot = mileageValidation.endMile !== null ? obj.parkingSpot : '';
       obj.contactPhone = document.getElementById('bk-phone').value || '';
-
-      if (requiresBookingPhoneForPlate(plate)) {
-        const phoneDigits = String(obj.contactPhone).replace(/\D/g, '');
-        if (phoneDigits.length < 9) {
-          Swal.fire('กรุณาระบุเบอร์โทร', 'รถโครงการเฉพาะต้องใส่เบอร์ติดต่อสำหรับบริษัทส่งรถ', 'warning');
-          btn.innerText = 'บันทึกข้อมูล';
-          btn.disabled = false;
-          return;
-        }
-        obj.contactPhone = phoneDigits;
-      }
 
       apiCall('saveBooking', [obj]).then(res => {
         if(res.success) { 
