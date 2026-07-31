@@ -8,7 +8,15 @@ const LEGACY_APP_DATA_CACHE_KEY = 'APP_DATA_V1';
 const CACHE_TTL_SEC = 120;
 const LOGS_CACHE_TTL_SEC = 90;
 const ADMIN_SESSION_CACHE_PREFIX = 'ADMIN_SESSION_';
-const VEHICLE_HEADERS = ['Vehicle_ID', 'ทะเบียน', 'รูปรถ(URL)', 'ประเภท', 'Email', 'Password', 'ระยะ Service (km)', 'ไมล์ล่าสุด (km)', 'จุดจอดล่าสุด', 'พรบ.หมดอายุ', 'หมายเหตุ', 'สถานะ', 'วันคืนรถ/หมดสัญญา', 'วันที่เช็คระยะล่าสุด', 'กม.เช็คระยะล่าสุด', 'ผู้นำเข้าเช็คระยะ', 'ระยะกม.ต่อรอบ', 'ประวัติเช็คระยะ(JSON)', 'แผนรอบถัดไป(JSON)', 'หมายเหตุบำรุงรักษา'];
+const EMD_SESSION_CACHE_PREFIX = 'EMD_SESSION_';
+const COMPANY_SESSION_CACHE_PREFIX = 'COMPANY_SESSION_';
+const LINE_REMINDER_CACHE_PREFIX = 'LINE_REMINDER_';
+const EMD_ACCESS_CODE = 'emd2';
+const COMPANY_USERNAME = 'tc';
+const SESSION_TTL_SEC = 7200;
+const VEHICLE_HEADERS = ['Vehicle_ID', 'ทะเบียน', 'รูปรถ(URL)', 'ประเภท', 'Email', 'Password', 'ระยะ Service (km)', 'ไมล์ล่าสุด (km)', 'จุดจอดล่าสุด', 'พรบ.หมดอายุ', 'หมายเหตุ', 'สถานะ', 'วันคืนรถ/หมดสัญญา', 'วันที่เช็คระยะล่าสุด', 'กม.เช็คระยะล่าสุด', 'ผู้นำเข้าเช็คระยะ', 'ระยะกม.ต่อรอบ', 'ประวัติเช็คระยะ(JSON)', 'แผนรอบถัดไป(JSON)', 'หมายเหตุบำรุงรักษา', 'ManagedBy', 'VehicleGroup'];
+const DEFAULT_VEHICLE_GROUP_ALL = 'ALL';
+const VEHICLE_GROUP_HEADERS = ['Group_ID', 'ชื่อกลุ่ม', 'คำค้นงาน(JSON)', 'ลำดับ', 'ระบบ'];
 const DEFAULT_SERVICE_INTERVAL_KM = 10000;
 
 function getSpreadsheet_() {
@@ -163,15 +171,100 @@ function putCacheSafe_(cache, key, value, ttlSec) {
 
 function createAdminSession_() {
   const token = Utilities.getUuid();
-  CacheService.getScriptCache().put(ADMIN_SESSION_CACHE_PREFIX + token, '1', 7200);
+  CacheService.getScriptCache().put(ADMIN_SESSION_CACHE_PREFIX + token, '1', SESSION_TTL_SEC);
   return token;
 }
 
+function createEmdSession_() {
+  const token = Utilities.getUuid();
+  CacheService.getScriptCache().put(EMD_SESSION_CACHE_PREFIX + token, '1', SESSION_TTL_SEC);
+  return token;
+}
+
+function createCompanySession_() {
+  const token = Utilities.getUuid();
+  CacheService.getScriptCache().put(COMPANY_SESSION_CACHE_PREFIX + token, '1', SESSION_TTL_SEC);
+  return token;
+}
+
+function resolveSessionRole_(token) {
+  if (!token) return null;
+  const cache = CacheService.getScriptCache();
+  if (cache.get(ADMIN_SESSION_CACHE_PREFIX + token) === '1') return 'ADMIN';
+  if (cache.get(EMD_SESSION_CACHE_PREFIX + token) === '1') return 'EMD';
+  if (cache.get(COMPANY_SESSION_CACHE_PREFIX + token) === '1') return 'COMPANY';
+  return null;
+}
+
+function refreshSession_(token, role) {
+  if (!token || !role) return;
+  const cache = CacheService.getScriptCache();
+  const prefix = role === 'ADMIN' ? ADMIN_SESSION_CACHE_PREFIX
+    : role === 'EMD' ? EMD_SESSION_CACHE_PREFIX
+    : COMPANY_SESSION_CACHE_PREFIX;
+  cache.put(prefix + token, '1', SESSION_TTL_SEC);
+}
+
 function requireAdminSession_(token) {
-  if (!token || CacheService.getScriptCache().get(ADMIN_SESSION_CACHE_PREFIX + token) !== '1') {
+  if (resolveSessionRole_(token) !== 'ADMIN') {
     throw new Error('กรุณาเข้าสู่ระบบ Admin อีกครั้ง');
   }
-  CacheService.getScriptCache().put(ADMIN_SESSION_CACHE_PREFIX + token, '1', 7200);
+  refreshSession_(token, 'ADMIN');
+}
+
+function requireMutationAccess_(token) {
+  const role = resolveSessionRole_(token);
+  if (role === 'EMD' || role === 'ADMIN') {
+    refreshSession_(token, role);
+    return role;
+  }
+  if (role === 'COMPANY') throw new Error('บริษัทมีสิทธิ์ดูข้อมูลอย่างเดียว');
+  throw new Error('กรุณาเข้าสู่ระบบก่อนดำเนินการ');
+}
+
+function requireAppSession_(token) {
+  const role = resolveSessionRole_(token);
+  if (!role) throw new Error('กรุณาเข้าสู่ระบบ');
+  refreshSession_(token, role);
+  return role;
+}
+
+function filterPayloadForCompany_(payload) {
+  const vehicles = (payload.vehicles || []).filter(function (v) {
+    return String(v.managedBy || '').toUpperCase() === 'COMPANY' && String(v.status || '') !== 'HIDDEN';
+  }).map(function (v) {
+    return {
+      id: v.id,
+      plate: v.plate,
+      img: v.img,
+      type: v.type,
+      parkingSpot: v.parkingSpot,
+      remarks: v.remarks,
+      status: v.status,
+      managedBy: v.managedBy,
+      vehicleGroup: v.vehicleGroup,
+      currentMile: v.currentMile
+    };
+  });
+  const companyPlates = {};
+  vehicles.forEach(function (v) {
+    companyPlates[normalizePlateKey_(v.plate)] = true;
+  });
+  const bookings = (payload.bookings || []).filter(function (b) {
+    return companyPlates[normalizePlateKey_(b.plate)];
+  });
+  return {
+    vehicles: vehicles,
+    bookings: bookings,
+    names: [],
+    logs: [],
+    settings: {
+      bannerStatus: payload.settings && payload.settings.bannerStatus,
+      bannerText: payload.settings && payload.settings.bannerText,
+      mileageReminderExempt: []
+    },
+    vehicleGroups: payload.vehicleGroups || []
+  };
 }
 
 function getNameRows_() {
@@ -214,7 +307,151 @@ function ensureVehiclesSheet_(ss) {
     const cell = sheet.getRange(1, c);
     if (!cell.getValue()) cell.setValue(VEHICLE_HEADERS[c - 1]);
   }
+  const managedHeader = sheet.getRange(1, 21).getValue();
+  if (String(managedHeader || '').trim() !== 'ManagedBy') {
+    sheet.getRange(1, 21).setValue('ManagedBy');
+  }
+  const groupHeader = sheet.getRange(1, 22).getValue();
+  if (String(groupHeader || '').trim() !== 'VehicleGroup') {
+    sheet.getRange(1, 22).setValue('VehicleGroup');
+  }
   return sheet;
+}
+
+function ensureVehicleGroupsSheet_(ss) {
+  let sheet = ss.getSheetByName('VehicleGroups');
+  if (!sheet) {
+    sheet = ss.insertSheet('VehicleGroups');
+    sheet.appendRow(VEHICLE_GROUP_HEADERS);
+    sheet.appendRow([DEFAULT_VEHICLE_GROUP_ALL, 'รถที่จองใช้ได้ทุกงาน', '[]', 1, 'YES']);
+    sheet.appendRow(['pwa', 'รถเฉพาะงานการประปา', '["การประปา","ประปา","กปน","กปน."]', 2, '']);
+    return sheet;
+  }
+  const headers = sheet.getRange(1, 1, 1, VEHICLE_GROUP_HEADERS.length).getValues()[0];
+  VEHICLE_GROUP_HEADERS.forEach(function (h, idx) {
+    if (!headers[idx]) sheet.getRange(1, idx + 1).setValue(h);
+  });
+  if (sheet.getLastRow() < 2) {
+    sheet.appendRow([DEFAULT_VEHICLE_GROUP_ALL, 'รถที่จองใช้ได้ทุกงาน', '[]', 1, 'YES']);
+    sheet.appendRow(['pwa', 'รถเฉพาะงานการประปา', '["การประปา","ประปา","กปน","กปน."]', 2, '']);
+  }
+  return sheet;
+}
+
+function parseGroupKeywords_(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) {
+    return value.map(function (k) { return String(k || '').trim(); }).filter(Boolean);
+  }
+  try {
+    const parsed = JSON.parse(String(value));
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map(function (k) { return String(k || '').trim(); }).filter(Boolean);
+  } catch (err) {
+    return String(value).split(',').map(function (k) { return k.trim(); }).filter(Boolean);
+  }
+}
+
+function normalizeVehicleGroupId_(value) {
+  const id = String(value || DEFAULT_VEHICLE_GROUP_ALL).trim();
+  return id || DEFAULT_VEHICLE_GROUP_ALL;
+}
+
+function getVehicleGroups_() {
+  const ss = getSpreadsheet_();
+  setupDatabase();
+  const sheet = getSheetOrThrow_(ss, 'VehicleGroups');
+  const data = sheet.getDataRange().getValues();
+  return data.slice(1).map(function (r, idx) {
+    return {
+      row: idx + 2,
+      id: normalizeVehicleGroupId_(r[0]),
+      name: String(r[1] || '').trim() || normalizeVehicleGroupId_(r[0]),
+      keywords: parseGroupKeywords_(r[2]),
+      sortOrder: parseInt(r[3], 10) || 999,
+      isSystem: String(r[4] || '').trim().toUpperCase() === 'YES'
+    };
+  }).filter(function (g) { return g.id; }).sort(function (a, b) {
+    return a.sortOrder - b.sortOrder || String(a.name).localeCompare(String(b.name), 'th');
+  });
+}
+
+function getVehicleGroupById_(groupId) {
+  const id = normalizeVehicleGroupId_(groupId);
+  const groups = getVehicleGroups_();
+  return groups.find(function (g) { return g.id === id; }) || null;
+}
+
+function matchesGroupKeywords_(dept, dest, keywords) {
+  const keys = (keywords || []).map(function (k) { return String(k || '').trim().toLowerCase(); }).filter(Boolean);
+  if (!keys.length) return false;
+  const haystack = (String(dept || '') + ' ' + String(dest || '')).toLowerCase();
+  return keys.some(function (k) { return haystack.indexOf(k) >= 0; });
+}
+
+function isVehicleBookableForContext_(vehicleGroupId, dept, dest) {
+  const groupId = normalizeVehicleGroupId_(vehicleGroupId);
+  if (groupId === DEFAULT_VEHICLE_GROUP_ALL) return true;
+  const group = getVehicleGroupById_(groupId);
+  if (!group) return false;
+  return matchesGroupKeywords_(dept, dest, group.keywords);
+}
+
+function ensureBookingsPhoneColumn_(ss) {
+  const sheet = ss.getSheetByName('Bookings');
+  if (!sheet) return;
+  const header = sheet.getRange(1, 14).getValue();
+  if (String(header || '').trim() !== 'เบอร์ติดต่อ') {
+    sheet.getRange(1, 14).setValue('เบอร์ติดต่อ');
+  }
+}
+
+function normalizeContactPhone_(value) {
+  const digits = String(value || '').replace(/\D/g, '');
+  if (digits.length < 9 || digits.length > 15) return '';
+  return digits;
+}
+
+function getVehicleGroupIdByPlate_(plate) {
+  const ss = getSpreadsheet_();
+  const vData = getSheetOrThrow_(ss, 'Vehicles').getDataRange().getValues();
+  for (let i = 1; i < vData.length; i++) {
+    if (normalizePlateKey_(vData[i][1]) === normalizePlateKey_(plate)) {
+      return normalizeVehicleGroupId_(vData[i][21]);
+    }
+  }
+  return DEFAULT_VEHICLE_GROUP_ALL;
+}
+
+function requiresBookingPhone_(plate) {
+  return getVehicleGroupIdByPlate_(plate) !== DEFAULT_VEHICLE_GROUP_ALL;
+}
+
+function validateBookingPhone_(plate, phone) {
+  if (!requiresBookingPhone_(plate)) {
+    return { success: true, phone: normalizeContactPhone_(phone) };
+  }
+  const normalized = normalizeContactPhone_(phone);
+  if (!normalized) {
+    return { success: false, msg: 'กรุณาระบุเบอร์โทรติดต่อสำหรับรถโครงการเฉพาะ (บริษัทใช้ติดต่อตอนส่งรถ)' };
+  }
+  return { success: true, phone: normalized };
+}
+
+function validateVehicleGroupBooking_(plate, dept, dest) {
+  const ss = getSpreadsheet_();
+  const vData = getSheetOrThrow_(ss, 'Vehicles').getDataRange().getValues();
+  for (let i = 1; i < vData.length; i++) {
+    if (normalizePlateKey_(vData[i][1]) !== normalizePlateKey_(plate)) continue;
+    const groupId = normalizeVehicleGroupId_(vData[i][21]);
+    if (isVehicleBookableForContext_(groupId, dept, dest)) return { success: true };
+    const group = getVehicleGroupById_(groupId);
+    return {
+      success: false,
+      msg: 'รถคันนี้จองได้เฉพาะงาน: ' + (group ? group.name : groupId)
+    };
+  }
+  return { success: true };
 }
 
 function vehicleFormField_(form, key, row, colIndex, fallback) {
@@ -281,6 +518,8 @@ function buildVehicleRowValues_(form, row, imgUrl, activeStatus) {
   const intervalKm = parseFloat(vehicleFormField_(form, 'serviceIntervalKm', row, 16, DEFAULT_SERVICE_INTERVAL_KM)) || DEFAULT_SERVICE_INTERVAL_KM;
   const historyJson = vehicleFormField_(form, 'serviceHistoryJson', row, 17, '[]');
   const roundPlanJson = vehicleFormField_(form, 'serviceRoundPlanJson', row, 18, '[]');
+  const managedBy = String(vehicleFormField_(form, 'managedBy', row, 20, 'EMD') || 'EMD').trim().toUpperCase() === 'COMPANY' ? 'COMPANY' : 'EMD';
+  const vehicleGroup = normalizeVehicleGroupId_(vehicleFormField_(form, 'vehicleGroup', row, 21, DEFAULT_VEHICLE_GROUP_ALL));
   return [
     vehicleFormField_(form, 'plate', row, 1, ''),
     imgUrl,
@@ -300,7 +539,9 @@ function buildVehicleRowValues_(form, row, imgUrl, activeStatus) {
     intervalKm,
     historyJson,
     roundPlanJson,
-    vehicleMaintenanceRemarksField_(form, row)
+    vehicleMaintenanceRemarksField_(form, row),
+    managedBy,
+    vehicleGroup
   ];
 }
 
@@ -387,21 +628,28 @@ function appendLogRow_(logSheet, email, action, target, detail, reason, clientIp
 function dispatchApi_(action, args, token, clientIp) {
   args = Array.isArray(args) ? args : [];
   switch (action) {
-    case 'getAppData': return getAppData(!(args.length > 0 && args[0] === false));
-    case 'getAppLogs': return getAppLogs_();
+    case 'getAppData': return getAppData(!(args.length > 0 && args[0] === false), token);
+    case 'getAppLogs': return getAppLogs_(token);
     case 'verifyAdminLogin': return verifyAdminLogin(args[0], args[1]);
+    case 'verifyEmdLogin': return verifyEmdLogin(args[0]);
+    case 'verifyCompanyLogin': return verifyCompanyLogin(args[0], args[1]);
     case 'checkAdminSession': return checkAdminSession(args[0] || token);
-    case 'saveAdminSettings': return saveAdminSettings(args[0]);
+    case 'checkEmdSession': return checkEmdSession(args[0] || token);
+    case 'checkCompanySession': return checkCompanySession(args[0] || token);
+    case 'saveAdminSettings': return saveAdminSettings(args[0], token);
     case 'getNameManagementData': return getNameManagementData(token);
     case 'saveManagedName': return saveManagedName(token, args[0]);
     case 'deleteManagedName': return deleteManagedName(token, args[0]);
-    case 'saveNameOption': return saveNameOption(args[0]);
-    case 'saveVehicle': return saveVehicle(args[0], clientIp);
+    case 'saveNameOption': return saveNameOption(args[0], token);
+    case 'saveVehicle': return saveVehicle(args[0], clientIp, token);
     case 'saveVehicleManagement': return saveVehicleManagement(token, args[0], clientIp);
-    case 'deleteVehicle': return deleteVehicle(args[0], args[1], clientIp);
-    case 'saveBooking': return saveBooking(args[0], clientIp);
-    case 'deleteBooking': return deleteBooking(args[0], args[1], clientIp);
-    case 'quickUpdateMileage': return quickUpdateMileage(args[0], args[1], args[2], clientIp);
+    case 'deleteVehicle': return deleteVehicle(args[0], args[1], clientIp, token);
+    case 'saveBooking': return saveBooking(args[0], clientIp, token);
+    case 'deleteBooking': return deleteBooking(args[0], args[1], clientIp, token);
+    case 'quickUpdateMileage': return quickUpdateMileage(args[0], args[1], args[2], clientIp, token);
+    case 'getVehicleGroupManagementData': return getVehicleGroupManagementData(token);
+    case 'saveVehicleGroup': return saveVehicleGroup(token, args[0]);
+    case 'deleteVehicleGroup': return deleteVehicleGroup(token, args[0]);
     default: throw new Error('Unknown action: ' + action);
   }
 }
@@ -410,7 +658,9 @@ function setupDatabase() {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   if (!ss.getSheetByName('Name')) ss.insertSheet('Name').appendRow(['ชื่อ', 'นามสกุล', 'แผนก']);
   ensureVehiclesSheet_(ss);
-  if (!ss.getSheetByName('Bookings')) ss.insertSheet('Bookings').appendRow(['Booking_ID', 'ทะเบียนรถ', 'ชื่อ', 'นามสกุล', 'แผนก', 'เริ่ม', 'สิ้นสุด', 'จุดหมาย', 'ผู้ขับขี่', 'อีเมลผู้บันทึก', 'ไมล์ก่อนใช้', 'ไมล์หลังใช้', 'จุดจอดหลังใช้งาน']);
+  ensureVehicleGroupsSheet_(ss);
+  if (!ss.getSheetByName('Bookings')) ss.insertSheet('Bookings').appendRow(['Booking_ID', 'ทะเบียนรถ', 'ชื่อ', 'นามสกุล', 'แผนก', 'เริ่ม', 'สิ้นสุด', 'จุดหมาย', 'ผู้ขับขี่', 'อีเมลผู้บันทึก', 'ไมล์ก่อนใช้', 'ไมล์หลังใช้', 'จุดจอดหลังใช้งาน', 'เบอร์ติดต่อ']);
+  ensureBookingsPhoneColumn_(ss);
   if (!ss.getSheetByName('Logs')) ss.insertSheet('Logs').appendRow(['Timestamp', 'อีเมลผู้ทำรายการ', 'Action', 'Target', 'รายละเอียด', 'เหตุผลการแก้ไข', 'IP']);
   ensureLogsIpColumn_(ss);
   
@@ -422,6 +672,9 @@ function setupDatabase() {
     sSheet.appendRow(['BannerStatus', 'ON', 'สถานะ Banner (ON/OFF)']);
     sSheet.appendRow(['BannerText', 'ยินดีต้อนรับสู่ระบบจองรถ EMD CAR!', 'ข้อความแจ้งเตือนที่แสดงวิ่งด้านบน']);
     sSheet.appendRow(['MileageReminderExempt', '[]', 'รายชื่อยกเว้นแจ้งเตือนไมล์ (JSON array)']);
+    sSheet.appendRow(['LineChannelAccessToken', '', 'LINE Messaging API Channel Access Token']);
+    sSheet.appendRow(['LineGroupId', '', 'LINE Group ID สำหรับแจ้งเตือน']);
+    sSheet.appendRow(['LineReminderMinutes', '180', 'เตือนก่อนเวลาส่งรถ (นาที)']);
   }
 }
 
@@ -439,14 +692,19 @@ function buildAppPayload_(ss, includeLogs) {
     serviceIntervalKm: parseFloat(r[16]) || DEFAULT_SERVICE_INTERVAL_KM,
     serviceHistory: parseVehicleServiceHistory_(r[17]),
     serviceRoundPlan: parseVehicleServiceRoundPlan_(r[18]),
-    maintenanceRemarks: r[19] || ''
+    maintenanceRemarks: r[19] || '',
+    managedBy: String(r[20] || 'EMD').trim().toUpperCase() === 'COMPANY' ? 'COMPANY' : 'EMD',
+    vehicleGroup: normalizeVehicleGroupId_(r[21])
   }));
+
+  const vehicleGroups = getVehicleGroups_();
 
   const bDataVal = getSheetOrThrow_(ss, 'Bookings').getDataRange().getValues();
   const bookings = bDataVal.slice(1).map(r => ({
     id: r[0], plate: r[1], name: r[2], surname: r[3],
     dept: r[4], start: r[5], end: r[6], dest: r[7], driver: r[8],
-    userEmail: r[9], startMile: r[10], endMile: r[11], parkingSpot: r[12] || ''
+    userEmail: r[9], startMile: r[10], endMile: r[11], parkingSpot: r[12] || '',
+    contactPhone: r[13] || ''
   }));
 
   const nData = getSheetOrThrow_(ss, 'Name').getDataRange().getValues();
@@ -456,14 +714,17 @@ function buildAppPayload_(ss, includeLogs) {
   if (includeLogs) logs = readLogsFromSheet_(ss);
 
   const sData = getSheetOrThrow_(ss, 'Settings').getDataRange().getValues();
-  let settings = { bannerStatus: 'OFF', bannerText: '', mileageReminderExempt: [] };
+  let settings = { bannerStatus: 'OFF', bannerText: '', mileageReminderExempt: [], lineChannelAccessToken: '', lineGroupId: '', lineReminderMinutes: 180 };
   for (let i = 1; i < sData.length; i++) {
     if (sData[i][0] === 'BannerStatus') settings.bannerStatus = sData[i][1];
     if (sData[i][0] === 'BannerText') settings.bannerText = sData[i][1];
     if (sData[i][0] === 'MileageReminderExempt') settings.mileageReminderExempt = parseMileageReminderExempt_(sData[i][1]);
+    if (sData[i][0] === 'LineChannelAccessToken') settings.lineChannelAccessToken = String(sData[i][1] || '');
+    if (sData[i][0] === 'LineGroupId') settings.lineGroupId = String(sData[i][1] || '');
+    if (sData[i][0] === 'LineReminderMinutes') settings.lineReminderMinutes = parseInt(sData[i][1], 10) || 180;
   }
 
-  return { vehicles, bookings, names, logs, settings };
+  return { vehicles, bookings, names, logs, settings, vehicleGroups };
 }
 
 function parseMileageReminderExempt_(value) {
@@ -486,25 +747,54 @@ function readLogsFromSheet_(ss) {
   })).reverse();
 }
 
-function getAppData(includeLogs) {
-  const wantLogs = (includeLogs !== false);
+function getAppData(includeLogs, token) {
+  const role = resolveSessionRole_(token);
+  if (!role) {
+    return { success: false, requiresAuth: true, msg: 'กรุณาเข้าสู่ระบบ' };
+  }
+  refreshSession_(token, role);
+
+  const wantLogs = (includeLogs !== false) && role === 'ADMIN';
   const cache = CacheService.getScriptCache();
   const cacheKey = wantLogs ? APP_DATA_CACHE_KEY : APP_DATA_CORE_CACHE_KEY;
+  let normalized;
   const cachedPayload = cache.get(cacheKey);
-  if (cachedPayload) return attachCurrentUser_(JSON.parse(cachedPayload));
-
-  const ss = getSpreadsheet_();
-  setupDatabase();
-  const normalized = JSON.parse(JSON.stringify(buildAppPayload_(ss, wantLogs)));
-  putCacheSafe_(cache, cacheKey, JSON.stringify(normalized), CACHE_TTL_SEC);
-  if (wantLogs) {
-    const coreOnly = Object.assign({}, normalized, { logs: [] });
-    putCacheSafe_(cache, APP_DATA_CORE_CACHE_KEY, JSON.stringify(coreOnly), CACHE_TTL_SEC);
+  if (cachedPayload) {
+    normalized = JSON.parse(cachedPayload);
+  } else {
+    const ss = getSpreadsheet_();
+    setupDatabase();
+    normalized = JSON.parse(JSON.stringify(buildAppPayload_(ss, wantLogs)));
+    putCacheSafe_(cache, cacheKey, JSON.stringify(normalized), CACHE_TTL_SEC);
+    if (wantLogs) {
+      const coreOnly = Object.assign({}, normalized, { logs: [] });
+      putCacheSafe_(cache, APP_DATA_CORE_CACHE_KEY, JSON.stringify(coreOnly), CACHE_TTL_SEC);
+    }
   }
-  return attachCurrentUser_(normalized);
+
+  let payload = attachCurrentUser_(normalized);
+  payload.role = role;
+  payload.readOnly = role === 'COMPANY';
+  payload.success = true;
+
+  if (role === 'COMPANY') {
+    payload = attachCurrentUser_(filterPayloadForCompany_(payload));
+    payload.role = 'COMPANY';
+    payload.readOnly = true;
+    payload.logs = [];
+  } else if (role !== 'ADMIN') {
+    payload.logs = [];
+  }
+
+  return payload;
 }
 
-function getAppLogs_() {
+function getAppLogs_(token) {
+  try {
+    requireAdminSession_(token);
+  } catch (error) {
+    return { success: false, msg: error.message };
+  }
   const cache = CacheService.getScriptCache();
   const cached = cache.get(APP_LOGS_CACHE_KEY);
   if (cached) return { success: true, logs: JSON.parse(cached) };
@@ -529,17 +819,49 @@ function verifyAdminLogin(user, passText) {
   const rawHash = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, passText);
   const txtHash = rawHash.map(b => (b < 0 ? b + 256 : b).toString(16).padStart(2, '0')).join('');
   
-  if(user === savedUser && txtHash === savedHash) return { success: true, token: createAdminSession_() };
+  if(user === savedUser && txtHash === savedHash) {
+    return { success: true, token: createAdminSession_(), role: 'ADMIN' };
+  }
   return { success: false, msg: 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง' };
+}
+
+function verifyEmdLogin(accessCode) {
+  if (String(accessCode || 'emd2').trim().toLowerCase() === EMD_ACCESS_CODE) {
+    return { success: true, token: createEmdSession_(), role: 'EMD' };
+  }
+  return { success: false, msg: 'รหัสเข้าใช้งานไม่ถูกต้อง' };
+}
+
+function verifyCompanyLogin(user, passText) {
+  if (String(user || '').trim().toLowerCase() === COMPANY_USERNAME) {
+    return { success: true, token: createCompanySession_(), role: 'COMPANY' };
+  }
+  return { success: false, msg: 'ชื่อผู้ใช้ไม่ถูกต้อง' };
 }
 
 function checkAdminSession(token) {
   try {
     requireAdminSession_(token);
-    return { success: true, token: token };
+    return { success: true, token: token, role: 'ADMIN' };
   } catch (error) {
     return { success: false, msg: error.message };
   }
+}
+
+function checkEmdSession(token) {
+  if (resolveSessionRole_(token) === 'EMD') {
+    refreshSession_(token, 'EMD');
+    return { success: true, token: token, role: 'EMD' };
+  }
+  return { success: false, msg: 'เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่' };
+}
+
+function checkCompanySession(token) {
+  if (resolveSessionRole_(token) === 'COMPANY') {
+    refreshSession_(token, 'COMPANY');
+    return { success: true, token: token, role: 'COMPANY' };
+  }
+  return { success: false, msg: 'เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่' };
 }
 
 function getNameManagementData(token) {
@@ -593,13 +915,97 @@ function deleteManagedName(token, row) {
   } catch (error) { return { success: false, msg: error.message }; }
 }
 
-function saveAdminSettings(form) {
+function getVehicleGroupManagementData(token) {
   try {
+    requireAdminSession_(token);
+    return { success: true, groups: getVehicleGroups_() };
+  } catch (error) { return { success: false, msg: error.message }; }
+}
+
+function saveVehicleGroup(token, form) {
+  try {
+    requireAdminSession_(token);
+    const ss = getSpreadsheet_();
+    setupDatabase();
+    const sheet = getSheetOrThrow_(ss, 'VehicleGroups');
+    const name = String(form.name || '').trim();
+    let id = String(form.id || '').trim();
+    const row = Number(form.row) || 0;
+    const keywords = parseGroupKeywords_(form.keywords);
+    const sortOrder = parseInt(form.sortOrder, 10) || 999;
+    if (!name) return { success: false, msg: 'กรุณาระบุชื่อกลุ่ม' };
+    if (!id) {
+      id = 'grp_' + new Date().getTime();
+    }
+    if (id === DEFAULT_VEHICLE_GROUP_ALL) {
+      return { success: false, msg: 'ไม่สามารถแก้ไขกลุ่มระบบ ALL ได้' };
+    }
+    const groups = getVehicleGroups_();
+    const duplicate = groups.some(function (g) {
+      return g.row !== row && g.id === id;
+    });
+    if (duplicate) return { success: false, msg: 'รหัสกลุ่มซ้ำ' };
+    const values = [id, name, JSON.stringify(keywords), sortOrder, ''];
+    if (row >= 2 && row <= sheet.getLastRow()) {
+      const existingId = String(sheet.getRange(row, 1).getValue() || '').trim();
+      if (existingId === DEFAULT_VEHICLE_GROUP_ALL) {
+        return { success: false, msg: 'ไม่สามารถแก้ไขกลุ่มระบบ ALL ได้' };
+      }
+      sheet.getRange(row, 1, 1, values.length).setValues([values]);
+    } else {
+      sheet.appendRow(values);
+    }
+    clearAppCache_();
+    return { success: true, msg: 'บันทึกกลุ่มรถเรียบร้อยครับ', groups: getVehicleGroups_() };
+  } catch (error) { return { success: false, msg: error.message }; }
+}
+
+function deleteVehicleGroup(token, rowOrId) {
+  try {
+    requireAdminSession_(token);
+    const ss = getSpreadsheet_();
+    setupDatabase();
+    const sheet = getSheetOrThrow_(ss, 'VehicleGroups');
+    const vSheet = getSheetOrThrow_(ss, 'Vehicles');
+    let targetRow = Number(rowOrId) || 0;
+    let groupId = '';
+    if (!targetRow) {
+      const groups = getVehicleGroups_();
+      const found = groups.find(function (g) { return g.id === String(rowOrId || '').trim(); });
+      if (found) {
+        targetRow = found.row;
+        groupId = found.id;
+      }
+    } else {
+      groupId = String(sheet.getRange(targetRow, 1).getValue() || '').trim();
+    }
+    if (targetRow < 2 || targetRow > sheet.getLastRow()) {
+      return { success: false, msg: 'ไม่พบกลุ่มที่ต้องการลบ' };
+    }
+    if (groupId === DEFAULT_VEHICLE_GROUP_ALL) {
+      return { success: false, msg: 'ไม่สามารถลบกลุ่ม "ทุกงาน" ได้' };
+    }
+    const vData = vSheet.getDataRange().getValues();
+    for (let i = 1; i < vData.length; i++) {
+      if (normalizeVehicleGroupId_(vData[i][21]) === groupId) {
+        vSheet.getRange(i + 1, 22).setValue(DEFAULT_VEHICLE_GROUP_ALL);
+      }
+    }
+    sheet.deleteRow(targetRow);
+    clearAppCache_();
+    return { success: true, msg: 'ลบกลุ่มและย้ายรถกลับเป็น "ทุกงาน" แล้ว', groups: getVehicleGroups_() };
+  } catch (error) { return { success: false, msg: error.message }; }
+}
+
+function saveAdminSettings(form, token) {
+  try {
+    requireAdminSession_(token);
     const ss = getSpreadsheet_();
     const sheet = getSheetOrThrow_(ss, 'Settings');
     const data = sheet.getDataRange().getValues();
     
     let updatedStatus = false, updatedText = false, updatedExempt = false;
+    let updatedLineToken = false, updatedLineGroup = false, updatedLineReminder = false;
     const exemptJson = form.mileageReminderExempt !== undefined
       ? JSON.stringify(parseMileageReminderExempt_(form.mileageReminderExempt))
       : null;
@@ -610,19 +1016,41 @@ function saveAdminSettings(form) {
         sheet.getRange(i + 1, 2).setValue(exemptJson);
         updatedExempt = true;
       }
+      if (form.lineChannelAccessToken !== undefined && data[i][0] === 'LineChannelAccessToken') {
+        sheet.getRange(i + 1, 2).setValue(String(form.lineChannelAccessToken || ''));
+        updatedLineToken = true;
+      }
+      if (form.lineGroupId !== undefined && data[i][0] === 'LineGroupId') {
+        sheet.getRange(i + 1, 2).setValue(String(form.lineGroupId || ''));
+        updatedLineGroup = true;
+      }
+      if (form.lineReminderMinutes !== undefined && data[i][0] === 'LineReminderMinutes') {
+        sheet.getRange(i + 1, 2).setValue(String(form.lineReminderMinutes || '180'));
+        updatedLineReminder = true;
+      }
     }
     
     if(!updatedStatus) sheet.appendRow(['BannerStatus', form.status]);
     if(!updatedText) sheet.appendRow(['BannerText', form.text]);
     if (exemptJson !== null && !updatedExempt) sheet.appendRow(['MileageReminderExempt', exemptJson]);
+    if (form.lineChannelAccessToken !== undefined && !updatedLineToken) {
+      sheet.appendRow(['LineChannelAccessToken', String(form.lineChannelAccessToken || '')]);
+    }
+    if (form.lineGroupId !== undefined && !updatedLineGroup) {
+      sheet.appendRow(['LineGroupId', String(form.lineGroupId || '')]);
+    }
+    if (form.lineReminderMinutes !== undefined && !updatedLineReminder) {
+      sheet.appendRow(['LineReminderMinutes', String(form.lineReminderMinutes || '180')]);
+    }
     clearAppCache_();
     
     return { success: true, msg: 'บันทึกการตั้งค่าระบบเรียบร้อยครับ' };
   } catch (error) { return { success: false, msg: error.message }; }
 }
 
-function saveNameOption(form) {
+function saveNameOption(form, token) {
   try {
+    requireMutationAccess_(token);
     const fullName = String(form.fullName || '').trim().replace(/\s+/g, ' ');
     const dept = String(form.dept || '').trim();
     if (!fullName) return { success: false, msg: 'กรุณาระบุชื่อ-นามสกุล' };
@@ -666,8 +1094,9 @@ function saveVehicleManagement(token, form, clientIp) {
   return saveVehicle(form, clientIp);
 }
 
-function saveVehicle(form, clientIp) {
+function saveVehicle(form, clientIp, token) {
   try {
+    requireMutationAccess_(token);
     const ss = getSpreadsheet_();
     setupDatabase();
     const sheet = getSheetOrThrow_(ss, 'Vehicles');
@@ -774,8 +1203,9 @@ function saveVehicle(form, clientIp) {
   } catch (error) { return {success: false, msg: error.message}; }
 }
 
-function deleteVehicle(id, mode, clientIp) {
+function deleteVehicle(id, mode, clientIp, token) {
   try {
+    requireMutationAccess_(token);
     const ss = getSpreadsheet_();
     const vSheet = getSheetOrThrow_(ss, 'Vehicles');
     const vData = vSheet.getDataRange().getValues();
@@ -813,8 +1243,9 @@ function deleteVehicle(id, mode, clientIp) {
   } catch(e) { return {success: false, msg: e.message}; }
 }
 
-function saveBooking(form, clientIp) {
+function saveBooking(form, clientIp, token) {
   try {
+    requireMutationAccess_(token);
     const ss = getSpreadsheet_();
     const bSheet = getSheetOrThrow_(ss, 'Bookings');
     const bData = bSheet.getDataRange().getValues();
@@ -825,6 +1256,13 @@ function saveBooking(form, clientIp) {
     if (!newStart || !newEnd || newStart >= newEnd) {
       return {success: false, msg: 'ช่วงเวลาเริ่ม/สิ้นสุดไม่ถูกต้อง'};
     }
+
+    const groupValidation = validateVehicleGroupBooking_(form.plate, form.dept, form.dest);
+    if (!groupValidation.success) return groupValidation;
+
+    const phoneValidation = validateBookingPhone_(form.plate, form.contactPhone);
+    if (!phoneValidation.success) return phoneValidation;
+    const contactPhone = phoneValidation.phone || '';
 
     for(let i=1; i<bData.length; i++) {
         if(String(bData[i][1]).trim() === String(form.plate).trim() && String(bData[i][0]).trim() !== String(form.id).trim()) {
@@ -877,29 +1315,34 @@ function saveBooking(form, clientIp) {
     if (form.id) {
       for (let i = 1; i < bData.length; i++) {
         if (String(bData[i][0]).trim() === String(form.id).trim()) {
-          bSheet.getRange(i + 1, 2, 1, 12).setValues([[form.plate, fname, lname, form.dept, "'" + form.start, "'" + form.end, form.dest, form.driver, form.originalEmail, startMileValue, endMileValue, bookingParking]]);
+          bSheet.getRange(i + 1, 2, 1, 13).setValues([[form.plate, fname, lname, form.dept, "'" + form.start, "'" + form.end, form.dest, form.driver, form.originalEmail, startMileValue, endMileValue, bookingParking, contactPhone]]);
           clearAppCache_();
-          appendLogRow_(logSheet, actionEmail, 'UPDATE_BOOKING', form.plate, `แก้ไข/คืนรถ (จุดจอด: ${bookingParking || '-'}, ไมล์: ${startMileValue || '-'} -> ${endMileValue || '-'})`, form.editReason || '-', ip);
+          appendLogRow_(logSheet, actionEmail, 'UPDATE_BOOKING', form.plate, `แก้ไข/คืนรถ (จุดจอด: ${bookingParking || '-'}, ไมล์: ${startMileValue || '-'} -> ${endMileValue || '-'}, โทร: ${contactPhone || '-'})`, form.editReason || '-', ip);
+          notifyCompanyBookingLine_(ss, 'UPDATE', buildBookingNotifyObject_(form, fname, lname, form.id, contactPhone), { skip: form.skipLineNotify });
           return {success: true, msg: 'อัปเดตการจองและจุดจอดเรียบร้อยครับ'};
         }
       }
     } else {
-      bSheet.appendRow(['B_' + new Date().getTime(), form.plate, fname, lname, form.dept, "'" + form.start, "'" + form.end, form.dest, form.driver, actionEmail, startMileValue, endMileValue, bookingParking]);
+      const newBookingId = 'B_' + new Date().getTime();
+      bSheet.appendRow([newBookingId, form.plate, fname, lname, form.dept, "'" + form.start, "'" + form.end, form.dest, form.driver, actionEmail, startMileValue, endMileValue, bookingParking, contactPhone]);
       clearAppCache_();
-      appendLogRow_(logSheet, actionEmail, 'CREATE_BOOKING', form.plate, `จองไป ${form.dest}`, '-', ip);
+      appendLogRow_(logSheet, actionEmail, 'CREATE_BOOKING', form.plate, `จองไป ${form.dest} (โทร: ${contactPhone || '-'})`, '-', ip);
+      notifyCompanyBookingLine_(ss, 'NEW', buildBookingNotifyObject_(form, fname, lname, newBookingId, contactPhone));
       return {success: true, msg: 'บันทึกการจองสำเร็จครับ'};
     }
   } catch (error) { return {success: false, msg: error.message}; }
 }
 
-function deleteBooking(id, reason, clientIp) {
+function deleteBooking(id, reason, clientIp, token) {
   if (id && typeof id === 'object') {
     const p = id;
     clientIp = p.clientIp || clientIp || '';
     reason = p.reason != null ? p.reason : reason;
+    token = p.token || token || '';
     id = p.id;
   }
   try {
+    requireMutationAccess_(token);
     const ss = getSpreadsheet_();
     const bSheet = getSheetOrThrow_(ss, 'Bookings');
     const data = bSheet.getDataRange().getValues();
@@ -916,9 +1359,22 @@ function deleteBooking(id, reason, clientIp) {
         if (isPast && !reasonText) {
           return { success: false, msg: 'การจองนี้ผ่านวันเวลาแล้ว กรุณาระบุเหตุผลในการลบ' };
         }
+        const bookingNotify = {
+          id: data[i][0],
+          plate: data[i][1],
+          name: data[i][2],
+          surname: data[i][3],
+          dept: data[i][4],
+          start: data[i][5],
+          end: data[i][6],
+          dest: data[i][7],
+          driver: data[i][8],
+          contactPhone: data[i][13] || ''
+        };
         bSheet.deleteRow(i + 1);
         clearAppCache_();
         appendLogRow_(getSheetOrThrow_(ss, 'Logs'), actionEmail, 'DELETE_BOOKING', plate, `ลบการจองไป ${dest}`, reasonText || 'ผู้ใช้กดยกเลิก/ลบการจอง', ip);
+        notifyCompanyBookingLine_(ss, 'DELETE', bookingNotify);
         return {success: true, msg: 'ลบข้อมูลการจองเรียบร้อยแล้วครับ'};
       }
     }
@@ -928,6 +1384,205 @@ function deleteBooking(id, reason, clientIp) {
 
 function setupDailyTrigger() {
   ScriptApp.newTrigger('dailyExpiryCheck').timeBased().atHour(8).everyDays(1).create();
+}
+
+function setupNotificationTriggers() {
+  ScriptApp.getProjectTriggers().forEach(function (trigger) {
+    const fn = trigger.getHandlerFunction();
+    if (fn === 'deliveryReminderCheck' || fn === 'dailyDeliverySummary') {
+      ScriptApp.deleteTrigger(trigger);
+    }
+  });
+  ScriptApp.newTrigger('deliveryReminderCheck').timeBased().everyMinutes(15).create();
+  ScriptApp.newTrigger('dailyDeliverySummary').timeBased().atHour(8).everyDays(1).create();
+}
+
+function getLineConfig_() {
+  const props = PropertiesService.getScriptProperties();
+  let token = String(props.getProperty('LineChannelAccessToken') || '').trim();
+  let groupId = String(props.getProperty('LineGroupId') || '').trim();
+  let reminderMin = parseInt(props.getProperty('LineReminderMinutes') || '180', 10) || 180;
+  if (!token || !groupId) {
+    const ss = getSpreadsheet_();
+    setupDatabase();
+    const sData = getSheetOrThrow_(ss, 'Settings').getDataRange().getValues();
+    for (let i = 1; i < sData.length; i++) {
+      if (sData[i][0] === 'LineChannelAccessToken' && !token) token = String(sData[i][1] || '').trim();
+      if (sData[i][0] === 'LineGroupId' && !groupId) groupId = String(sData[i][1] || '').trim();
+      if (sData[i][0] === 'LineReminderMinutes') reminderMin = parseInt(sData[i][1], 10) || reminderMin;
+    }
+  }
+  return { token: token, groupId: groupId, reminderMin: reminderMin };
+}
+
+function sendLineMessage_(text) {
+  const cfg = getLineConfig_();
+  if (!cfg.token || !cfg.groupId || !text) return false;
+  try {
+    const res = UrlFetchApp.fetch('https://api.line.me/v2/bot/message/push', {
+      method: 'post',
+      contentType: 'application/json',
+      headers: { Authorization: 'Bearer ' + cfg.token },
+      payload: JSON.stringify({
+        to: cfg.groupId,
+        messages: [{ type: 'text', text: String(text).slice(0, 5000) }]
+      }),
+      muteHttpExceptions: true
+    });
+    return res.getResponseCode() >= 200 && res.getResponseCode() < 300;
+  } catch (err) {
+    return false;
+  }
+}
+
+function formatLineDateTime_(value) {
+  const ms = parseTimeSafe_(value);
+  if (!ms) return String(value || '-');
+  const d = new Date(ms);
+  return Utilities.formatDate(d, 'Asia/Bangkok', 'dd/MM/yyyy HH:mm');
+}
+
+function buildBookingNotifyObject_(form, fname, lname, bookingId, contactPhone) {
+  return {
+    id: bookingId || form.id || '',
+    plate: form.plate,
+    name: fname,
+    surname: lname,
+    dept: form.dept,
+    start: form.start,
+    end: form.end,
+    dest: form.dest,
+    driver: form.driver,
+    contactPhone: contactPhone || form.contactPhone || ''
+  };
+}
+
+function isCompanyManagedPlate_(ss, plate) {
+  const vData = getSheetOrThrow_(ss, 'Vehicles').getDataRange().getValues();
+  for (let i = 1; i < vData.length; i++) {
+    if (normalizePlateKey_(vData[i][1]) === normalizePlateKey_(plate)) {
+      return String(vData[i][20] || '').toUpperCase() === 'COMPANY';
+    }
+  }
+  return false;
+}
+
+function formatBookingLineMessage_(eventType, booking) {
+  const userName = String((booking.name || '') + ' ' + (booking.surname || '')).trim() || '-';
+  const titleMap = {
+    NEW: '🚗 จองใหม่ — ส่งรถตามเวลา',
+    UPDATE: '✏️ แก้ไขการจอง',
+    DELETE: '❌ ยกเลิกการจอง',
+    REMINDER: '⏰ เตือนก่อนส่งรถ',
+    DAILY: '📋 สรุปรายการส่งรถพรุ่งนี้'
+  };
+  const lines = [
+    titleMap[eventType] || '📢 แจ้งเตือนการจอง',
+    'ทะเบียน: ' + (booking.plate || '-'),
+    'ผู้จอง: ' + userName + (booking.dept ? ' (' + booking.dept + ')' : ''),
+    'เวลา: ' + formatLineDateTime_(booking.start) + ' - ' + formatLineDateTime_(booking.end),
+    'จุดหมาย: ' + (booking.dest || '-'),
+    'ผู้ขับ: ' + (booking.driver || '-')
+  ];
+  if (booking.contactPhone) {
+    lines.push('📞 ติดต่อ: ' + booking.contactPhone);
+  }
+  return lines.join('\n');
+}
+
+function notifyCompanyBookingLine_(ss, eventType, booking, options) {
+  options = options || {};
+  if (options.skip || !booking || !isCompanyManagedPlate_(ss, booking.plate)) return;
+  sendLineMessage_(formatBookingLineMessage_(eventType, booking));
+}
+
+function getCompanyManagedPlates_(ss) {
+  const vData = getSheetOrThrow_(ss, 'Vehicles').getDataRange().getValues();
+  const plates = {};
+  for (let i = 1; i < vData.length; i++) {
+    if (String(vData[i][20] || '').toUpperCase() === 'COMPANY') {
+      plates[normalizePlateKey_(vData[i][1])] = vData[i][1];
+    }
+  }
+  return plates;
+}
+
+function deliveryReminderCheck() {
+  const ss = getSpreadsheet_();
+  setupDatabase();
+  const cfg = getLineConfig_();
+  if (!cfg.token || !cfg.groupId) return;
+  const companyPlates = getCompanyManagedPlates_(ss);
+  const bData = getSheetOrThrow_(ss, 'Bookings').getDataRange().getValues();
+  const now = Date.now();
+  const windowMs = cfg.reminderMin * 60 * 1000;
+  const cache = CacheService.getScriptCache();
+
+  for (let i = 1; i < bData.length; i++) {
+    const plateKey = normalizePlateKey_(bData[i][1]);
+    if (!companyPlates[plateKey]) continue;
+    const startMs = parseTimeSafe_(bData[i][5]);
+    if (!startMs || startMs <= now) continue;
+    const diff = startMs - now;
+    if (diff > windowMs + 5 * 60 * 1000 || diff < windowMs - 5 * 60 * 1000) continue;
+    const bookingId = String(bData[i][0] || '');
+    const cacheKey = LINE_REMINDER_CACHE_PREFIX + bookingId;
+    if (cache.get(cacheKey) === '1') continue;
+    const booking = {
+      id: bookingId,
+      plate: bData[i][1],
+      name: bData[i][2],
+      surname: bData[i][3],
+      dept: bData[i][4],
+      start: bData[i][5],
+      end: bData[i][6],
+      dest: bData[i][7],
+      driver: bData[i][8],
+      contactPhone: bData[i][13] || ''
+    };
+    if (sendLineMessage_(formatBookingLineMessage_('REMINDER', booking))) {
+      cache.put(cacheKey, '1', 86400);
+    }
+  }
+}
+
+function dailyDeliverySummary() {
+  const ss = getSpreadsheet_();
+  setupDatabase();
+  const cfg = getLineConfig_();
+  if (!cfg.token || !cfg.groupId) return;
+  const companyPlates = getCompanyManagedPlates_(ss);
+  const bData = getSheetOrThrow_(ss, 'Bookings').getDataRange().getValues();
+  const tz = 'Asia/Bangkok';
+  const now = new Date();
+  const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  const targetKey = Utilities.formatDate(tomorrow, tz, 'yyyy-MM-dd');
+  const items = [];
+
+  for (let i = 1; i < bData.length; i++) {
+    const plateKey = normalizePlateKey_(bData[i][1]);
+    if (!companyPlates[plateKey]) continue;
+    const startMs = parseTimeSafe_(bData[i][5]);
+    if (!startMs) continue;
+    const startKey = Utilities.formatDate(new Date(startMs), tz, 'yyyy-MM-dd');
+    if (startKey !== targetKey) continue;
+    items.push({
+      startMs: startMs,
+      line: formatLineDateTime_(bData[i][5]) + ' ' + bData[i][1] + ' — ' +
+        String((bData[i][2] || '') + ' ' + (bData[i][3] || '')).trim() +
+        (bData[i][4] ? ' (' + bData[i][4] + ')' : '') + ' → ' + (bData[i][7] || '-')
+    });
+  }
+
+  if (!items.length) {
+    sendLineMessage_('📋 สรุปรายการส่งรถพรุ่งนี้\nไม่มีรายการส่งรถของบริษัท');
+    return;
+  }
+  items.sort(function (a, b) { return a.startMs - b.startMs; });
+  const body = ['📋 สรุปรายการส่งรถพรุ่งนี้ (' + items.length + ' คัน)']
+    .concat(items.map(function (item, idx) { return (idx + 1) + '. ' + item.line; }))
+    .join('\n');
+  sendLineMessage_(body);
 }
 
 function dailyExpiryCheck() {
@@ -970,8 +1625,9 @@ function dailyExpiryCheck() {
     });
   }
 }
-function quickUpdateMileage(id, plate, newMile, clientIp) {
+function quickUpdateMileage(id, plate, newMile, clientIp, token) {
   try {
+    requireMutationAccess_(token);
     const ss = getSpreadsheet_();
     const sheet = getSheetOrThrow_(ss, 'Vehicles');
     const data = sheet.getDataRange().getValues();

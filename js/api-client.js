@@ -115,6 +115,9 @@
   };
 
   window.apiCall = function (action, args, token) {
+    if (!token && typeof window.getEmdApiToken === 'function') {
+      token = window.getEmdApiToken(action) || '';
+    }
     return window.emdApiRequest(action, args, token);
   };
 

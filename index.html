@@ -234,6 +234,25 @@
     </div>
   </div>
 
+  <div id="login-gate" class="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/80 backdrop-blur-sm px-4">
+    <div class="bg-white dark:bg-slate-800 rounded-3xl p-8 w-full max-w-lg shadow-2xl border border-white/10">
+      <h2 class="text-2xl font-semibold text-center text-purple-600 dark:text-purple-400 mb-2">เข้าสู่ระบบ EMD CAR</h2>
+      <p class="text-sm text-slate-500 text-center mb-6">เลือกประเภทผู้ใช้งาน</p>
+      <div class="space-y-6">
+        <div class="rounded-2xl border border-purple-100 dark:border-slate-600 p-4">
+          <h3 class="font-medium text-purple-700 dark:text-purple-300 mb-2">กอง (จอง/ใช้งาน)</h3>
+          <button type="button" onclick="window.submitEmdLogin()" class="w-full bg-purple-500 hover:bg-purple-600 text-white py-2 rounded-xl transition">เข้าสู่ระบบกอง</button>
+        </div>
+        <div class="rounded-2xl border border-blue-100 dark:border-slate-600 p-4">
+          <h3 class="font-medium text-blue-700 dark:text-blue-300 mb-2">บริษัท (ดูอย่างเดียว)</h3>
+          <input type="text" id="gate-company-user" value="tc" placeholder="ชื่อผู้ใช้" class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600 mb-2">
+          <button type="button" onclick="window.submitCompanyLogin()" class="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 rounded-xl transition">เข้าดูข้อมูลบริษัท</button>
+        </div>
+      </div>
+      <p id="login-gate-error" class="text-red-500 text-sm text-center mt-4 hidden"></p>
+    </div>
+  </div>
+
   <div id="announcement-banner" class="hidden px-4 py-2 text-sm font-medium w-full overflow-hidden whitespace-nowrap">
     <div class="inline-block animate-marquee" id="banner-text-content"></div>
   </div>
@@ -242,12 +261,14 @@
     <div class="max-w-7xl mx-auto px-4 py-3 flex flex-col md:flex-row justify-between items-center gap-2">
       <h1 class="text-xl md:text-2xl font-semibold tracking-tight drop-shadow-sm">⚡️ EMD CAR 🚗</h1>
       <div class="space-x-2 flex items-center flex-wrap justify-center gap-y-2">
+        <span id="role-display" class="hidden md:inline text-sm emd-glass-chip px-3 py-1 rounded-full mr-2"></span>
         <span id="current-user-display" class="hidden md:inline text-sm emd-glass-chip px-3 py-1 rounded-full mr-2"></span>
-        <button id="btn-login" onclick="window.promptLogin()" class="bg-slate-600/80 hover:bg-slate-600 px-4 py-2 rounded-full text-sm font-medium transition shadow backdrop-blur-sm border border-white/10">🔐 Admin</button>
+        <button id="btn-session-logout" onclick="window.logoutSession()" class="hidden bg-amber-500 hover:bg-amber-600 px-4 py-2 rounded-full text-sm font-medium transition shadow">🚪 ออกจากระบบ</button>
+        <button id="btn-login" onclick="window.promptLogin()" class="hidden bg-slate-600/80 hover:bg-slate-600 px-4 py-2 rounded-full text-sm font-medium transition shadow backdrop-blur-sm border border-white/10">🔐 Admin</button>
         <button id="btn-settings" onclick="window.openAdminSettings()" class="hidden bg-blue-500 hover:bg-blue-600 px-4 py-2 rounded-full text-sm font-medium transition shadow">⚙️ ตั้งค่าระบบ</button>
         <button id="btn-logout" onclick="window.logoutAdmin()" class="hidden bg-red-500 hover:bg-red-600 px-4 py-2 rounded-full text-sm font-medium transition shadow">🚪 ออกจากระบบ</button>
         <button id="btn-add-car" onclick="window.openVehicleModal()" class="hidden bg-white/15 hover:bg-white/25 px-4 py-2 rounded-full text-sm font-medium transition border border-white/20 backdrop-blur-sm">+ เพิ่มรถใหม่</button>
-        <button onclick="window.openBookingModal()" class="emd-btn-primary px-4 py-2 rounded-full text-sm transition">📝 จองรถ</button>
+        <button id="btn-book" onclick="window.openBookingModal()" class="emd-btn-primary px-4 py-2 rounded-full text-sm transition">📝 จองรถ</button>
       </div>
     </div>
     <div class="emd-tab-bar flex justify-center space-x-6 pt-2 px-4 overflow-x-auto">
@@ -256,6 +277,7 @@
       <button onclick="switchTab('search')" id="tab-search" class="pb-2 px-2 hover:text-purple-600 transition whitespace-nowrap">🔍 ค้นหาประวัติ</button>
       <button onclick="switchTab('names')" id="tab-names" class="hidden pb-2 px-2 hover:text-purple-600 transition whitespace-nowrap">👥 รายชื่อ/แผนก</button>
       <button onclick="switchTab('vehicles')" id="tab-vehicles" class="hidden pb-2 px-2 hover:text-purple-600 transition whitespace-nowrap">🛠️ จัดการรถ</button>
+      <button onclick="switchTab('groups')" id="tab-groups" class="hidden pb-2 px-2 hover:text-purple-600 transition whitespace-nowrap">🏷️ กลุ่มงานรถ</button>
       <button onclick="switchTab('logs')" id="tab-logs" class="hidden pb-2 px-2 hover:text-purple-600 transition whitespace-nowrap">⚙️ Logs</button>
     </div>
   </nav>
@@ -263,8 +285,12 @@
   <main class="max-w-7xl mx-auto px-4 py-8 w-full">
     
     <div id="view-dashboard" class="space-y-8 block">
+      <div id="company-delivery-panel" class="hidden bg-blue-50 dark:bg-slate-800 border border-blue-200 dark:border-slate-600 rounded-2xl p-5">
+        <h2 class="text-xl font-semibold text-blue-600 dark:text-blue-400 mb-3">🚚 รายการส่งรถ (บริษัท)</h2>
+        <div id="company-delivery-content" class="text-sm space-y-2"></div>
+      </div>
       <h2 class="text-2xl font-semibold text-purple-500 dark:text-purple-400 border-b-2 border-purple-100 dark:border-purple-800 pb-2">🚙 รถในโครงการและสถานะปัจจุบัน</h2>
-      <div id="car-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"></div>
+      <div id="car-list-sections" class="space-y-2"></div>
 
       <h2 class="text-2xl font-semibold text-purple-500 dark:text-purple-400 border-b-2 border-purple-100 dark:border-purple-800 pb-2 mt-8">📊 ภาพรวมระบบ</h2>
       <div id="dashboard-overview" class="grid grid-cols-1 xl:grid-cols-12 gap-3 items-stretch min-w-0">
@@ -387,6 +413,24 @@
       </div>
     </div>
 
+    <div id="view-groups" class="hidden space-y-6">
+      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 border-b-2 border-purple-100 dark:border-purple-800 pb-3">
+        <h2 class="text-2xl font-semibold text-purple-500 dark:text-purple-400">🏷️ จัดการกลุ่มงานรถ</h2>
+        <button type="button" onclick="window.openVehicleGroupModal()" class="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-xl text-sm font-medium">+ เพิ่มกลุ่มงาน</button>
+      </div>
+      <p class="text-sm text-slate-500">กลุ่ม "ทุกงาน" เป็นค่าเริ่มต้น — กลุ่มอื่นกำหนดคำค้นแผนก/จุดหมายเพื่อให้จองรถเฉพาะงานได้</p>
+      <div class="overflow-x-auto bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700">
+        <table class="w-full text-left text-sm">
+          <thead class="bg-purple-50 dark:bg-slate-700 text-purple-700 dark:text-purple-300">
+            <tr><th class="p-3">ลำดับ</th><th class="p-3">ชื่อกลุ่ม</th><th class="p-3">คำค้นงาน (แผนก/จุดหมาย)</th><th class="p-3 text-right">จัดการ</th></tr>
+          </thead>
+          <tbody id="group-manager-results" class="divide-y divide-slate-100 dark:divide-slate-700">
+            <tr><td colspan="4" class="p-6 text-center text-slate-400">กรุณาเข้าสู่ระบบ Admin</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
   </main>
 
   <footer class="w-full text-center py-6 text-sm font-medium mt-auto">
@@ -415,6 +459,7 @@
 
         <div class="bg-purple-50 dark:bg-purple-900/20 p-4 rounded-xl space-y-4 border border-purple-100 dark:border-purple-800/30">
           <h4 class="text-sm font-semibold text-purple-700 dark:text-purple-400 mb-2">🚗 2. เลือกรถที่ว่าง</h4>
+          <p id="bk-plate-hint" class="text-xs text-slate-500 mb-2 hidden"></p>
           <div>
             <select id="bk-plate" onchange="window.updateCarImage()" required class="w-full px-3 py-2 rounded-lg border border-purple-200 outline-none dark:bg-slate-700 dark:border-slate-600">
               <option value="">-- กรุณาระบุเวลาด้านบนเพื่อค้นหารถ --</option>
@@ -444,20 +489,26 @@
               </label>
             </label>
             <div class="emd-combobox">
-              <input type="text" id="bk-dept" onfocus="window.showBookingCombobox('bk-dept')" required autocomplete="off" class="w-full px-3 py-2 rounded-lg border bg-slate-50 outline-none dark:bg-slate-700 dark:border-slate-600">
+              <input type="text" id="bk-dept" oninput="window.onBookingContextChanged()" onfocus="window.showBookingCombobox('bk-dept')" required autocomplete="off" class="w-full px-3 py-2 rounded-lg border bg-slate-50 outline-none dark:bg-slate-700 dark:border-slate-600">
               <div id="bk-dept-menu" class="emd-combobox-menu hidden" role="listbox"></div>
             </div>
           </div>
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div><label class="block text-sm font-medium mb-1">จุดหมาย</label><input type="text" id="bk-dest" required class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600"></div>
+          <div><label class="block text-sm font-medium mb-1">จุดหมาย</label><input type="text" id="bk-dest" oninput="window.onBookingContextChanged()" required class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600"></div>
           <div><label class="block text-sm font-medium mb-1">ผู้ขับขี่</label>
             <div class="emd-combobox">
               <input type="text" id="bk-driver" onfocus="window.showBookingCombobox('bk-driver')" required autocomplete="off" class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600">
               <div id="bk-driver-menu" class="emd-combobox-menu hidden" role="listbox"></div>
             </div>
           </div>
+        </div>
+
+        <div id="bk-phone-wrap" class="hidden bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl border border-blue-200 dark:border-blue-800/40">
+          <label class="block text-sm font-medium mb-1 text-blue-700 dark:text-blue-300">📞 เบอร์โทรติดต่อ <span class="text-red-500">*</span></label>
+          <input type="tel" id="bk-phone" inputmode="tel" autocomplete="tel" placeholder="08x-xxx-xxxx" class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600">
+          <p class="text-xs text-slate-500 mt-1">สำหรับบริษัทติดต่อเมื่อส่งรถ (รถโครงการเฉพาะ)</p>
         </div>
 
         <p class="text-xs text-center text-slate-500 dark:text-slate-400 -mt-2">อัปเดตไมล์หลังใช้รถได้ที่ <strong>ปฏิทิน</strong> → คลิกวันใช้รถ → ปุ่มอัปเดตเลขไมล์</p>
@@ -528,10 +579,35 @@
              <label class="block text-sm font-medium mb-1 text-blue-600 dark:text-blue-400">📌 หมายเหตุ / เหตุผลการปิด</label>
              <input type="text" id="vh-remarks" placeholder="เช่น แอร์ไม่เย็น, ส่งซ่อมศูนย์..." class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600">
            </div>
+           <div id="vh-managed-company-wrap" class="md:col-span-2">
+             <label class="flex items-center gap-2 cursor-pointer">
+               <input type="checkbox" id="vh-managed-company" class="rounded text-blue-500">
+               <span class="text-sm font-medium text-blue-700 dark:text-blue-300">เก็บ/ส่งโดยบริษัท (TC) — แจ้งเตือน LINE เมื่อมีการจอง</span>
+             </label>
+           </div>
+           <div id="vh-vehicle-group-wrap" class="md:col-span-2">
+             <label class="block text-sm font-medium mb-1 text-purple-700 dark:text-purple-300">กลุ่มงานที่จองได้</label>
+             <select id="vh-vehicle-group" class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600"></select>
+             <p class="text-xs text-slate-400 mt-1">เลือก "ทุกงาน" หรือกลุ่มเฉพาะ เช่น การประปา</p>
+           </div>
         </div>
 
         <button type="submit" id="vh-submit-btn" class="w-full bg-purple-500 hover:bg-purple-600 text-white font-medium py-3 rounded-xl mt-4 transition">บันทึกข้อมูลรถ</button>
         <button type="button" id="vh-delete-btn" onclick="window.deleteVehicleAction()" class="hidden w-full bg-red-500 hover:bg-red-600 text-white font-medium py-3 rounded-xl mt-2 transition">🗑️ ลบรถคันนี้ออกจากระบบ</button>
+      </form>
+    </div>
+  </div>
+
+  <div id="group-modal" class="fixed inset-0 bg-slate-900/60 hidden items-center justify-center z-50 px-4">
+    <div class="bg-white dark:bg-slate-800 rounded-3xl p-6 w-full max-w-md shadow-2xl relative border-t-4 border-purple-500">
+      <button onclick="window.closeModal('group-modal')" class="absolute top-4 right-4 text-slate-400 hover:text-purple-500 text-2xl">&times;</button>
+      <h3 class="text-xl font-semibold text-purple-600 dark:text-purple-400 mb-6 text-center" id="group-modal-title">เพิ่มกลุ่มงานรถ</h3>
+      <form id="group-form" onsubmit="window.submitVehicleGroup(event)" class="space-y-4">
+        <input type="hidden" id="vg-row"><input type="hidden" id="vg-id">
+        <div><label class="block text-sm font-medium mb-1">ชื่อกลุ่ม</label><input type="text" id="vg-name" required placeholder="เช่น งานการประปา" class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600"></div>
+        <div><label class="block text-sm font-medium mb-1">คำค้นงาน (คั่นด้วย comma)</label><input type="text" id="vg-keywords" placeholder="การประปา, ประปา, กปน" class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600"><p class="text-xs text-slate-400 mt-1">ใช้จับคู่จากแผนกหรือจุดหมายตอนจอง</p></div>
+        <div><label class="block text-sm font-medium mb-1">ลำดับแสดง</label><input type="number" id="vg-sort" min="1" value="10" class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600"></div>
+        <button type="submit" id="vg-submit-btn" class="w-full bg-purple-500 hover:bg-purple-600 text-white font-medium py-3 rounded-xl transition">บันทึกกลุ่ม</button>
       </form>
     </div>
   </div>
@@ -551,6 +627,14 @@
         <div>
           <label class="block text-sm font-medium mb-1">ข้อความประกาศที่วิ่งด้านบน</label>
           <textarea id="st-banner-text" rows="3" class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600"></textarea>
+        </div>
+        <div class="border-t border-slate-200 dark:border-slate-600 pt-4 mt-2">
+          <label class="block text-sm font-medium mb-1 text-green-700 dark:text-green-300">LINE Messaging API</label>
+          <p class="text-xs text-slate-500 mb-2">แจ้งเตือนกลุ่ม LINE เมื่อมีการจองรถที่ตั้งเป็น "เก็บ/ส่งโดยบริษัท"</p>
+          <input type="text" id="st-line-token" placeholder="Channel Access Token" class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600 mb-2 text-sm">
+          <input type="text" id="st-line-group" placeholder="Group ID" class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600 mb-2 text-sm">
+          <input type="number" id="st-line-reminder" min="5" max="480" placeholder="180" class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600 text-sm">
+          <p class="text-xs text-slate-400 mt-1">เตือนก่อนส่งรถ (นาที) — ค่าเริ่มต้น 180 (3 ชม.)</p>
         </div>
         <div class="border-t border-slate-200 dark:border-slate-600 pt-4 mt-2">
           <label class="block text-sm font-medium mb-1 text-orange-700 dark:text-orange-300">ยกเว้นแจ้งเตือนไมล์ (ไม่เด้งเตือนคนเหล่านี้)</label>
@@ -592,9 +676,12 @@
     function ensureFullCalendar() { return loadScriptOnce(EMD_FC_SRC); }
 
     let calendar;
-    let appData = { vehicles: [], bookings: [], names: [], logs: [], settings: {}, currentUserEmail: '' };
+    let appData = { vehicles: [], bookings: [], names: [], logs: [], settings: {}, vehicleGroups: [], currentUserEmail: '' };
     let isAdmin = false;
     let adminToken = '';
+    let userRole = null;
+    let sessionToken = '';
+    let isReadOnly = false;
     let nameManagerRows = [];
     let isCalendarInitialized = false;
     let isChartsRendered = false;
@@ -610,6 +697,8 @@
     const APP_CACHE_STALE_MS = 30 * 60 * 1000;
     const APP_CACHE_MAX_MS = 24 * 60 * 60 * 1000;
     const ADMIN_SESSION_STORAGE_KEY = 'emdcar_admin_token_v1';
+    const EMD_SESSION_STORAGE_KEY = 'emdcar_emd_token_v1';
+    const COMPANY_SESSION_STORAGE_KEY = 'emdcar_company_token_v1';
     let loadDataInflight = null;
     let loadDataSeq = 0;
     const escapeHtml = (value) => String(value || '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
@@ -1160,12 +1249,174 @@
       renderDashboardAvailabilityCard();
     };
 
-    window.onload = function() {
+    window.getEmdApiToken = function (action) {
+      const adminActions = ['verifyAdminLogin', 'verifyEmdLogin', 'verifyCompanyLogin', 'checkAdminSession', 'checkEmdSession', 'checkCompanySession'];
+      if (adminActions.indexOf(action) >= 0) return '';
+      if (isAdmin && adminToken) return adminToken;
+      return sessionToken || '';
+    };
+
+    function saveSessionToken(role, token) {
+      try {
+        if (role === 'EMD') sessionStorage.setItem(EMD_SESSION_STORAGE_KEY, token || '');
+        if (role === 'COMPANY') sessionStorage.setItem(COMPANY_SESSION_STORAGE_KEY, token || '');
+      } catch (e) {}
+    }
+
+    function readStoredSession() {
+      try {
+        const emd = sessionStorage.getItem(EMD_SESSION_STORAGE_KEY) || '';
+        const company = sessionStorage.getItem(COMPANY_SESSION_STORAGE_KEY) || '';
+        if (emd) return { role: 'EMD', token: emd };
+        if (company) return { role: 'COMPANY', token: company };
+      } catch (e) {}
+      return null;
+    }
+
+    function clearStoredSession() {
+      try {
+        sessionStorage.removeItem(EMD_SESSION_STORAGE_KEY);
+        sessionStorage.removeItem(COMPANY_SESSION_STORAGE_KEY);
+      } catch (e) {}
+    }
+
+    function showLoginGate(msg) {
+      const gate = document.getElementById('login-gate');
+      const err = document.getElementById('login-gate-error');
+      if (gate) gate.classList.remove('hidden');
+      if (err) {
+        if (msg) { err.textContent = msg; err.classList.remove('hidden'); }
+        else { err.classList.add('hidden'); err.textContent = ''; }
+      }
+      hideLoading();
+    }
+
+    function hideLoginGate() {
+      const gate = document.getElementById('login-gate');
+      if (gate) gate.classList.add('hidden');
+    }
+
+    function setRoleUiState() {
+      const isCompany = userRole === 'COMPANY';
+      isReadOnly = isCompany;
+      document.getElementById('btn-book').classList.toggle('hidden', isCompany || isReadOnly);
+      document.getElementById('btn-login').classList.toggle('hidden', isCompany);
+      document.getElementById('btn-session-logout').classList.toggle('hidden', !userRole);
+      document.getElementById('company-delivery-panel').classList.toggle('hidden', !isCompany);
+      const roleEl = document.getElementById('role-display');
+      if (roleEl) {
+        if (userRole === 'EMD') roleEl.textContent = '🏢 กอง';
+        else if (userRole === 'COMPANY') roleEl.textContent = '🏭 บริษัท (ดูอย่างเดียว)';
+        else if (isAdmin) roleEl.textContent = '🔐 Admin';
+        roleEl.classList.toggle('hidden', !userRole && !isAdmin);
+      }
+    }
+
+    function activateUserSession(role, token) {
+      userRole = role;
+      sessionToken = token || '';
+      saveSessionToken(role, sessionToken);
+      isReadOnly = role === 'COMPANY';
+      hideLoginGate();
+      setRoleUiState();
+      setAdminUiState(isAdmin);
+    }
+
+    window.logoutSession = function () {
+      userRole = null;
+      sessionToken = '';
+      isReadOnly = false;
+      clearStoredSession();
+      showLoginGate();
+    };
+
+    window.submitEmdLogin = function () {
+      apiCall('verifyEmdLogin', ['emd2']).then(function (res) {
+        if (res && res.success) {
+          activateUserSession('EMD', res.token);
+          loadData({ full: isAdmin });
+        } else {
+          showLoginGate((res && res.msg) || 'รหัสไม่ถูกต้อง');
+        }
+      }).catch(function (err) {
+        showLoginGate(err.message || 'เชื่อมต่อไม่สำเร็จ');
+      });
+    };
+
+    window.submitCompanyLogin = function () {
+      const user = (document.getElementById('gate-company-user') || {}).value || 'tc';
+      apiCall('verifyCompanyLogin', [user, '']).then(function (res) {
+        if (res && res.success) {
+          activateUserSession('COMPANY', res.token);
+          loadData({ full: false });
+        } else {
+          showLoginGate((res && res.msg) || 'เข้าสู่ระบบไม่สำเร็จ');
+        }
+      }).catch(function (err) {
+        showLoginGate(err.message || 'เชื่อมต่อไม่สำเร็จ');
+      });
+    };
+
+    function restoreUserSession() {
+      const stored = readStoredSession();
+      if (!stored) return Promise.resolve(false);
+      const checkAction = stored.role === 'COMPANY' ? 'checkCompanySession' : 'checkEmdSession';
+      return apiCall(checkAction, [stored.token], stored.token).then(function (res) {
+        if (res && res.success) {
+          userRole = stored.role;
+          sessionToken = stored.token;
+          isReadOnly = stored.role === 'COMPANY';
+          hideLoginGate();
+          setRoleUiState();
+          return true;
+        }
+        clearStoredSession();
+        return false;
+      }).catch(function () {
+        clearStoredSession();
+        return false;
+      });
+    }
+
+    function renderCompanyDeliveryPanel() {
+      const wrap = document.getElementById('company-delivery-content');
+      if (!wrap || userRole !== 'COMPANY') return;
+      const now = Date.now();
+      const dayMs = 24 * 60 * 60 * 1000;
+      const todayEnd = new Date();
+      todayEnd.setHours(23, 59, 59, 999);
+      const tomorrowEnd = new Date(todayEnd.getTime() + dayMs);
+      const upcoming = (appData.bookings || []).filter(function (b) {
+        const start = parseTimeSafe(b.start);
+        return start >= now && start <= tomorrowEnd.getTime();
+      }).sort(function (a, b) { return parseTimeSafe(a.start) - parseTimeSafe(b.start); });
+      if (!upcoming.length) {
+        wrap.innerHTML = '<p class="text-slate-500">ไม่มีรายการส่งรถวันนี้/พรุ่งนี้</p>';
+        return;
+      }
+      wrap.innerHTML = upcoming.map(function (b) {
+        const name = getBookingDisplayName(b);
+        return '<div class="p-2 rounded-lg bg-white/70 dark:bg-slate-700/50">' +
+          '<strong>' + escapeHtml(formatThaiDateTime(b.start)) + '</strong> — ' +
+          escapeHtml(b.plate) + ' · ' + escapeHtml(name) +
+          (b.dept ? ' (' + escapeHtml(b.dept) + ')' : '') +
+          ' → ' + escapeHtml(b.dest || '-') +
+          (b.contactPhone ? '<br><span class="text-blue-600">📞 ' + escapeHtml(b.contactPhone) + '</span>' : '') +
+          '</div>';
+      }).join('');
+    }
+
+    window.onload = async function() {
       showSkeletonState();
       ensureChartJs();
       resolveClientIpOnce();
       initBookingComboboxes();
-      restoreAdminSession();
+      const adminRestored = await restoreAdminSession();
+      const userRestored = await restoreUserSession();
+      if (!userRestored && !adminRestored) {
+        showLoginGate();
+        return;
+      }
       loadData({ full: isAdmin });
     };
 
@@ -1750,7 +2001,8 @@
       if(tabId === 'logs' && !isAdmin) return;
       if(tabId === 'vehicles' && !isAdmin) return;
       if(tabId === 'names' && !isAdmin) return;
-      ['dashboard', 'calendar', 'search', 'logs', 'names', 'vehicles'].forEach(id => {
+      if(tabId === 'groups' && !isAdmin) return;
+      ['dashboard', 'calendar', 'search', 'logs', 'names', 'vehicles', 'groups'].forEach(id => {
         document.getElementById('view-' + id).classList.add('hidden');
         document.getElementById('tab-' + id).classList.remove('tab-active');
       });
@@ -1771,6 +2023,8 @@
         renderVehicleManager();
       } else if (tabId === 'names') {
         refreshNameManager();
+      } else if (tabId === 'groups') {
+        refreshGroupManager();
       } else if (tabId === 'logs' && isAdmin) {
         loadLogsIfNeeded();
       }
@@ -1810,9 +2064,15 @@
       const fetchPromise = apiCall('getAppData', [includeLogs]);
       const tracked = fetchPromise.then(function (data) {
         if (seq !== loadDataSeq) return data;
+        if (data && data.requiresAuth) {
+          logoutSession();
+          throw new Error(data.msg || 'กรุณาเข้าสู่ระบบ');
+        }
         if (!data || !Array.isArray(data.vehicles)) {
           throw new Error('ข้อมูลจากเซิร์ฟเวอร์ไม่สมบูรณ์');
         }
+        if (data.role) userRole = data.role === 'ADMIN' ? (userRole || 'EMD') : data.role;
+        if (data.readOnly) isReadOnly = true;
         initApp(data, false);
         return data;
       }).catch(function (err) {
@@ -1843,6 +2103,7 @@
       appData.names = appData.names || [];
       appData.logs = appData.logs || [];
       appData.settings = appData.settings || {};
+      appData.vehicleGroups = appData.vehicleGroups || [];
       if (appData.currentUserEmail) document.getElementById('current-user-display').innerText = '👤 ' + appData.currentUserEmail;
       
       const bannerEl = document.getElementById('announcement-banner');
@@ -1850,6 +2111,9 @@
         document.getElementById('banner-text-content').innerText = appData.settings.bannerText;
         bannerEl.classList.remove('hidden');
       } else { bannerEl.classList.add('hidden'); }
+
+      appData.vehicleGroups = appData.vehicleGroups || [];
+      vehicleGroupRows = appData.vehicleGroups.slice();
 
       renderDashboard();
       renderCars(appData.vehicles);
@@ -1867,6 +2131,8 @@
       if (isAdmin) renderCharts();
       syncSearchReportDistanceColumn();
       if (!fromCache) writeCache(appData);
+      setRoleUiState();
+      renderCompanyDeliveryPanel();
       hideLoading();
     }
 
@@ -1890,6 +2156,7 @@
       document.getElementById('tab-logs').classList.toggle('hidden', !enabled);
       document.getElementById('tab-names').classList.toggle('hidden', !enabled);
       document.getElementById('tab-vehicles').classList.toggle('hidden', !enabled);
+      document.getElementById('tab-groups').classList.toggle('hidden', !enabled);
       document.getElementById('btn-export').classList.toggle('hidden', !enabled);
       document.getElementById('btn-export-pdf').classList.toggle('hidden', !enabled);
       document.getElementById('view-charts').classList.toggle('hidden', !enabled);
@@ -1902,10 +2169,12 @@
       adminToken = token || '';
       saveAdminSessionToken(adminToken);
       setAdminUiState(true);
+      setRoleUiState();
       renderCars(appData.vehicles);
       if (!isChartsRendered && options.renderCharts !== false) renderCharts();
       loadLogsIfNeeded();
       refreshNameManager();
+      refreshGroupManager();
       refreshSearchReportForAdmin();
     }
 
@@ -1915,6 +2184,7 @@
       nameManagerRows = [];
       clearAdminSessionToken();
       setAdminUiState(false);
+      setRoleUiState();
       renderCars(appData.vehicles);
       refreshSearchReportForAdmin();
       if (switchHome) switchTab('dashboard');
@@ -1922,14 +2192,20 @@
 
     function restoreAdminSession() {
       const token = readAdminSessionToken();
-      if (!token) return;
+      if (!token) return Promise.resolve(false);
       isAdmin = true;
       adminToken = token;
       setAdminUiState(true);
-      apiCall('checkAdminSession', [token], token).then(function (res) {
-        if (!res || !res.success) deactivateAdminSession(false);
+      return apiCall('checkAdminSession', [token], token).then(function (res) {
+        if (!res || !res.success) {
+          deactivateAdminSession(false);
+          return false;
+        }
+        hideLoginGate();
+        return true;
       }).catch(function () {
         deactivateAdminSession(false);
+        return false;
       });
     }
 
@@ -1949,6 +2225,7 @@
 
       if (formValues && formValues.success) {
         activateAdminSession(formValues.token || '');
+        hideLoginGate();
         loadData({ full: true, silent: true });
         Swal.fire({ icon: 'success', title: 'สำเร็จ', text: 'เข้าสู่ระบบ Admin แล้ว', timer: 1500, showConfirmButton: false });
       } else if (formValues && !formValues.success) {
@@ -1995,6 +2272,9 @@
     window.openAdminSettings = function() {
       document.getElementById('st-banner-status').value = appData.settings.bannerStatus || 'OFF';
       document.getElementById('st-banner-text').value = appData.settings.bannerText || '';
+      document.getElementById('st-line-token').value = appData.settings.lineChannelAccessToken || '';
+      document.getElementById('st-line-group').value = appData.settings.lineGroupId || '';
+      document.getElementById('st-line-reminder').value = appData.settings.lineReminderMinutes || 180;
       renderMileageExemptCheckboxes();
       document.getElementById('settings-modal').style.display = 'flex';
     };
@@ -2005,9 +2285,12 @@
       const obj = {
         status: document.getElementById('st-banner-status').value,
         text: document.getElementById('st-banner-text').value,
-        mileageReminderExempt: collectMileageExemptFromForm()
+        mileageReminderExempt: collectMileageExemptFromForm(),
+        lineChannelAccessToken: document.getElementById('st-line-token').value,
+        lineGroupId: document.getElementById('st-line-group').value,
+        lineReminderMinutes: document.getElementById('st-line-reminder').value || 180
       };
-      apiCall('saveAdminSettings', [obj]).then(res => {
+      apiCall('saveAdminSettings', [obj], adminToken).then(res => {
         showToast(res.msg, res.success); window.closeModal('settings-modal');
         reloadAfterMutation(); 
       }).catch(function () {}).finally(function () {
@@ -2200,127 +2483,187 @@
       renderCharts();
     };
 
-    function renderCars(vehicles) {
-      const container = document.getElementById('car-list');
-      let cardsHtml = '';
-      const now = new Date();
-      const nowTime = now.getTime(); // ประกาศรอบเดียวตรงนี้
-
-      vehicles.forEach(car => {
-        if (car.status === 'HIDDEN' && !isAdmin) return;
-        
-        // 1. เช็คว่ากำลังใช้งานอยู่หรือไม่ (ถึงเวลาจองแล้ว และยังไม่คืนรถ)
-        const currentBooking = appData.bookings.find(b => b.plate === car.plate && isBookingActiveNow(b, nowTime));
-
-        // 2. เช็คว่ามีการจองล่วงหน้าหรือไม่ (เอาเฉพาะคิวที่เวลายังมาไม่ถึง เรียงตามคิวที่ใกล้ที่สุด)
-        const upcomingBookings = appData.bookings.filter(b =>
-          b.plate === car.plate &&
-          parseTimeSafe(b.start) > nowTime &&
-          !bookingHasPostTripData(b)
-        ).sort((a, b) => parseTimeSafe(a.start) - parseTimeSafe(b.start));
-
-        // ดึงคิวแรกสุดที่กำลังจะมาถึง
-        const nextBooking = upcomingBookings.length > 0 ? upcomingBookings[0] : null;
-
-        let statusHtml = '';
-        let imgFilter = '';
-        let borderClass = "border-slate-100 dark:border-slate-700";
-
-        if (car.status === 'HIDDEN') {
-          statusHtml = `<div class="bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 p-3 rounded-xl mb-3 border border-slate-300 dark:border-slate-600"><p class="font-bold text-sm">👻 ถูกซ่อนอยู่ (เฉพาะ Admin เห็น)</p></div>`;
-          imgFilter = 'grayscale opacity-30';
-          borderClass = "border-slate-300 border-dashed border-2 opacity-70";
-        } else if (car.status === 'DISABLED') {
-          statusHtml = `<div class="bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 p-3 rounded-xl mb-3"><p class="font-bold text-sm">🔴 งดให้บริการ / ปิดจอง</p></div>`;
-          imgFilter = 'grayscale opacity-70';
-          borderClass = "border-red-300 dark:border-red-800 border-2 shadow-red-100 dark:shadow-red-900/20";
-        } else if (currentBooking) {
-          // สถานะ: กำลังใช้งาน
-          const tripDest = escapeHtml(currentBooking.dest || '-');
-          statusHtml = `<div class="bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-400 p-3 rounded-xl mb-3"><p class="font-bold text-sm">🚗 กำลังใช้งาน</p><p class="text-sm mt-1">${escapeHtml(getBookingDisplayName(currentBooking))} → <strong>${tripDest}</strong></p></div>`;
-          borderClass = "border-orange-300 dark:border-orange-800 border-2";
-        } else if (nextBooking) {
-          // สถานะ: ว่างตอนนี้ แต่มีคิวรอนำรถออก
-          const nextDate = new Date(parseTimeSafe(nextBooking.start));
-          const timeStr = formatThaiTime(nextDate);
-          const isToday = nextDate.toDateString() === now.toDateString();
-          const displayTime = isToday ? `วันนี้ ${timeStr} น.` : `${formatThaiDate(nextDate)} ${timeStr} น.`;
-          
-          const nextDest = escapeHtml(nextBooking.dest || '-');
-          statusHtml = `<div class="bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 p-3 rounded-xl mb-3"><p class="font-bold text-sm">⏳ รอนำรถออก (ถูกจองแล้ว)</p><p class="text-sm mt-1">คิวถัดไป: ${displayTime}</p><p class="text-xs mt-1">${escapeHtml(getBookingDisplayName(nextBooking))} → <strong>${nextDest}</strong></p></div>`;
-          borderClass = "border-blue-300 dark:border-blue-800 border-2";
-        } else {
-          const idleLabel = getCarIdleLabel(car.plate, nowTime);
-          statusHtml = `<div class="bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 p-3 rounded-xl mb-3"><p class="font-bold text-sm">🟢 ว่าง (${escapeHtml(idleLabel)})</p><p class="text-sm mt-1 truncate">จุดจอด: ${escapeHtml(car.parkingSpot || '-')}</p></div>`;
-        }
-
-        let actAlert = '';
-        if(car.actExpiry) {
-          const daysLeft = (new Date(car.actExpiry) - now) / (1000 * 60 * 60 * 24);
-          if(daysLeft <= 30 && daysLeft >= 0) actAlert = `<p class="text-xs text-orange-600 bg-orange-100 px-2 py-1 rounded mt-1 shadow">⚠️ พ.ร.บ. หมดใน ${Math.ceil(daysLeft)} วัน</p>`;
-          else if (daysLeft < 0) actAlert = `<p class="text-xs text-white bg-red-500 px-2 py-1 rounded mt-1 font-bold shadow">❌ พ.ร.บ. หมดอายุแล้ว!</p>`;
-        }
-
-        const mileDisplay = isAdmin
-          ? '<button onclick="window.promptEditMileage(\'' + car.id + '\', \'' + escapeHtml(car.plate) + '\', ' + car.currentMile + ')" class="font-bold text-purple-600 bg-purple-100 hover:bg-purple-200 dark:text-purple-300 dark:bg-purple-900/40 px-2 py-0.5 rounded cursor-pointer transition shadow-sm">' +
-            car.currentMile.toLocaleString() + ' ✏️</button>'
-          : '<span class="font-bold text-purple-600 dark:text-purple-300">' + car.currentMile.toLocaleString() + '</span>';
-        let serviceHtml = '<p class="text-sm text-slate-500 dark:text-slate-400 mb-1">ไมล์ล่าสุด: ' +
-            mileDisplay + ' / ' + car.serviceMile.toLocaleString() +
-          '</p>';
-
-        const svcInfo = getVehicleServiceInfo(car);
-        if (car.status === 'ACTIVE') {
-          serviceHtml += formatLastParkingUpdateLine(car, nowTime);
-        }
-        if (car.serviceMile > 0 && car.status === 'ACTIVE') {
-          if (svcInfo.isOverdue) {
-            serviceHtml += `<div class="mt-1 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded text-center">🚨 เลยระยะ Service แล้ว!</div>`;
-            borderClass = "border-red-500 border-2 shadow-red-100 shadow-md dark:shadow-red-900/20";
-          } else if (svcInfo.isWarning) {
-            serviceHtml += `<div class="mt-1 bg-orange-400 text-white text-xs font-bold px-2 py-1 rounded text-center">⚠️ ใกล้ครบ Service (เหลือ ${svcInfo.remaining.toLocaleString()} km)</div>`;
-            if(borderClass === "border-slate-100 dark:border-slate-700") borderClass = "border-orange-400 border-2";
-          }
-        }
-
-        let leaseHtml = '';
-        if (currentBooking) {
-          const returnDate = new Date(parseTimeSafe(currentBooking.end));
-          if (!isNaN(returnDate.getTime())) {
-            const diffDays = (returnDate - now) / (1000 * 60 * 60 * 24);
-            let returnAlert = '';
-            if (diffDays >= 0 && diffDays <= 1) {
-              returnAlert = `<span class="text-orange-600 bg-orange-100 px-1 rounded font-bold ml-1">ใกล้ถึงเวลา</span>`;
-            } else if (diffDays < 0) {
-              returnAlert = `<span class="text-white bg-red-500 px-1 rounded font-bold ml-1">เกินกำหนด</span>`;
-            }
-            leaseHtml = `<p class="text-xs text-blue-600 dark:text-blue-400 font-medium mt-1">📅 คืนรถ: ${formatThaiDateTime(returnDate)} น. ${returnAlert}</p>`;
-          }
-        }
-
-        let remarksHtml = car.remarks ? `<div class="mt-2 text-xs text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/20 p-2 rounded-lg border border-blue-100 dark:border-blue-800">📌 <b>หมายเหตุ:</b> ${escapeHtml(car.remarks)}</div>` : '';
-        if (car.status !== 'ACTIVE' && car.remarks) {
-            remarksHtml = `<div class="mt-2 text-xs text-red-700 dark:text-red-300 bg-red-100 dark:bg-red-900/30 p-2 rounded-lg border border-red-200 dark:border-red-800 font-bold">⚠️ เหตุผล: ${escapeHtml(car.remarks)}</div>`;
-        }
-
-        let settingBtn = '<button onclick="window.openVehicleModal(\'' + car.id + '\')" class="absolute top-2 right-2 bg-white/95 hover:bg-white text-purple-600 px-3 py-1 rounded-full shadow-md text-xs font-bold border border-purple-200 z-10 transition backdrop-blur-sm">อัปเดตข้อมูล</button>';
-
-        let carImageSrc = car.img;
-        if (!carImageSrc) carImageSrc = 'https://via.placeholder.com/400x200';
-        cardsHtml += '<div class="emd-car-card emd-panel bg-white dark:bg-slate-800 rounded-3xl overflow-hidden shadow-sm ' + borderClass + ' flex flex-col relative transition-colors">' +
-          settingBtn +
-          '<div class="relative bg-slate-100 dark:bg-slate-700">' +
-            '<img src="' + carImageSrc + '" loading="lazy" decoding="async" class="w-full h-48 object-cover transition duration-300 ' + imgFilter + '">' +
-            '<div class="absolute bottom-0 w-full p-2 bg-gradient-to-t from-black/60 to-transparent">' + actAlert + '</div>' +
-          '</div>' +
-          '<div class="p-5 flex-1 flex flex-col">' +
-            '<h3 class="text-xl font-semibold text-purple-900 dark:text-purple-300 mb-3">' + car.plate + ' <span class="text-xs font-normal text-slate-400">(' + car.type + ')</span></h3>' +
-            '<div class="car-card-status">' + statusHtml + '</div>' +
-            serviceHtml + leaseHtml + remarksHtml +
-          '</div>' +
-        '</div>';
+    function getSortedVehicleGroups() {
+      return (appData.vehicleGroups || []).slice().sort(function (a, b) {
+        return (a.sortOrder || 999) - (b.sortOrder || 999) || String(a.name).localeCompare(String(b.name), 'th');
       });
-      container.innerHTML = cardsHtml || '<div class="col-span-full text-center text-slate-400">ไม่พบรถในระบบ</div>';
+    }
+
+    function matchesGroupKeywords(dept, dest, keywords) {
+      const keys = (keywords || []).map(function (k) { return String(k || '').trim().toLowerCase(); }).filter(Boolean);
+      if (!keys.length) return false;
+      const haystack = (String(dept || '') + ' ' + String(dest || '')).toLowerCase();
+      return keys.some(function (k) { return haystack.indexOf(k) >= 0; });
+    }
+
+    function isCarBookableForCurrentContext(car) {
+      const groupId = car.vehicleGroup || 'ALL';
+      if (groupId === 'ALL') return true;
+      const group = (appData.vehicleGroups || []).find(function (g) { return g.id === groupId; });
+      if (!group) return false;
+      const deptEl = document.getElementById('bk-dept');
+      const destEl = document.getElementById('bk-dest');
+      const dept = deptEl ? deptEl.value : '';
+      const dest = destEl ? destEl.value : '';
+      return matchesGroupKeywords(dept, dest, group.keywords);
+    }
+
+    function populateVehicleGroupSelects() {
+      const sel = document.getElementById('vh-vehicle-group');
+      if (!sel) return;
+      const groups = getSortedVehicleGroups();
+      const allGroup = groups.find(function (g) { return g.id === 'ALL'; }) || { id: 'ALL', name: 'รถที่จองใช้ได้ทุกงาน' };
+      const restricted = groups.filter(function (g) { return g.id !== 'ALL'; });
+      sel.innerHTML = '<option value="ALL">' + escapeHtml(allGroup.name) + '</option>' +
+        restricted.map(function (g) {
+          return '<option value="' + escapeHtml(g.id) + '">' + escapeHtml(g.name) + '</option>';
+        }).join('');
+    }
+
+    function buildCarCardHtml(car) {
+      const now = new Date();
+      const nowTime = now.getTime();
+      if (car.status === 'HIDDEN' && !isAdmin) return '';
+
+      const currentBooking = appData.bookings.find(function (b) { return b.plate === car.plate && isBookingActiveNow(b, nowTime); });
+      const upcomingBookings = appData.bookings.filter(function (b) {
+        return b.plate === car.plate && parseTimeSafe(b.start) > nowTime && !bookingHasPostTripData(b);
+      }).sort(function (a, b) { return parseTimeSafe(a.start) - parseTimeSafe(b.start); });
+      const nextBooking = upcomingBookings.length > 0 ? upcomingBookings[0] : null;
+
+      let statusHtml = '';
+      let imgFilter = '';
+      let borderClass = 'border-slate-100 dark:border-slate-700';
+
+      if (car.status === 'HIDDEN') {
+        statusHtml = '<div class="bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 p-3 rounded-xl mb-3 border border-slate-300 dark:border-slate-600"><p class="font-bold text-sm">👻 ถูกซ่อนอยู่ (เฉพาะ Admin เห็น)</p></div>';
+        imgFilter = 'grayscale opacity-30';
+        borderClass = 'border-slate-300 border-dashed border-2 opacity-70';
+      } else if (car.status === 'DISABLED') {
+        statusHtml = '<div class="bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 p-3 rounded-xl mb-3"><p class="font-bold text-sm">🔴 งดให้บริการ / ปิดจอง</p></div>';
+        imgFilter = 'grayscale opacity-70';
+        borderClass = 'border-red-300 dark:border-red-800 border-2 shadow-red-100 dark:shadow-red-900/20';
+      } else if (currentBooking) {
+        const tripDest = escapeHtml(currentBooking.dest || '-');
+        statusHtml = '<div class="bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-400 p-3 rounded-xl mb-3"><p class="font-bold text-sm">🚗 กำลังใช้งาน</p><p class="text-sm mt-1">' + escapeHtml(getBookingDisplayName(currentBooking)) + ' → <strong>' + tripDest + '</strong></p></div>';
+        borderClass = 'border-orange-300 dark:border-orange-800 border-2';
+      } else if (nextBooking) {
+        const nextDate = new Date(parseTimeSafe(nextBooking.start));
+        const timeStr = formatThaiTime(nextDate);
+        const isToday = nextDate.toDateString() === now.toDateString();
+        const displayTime = isToday ? ('วันนี้ ' + timeStr + ' น.') : (formatThaiDate(nextDate) + ' ' + timeStr + ' น.');
+        const nextDest = escapeHtml(nextBooking.dest || '-');
+        statusHtml = '<div class="bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 p-3 rounded-xl mb-3"><p class="font-bold text-sm">⏳ รอนำรถออก (ถูกจองแล้ว)</p><p class="text-sm mt-1">คิวถัดไป: ' + displayTime + '</p><p class="text-xs mt-1">' + escapeHtml(getBookingDisplayName(nextBooking)) + ' → <strong>' + nextDest + '</strong></p></div>';
+        borderClass = 'border-blue-300 dark:border-blue-800 border-2';
+      } else {
+        const idleLabel = getCarIdleLabel(car.plate, nowTime);
+        statusHtml = '<div class="bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 p-3 rounded-xl mb-3"><p class="font-bold text-sm">🟢 ว่าง (' + escapeHtml(idleLabel) + ')</p><p class="text-sm mt-1 truncate">จุดจอด: ' + escapeHtml(car.parkingSpot || '-') + '</p></div>';
+      }
+
+      let actAlert = '';
+      if (car.actExpiry) {
+        const daysLeft = (new Date(car.actExpiry) - now) / (1000 * 60 * 60 * 24);
+        if (daysLeft <= 30 && daysLeft >= 0) actAlert = '<p class="text-xs text-orange-600 bg-orange-100 px-2 py-1 rounded mt-1 shadow">⚠️ พ.ร.บ. หมดใน ' + Math.ceil(daysLeft) + ' วัน</p>';
+        else if (daysLeft < 0) actAlert = '<p class="text-xs text-white bg-red-500 px-2 py-1 rounded mt-1 font-bold shadow">❌ พ.ร.บ. หมดอายุแล้ว!</p>';
+      }
+
+      const mileDisplay = isAdmin
+        ? '<button onclick="window.promptEditMileage(\'' + car.id + '\', \'' + escapeHtml(car.plate) + '\', ' + car.currentMile + ')" class="font-bold text-purple-600 bg-purple-100 hover:bg-purple-200 dark:text-purple-300 dark:bg-purple-900/40 px-2 py-0.5 rounded cursor-pointer transition shadow-sm">' + car.currentMile.toLocaleString() + ' ✏️</button>'
+        : '<span class="font-bold text-purple-600 dark:text-purple-300">' + car.currentMile.toLocaleString() + '</span>';
+      let serviceHtml = '<p class="text-sm text-slate-500 dark:text-slate-400 mb-1">ไมล์ล่าสุด: ' + mileDisplay + ' / ' + car.serviceMile.toLocaleString() + '</p>';
+      const svcInfo = getVehicleServiceInfo(car);
+      if (car.status === 'ACTIVE') serviceHtml += formatLastParkingUpdateLine(car, nowTime);
+      if (car.serviceMile > 0 && car.status === 'ACTIVE') {
+        if (svcInfo.isOverdue) {
+          serviceHtml += '<div class="mt-1 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded text-center">🚨 เลยระยะ Service แล้ว!</div>';
+          borderClass = 'border-red-500 border-2 shadow-red-100 shadow-md dark:shadow-red-900/20';
+        } else if (svcInfo.isWarning) {
+          serviceHtml += '<div class="mt-1 bg-orange-400 text-white text-xs font-bold px-2 py-1 rounded text-center">⚠️ ใกล้ครบ Service (เหลือ ' + svcInfo.remaining.toLocaleString() + ' km)</div>';
+          if (borderClass === 'border-slate-100 dark:border-slate-700') borderClass = 'border-orange-400 border-2';
+        }
+      }
+
+      let leaseHtml = '';
+      if (currentBooking) {
+        const returnDate = new Date(parseTimeSafe(currentBooking.end));
+        if (!isNaN(returnDate.getTime())) {
+          const diffDays = (returnDate - now) / (1000 * 60 * 60 * 24);
+          let returnAlert = '';
+          if (diffDays >= 0 && diffDays <= 1) returnAlert = '<span class="text-orange-600 bg-orange-100 px-1 rounded font-bold ml-1">ใกล้ถึงเวลา</span>';
+          else if (diffDays < 0) returnAlert = '<span class="text-white bg-red-500 px-1 rounded font-bold ml-1">เกินกำหนด</span>';
+          leaseHtml = '<p class="text-xs text-blue-600 dark:text-blue-400 font-medium mt-1">📅 คืนรถ: ' + formatThaiDateTime(returnDate) + ' น. ' + returnAlert + '</p>';
+        }
+      }
+
+      let remarksHtml = car.remarks ? '<div class="mt-2 text-xs text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-900/20 p-2 rounded-lg border border-blue-100 dark:border-blue-800">📌 <b>หมายเหตุ:</b> ' + escapeHtml(car.remarks) + '</div>' : '';
+      if (car.status !== 'ACTIVE' && car.remarks) {
+        remarksHtml = '<div class="mt-2 text-xs text-red-700 dark:text-red-300 bg-red-100 dark:bg-red-900/30 p-2 rounded-lg border border-red-200 dark:border-red-800 font-bold">⚠️ เหตุผล: ' + escapeHtml(car.remarks) + '</div>';
+      }
+
+      let settingBtn = isReadOnly ? '' : '<button onclick="window.openVehicleModal(\'' + car.id + '\')" class="absolute top-2 right-2 bg-white/95 hover:bg-white text-purple-600 px-3 py-1 rounded-full shadow-md text-xs font-bold border border-purple-200 z-10 transition backdrop-blur-sm">อัปเดตข้อมูล</button>';
+      if (car.managedBy === 'COMPANY' && !isReadOnly) {
+        settingBtn += '<span class="absolute top-2 left-2 bg-blue-500 text-white px-2 py-0.5 rounded-full text-xs font-bold z-10">TC</span>';
+      }
+      const groupBadge = (car.vehicleGroup && car.vehicleGroup !== 'ALL')
+        ? (function () {
+            const g = (appData.vehicleGroups || []).find(function (x) { return x.id === car.vehicleGroup; });
+            return '<span class="absolute top-10 left-2 bg-amber-500 text-white px-2 py-0.5 rounded-full text-xs font-bold z-10">' + escapeHtml(g ? g.name : car.vehicleGroup) + '</span>';
+          })()
+        : '';
+
+      let carImageSrc = car.img || 'https://via.placeholder.com/400x200';
+      return '<div class="emd-car-card emd-panel bg-white dark:bg-slate-800 rounded-3xl overflow-hidden shadow-sm ' + borderClass + ' flex flex-col relative transition-colors">' +
+        settingBtn + groupBadge +
+        '<div class="relative bg-slate-100 dark:bg-slate-700">' +
+          '<img src="' + carImageSrc + '" loading="lazy" decoding="async" class="w-full h-48 object-cover transition duration-300 ' + imgFilter + '">' +
+          '<div class="absolute bottom-0 w-full p-2 bg-gradient-to-t from-black/60 to-transparent">' + actAlert + '</div>' +
+        '</div>' +
+        '<div class="p-5 flex-1 flex flex-col">' +
+          '<h3 class="text-xl font-semibold text-purple-900 dark:text-purple-300 mb-3">' + car.plate + ' <span class="text-xs font-normal text-slate-400">(' + car.type + ')</span></h3>' +
+          '<div class="car-card-status">' + statusHtml + '</div>' +
+          serviceHtml + leaseHtml + remarksHtml +
+        '</div>' +
+      '</div>';
+    }
+
+    function renderCarGroupSection(title, subtitle, cars) {
+      const cards = (cars || []).map(buildCarCardHtml).filter(Boolean).join('');
+      return '<section class="mb-10 space-y-4">' +
+        '<div class="border-b border-purple-100 dark:border-purple-800 pb-2">' +
+          '<h3 class="text-lg font-semibold text-purple-600 dark:text-purple-400">' + escapeHtml(title) + '</h3>' +
+          (subtitle ? '<p class="text-xs text-slate-500 mt-1">' + escapeHtml(subtitle) + '</p>' : '') +
+        '</div>' +
+        '<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">' +
+          (cards || '<p class="col-span-full text-center text-slate-400 text-sm py-6">ไม่มีรถในกลุ่มนี้</p>') +
+        '</div>' +
+      '</section>';
+    }
+
+    function renderCars(vehicles) {
+      const container = document.getElementById('car-list-sections');
+      if (!container) return;
+      populateVehicleGroupSelects();
+
+      const allCars = vehicles.filter(function (v) { return (v.vehicleGroup || 'ALL') === 'ALL'; });
+      const restrictedGroups = getSortedVehicleGroups().filter(function (g) { return g.id !== 'ALL'; });
+
+      let html = renderCarGroupSection(
+        '1. รถที่จองใช้ได้ทุกงาน',
+        'จองได้ทุกแผนก/ทุกงาน',
+        allCars
+      );
+
+      restrictedGroups.forEach(function (group, idx) {
+        const groupCars = vehicles.filter(function (v) { return v.vehicleGroup === group.id; });
+        const kwText = (group.keywords || []).join(', ');
+        html += renderCarGroupSection(
+          (idx + 2) + '. รถที่จองเฉพาะใช้ใน' + group.name + 'เท่านั้น',
+          kwText ? ('จองได้เมื่อแผนก/จุดหมายมีคำ: ' + kwText) : '',
+          groupCars
+        );
+      });
+
+      container.innerHTML = html || '<p class="text-center text-slate-400">ไม่พบรถในระบบ</p>';
     }
 
     function applyCalendarScrollMode(viewType) {
@@ -2377,9 +2720,14 @@
               <p><strong>จุดจอดหลังใช้งาน:</strong> ${b.parkingSpot || '-'}</p>
             </div>
           ` : '';
-          const mileageUpdateButtonHtml = hasPostTripData ? '' : `
+          const mileageUpdateButtonHtml = (hasPostTripData || isReadOnly) ? '' : `
             <button type="button" onclick="window.openMileageUpdateModal('${escapeHtml(b.id)}')" class="mt-4 w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3 rounded-xl shadow-md transition">
               📍 อัปเดตเลขไมล์หลังใช้งาน
+            </button>
+          `;
+          const editBookingButtonHtml = isReadOnly ? '' : `
+            <button type="button" onclick="window.openBookingModal('${escapeHtml(b.id)}')" class="mt-2 w-full bg-purple-500 hover:bg-purple-600 text-white font-medium py-3 rounded-xl shadow-md transition">
+              ✏️ แก้ไขการจอง / ยกเลิก
             </button>
           `;
 
@@ -2391,15 +2739,14 @@
             </div>
             <p><strong>แผนก:</strong> ${escapeHtml(b.dept || '-')}</p>
             <p><strong>ผู้ขับขี่:</strong> ${formatUserNameColored(b.driver || b)}</p>
+            ${b.contactPhone ? '<p><strong>📞 ติดต่อ:</strong> ' + escapeHtml(b.contactPhone) + '</p>' : ''}
             <div class="bg-slate-50 dark:bg-slate-700 p-3 rounded-xl mt-3 space-y-2 text-slate-700 dark:text-slate-300">
               <p><strong>🕒 เริ่ม:</strong> <br>${formatThaiDateTime(b.start)}</p>
               <p><strong>🏁 สิ้นสุด:</strong> <br>${formatThaiDateTime(b.end)}</p>
             </div>
             ${returnInfoHtml}
             ${mileageUpdateButtonHtml}
-            <button type="button" onclick="window.openBookingModal('${escapeHtml(b.id)}')" class="mt-2 w-full bg-purple-500 hover:bg-purple-600 text-white font-medium py-3 rounded-xl shadow-md transition">
-              ✏️ แก้ไขการจอง / ยกเลิก
-            </button>
+            ${editBookingButtonHtml}
           `;
         }
       });
@@ -3182,6 +3529,122 @@
       });
     };
 
+    let vehicleGroupRows = [];
+
+    function applyVehicleGroupRows(rows) {
+      vehicleGroupRows = Array.isArray(rows) ? rows.slice() : [];
+      appData.vehicleGroups = vehicleGroupRows.slice();
+      populateVehicleGroupSelects();
+      renderGroupManager();
+      renderCars(appData.vehicles);
+    }
+
+    function refreshGroupManager() {
+      if (!isAdmin || !adminToken) return;
+      const tbody = document.getElementById('group-manager-results');
+      if (tbody) tbody.innerHTML = '<tr><td colspan="4" class="p-6 text-center text-slate-400">กำลังโหลดกลุ่ม...</td></tr>';
+      apiCall('getVehicleGroupManagementData', [], adminToken).then(function (res) {
+        if (!res.success) {
+          if (tbody) tbody.innerHTML = '<tr><td colspan="4" class="p-6 text-center text-red-500">' + escapeHtml(res.msg || 'โหลดไม่สำเร็จ') + '</td></tr>';
+          return;
+        }
+        applyVehicleGroupRows(res.groups || []);
+      }).catch(function (err) {
+        if (tbody) tbody.innerHTML = '<tr><td colspan="4" class="p-6 text-center text-red-500">' + escapeHtml(err.message || 'โหลดไม่สำเร็จ') + '</td></tr>';
+      });
+    }
+
+    function renderGroupManager() {
+      const tbody = document.getElementById('group-manager-results');
+      if (!tbody) return;
+      if (!isAdmin) {
+        tbody.innerHTML = '<tr><td colspan="4" class="p-6 text-center text-slate-400">กรุณาเข้าสู่ระบบ Admin</td></tr>';
+        return;
+      }
+      const rows = vehicleGroupRows.slice().sort(function (a, b) { return (a.sortOrder || 999) - (b.sortOrder || 999); });
+      if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="4" class="p-6 text-center text-slate-400">ไม่มีกลุ่ม</td></tr>';
+        return;
+      }
+      tbody.innerHTML = rows.map(function (g) {
+        const kw = (g.keywords || []).join(', ') || '-';
+        const actions = g.isSystem || g.id === 'ALL'
+          ? '<span class="text-xs text-slate-400">ระบบ</span>'
+          : '<button type="button" onclick="window.openVehicleGroupModal(' + g.row + ')" class="px-3 py-1 rounded-lg bg-blue-500 hover:bg-blue-600 text-white text-xs mr-1">แก้ไข</button>' +
+            '<button type="button" onclick="window.deleteVehicleGroupAction(' + g.row + ')" class="px-3 py-1 rounded-lg bg-red-500 hover:bg-red-600 text-white text-xs">ลบ</button>';
+        return '<tr class="dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50">' +
+          '<td class="p-3 text-center">' + escapeHtml(String(g.sortOrder || '-')) + '</td>' +
+          '<td class="p-3 font-medium">' + escapeHtml(g.name) + (g.id === 'ALL' ? ' <span class="text-xs text-purple-500">(ทุกงาน)</span>' : '') + '</td>' +
+          '<td class="p-3 text-sm text-slate-500">' + escapeHtml(kw) + '</td>' +
+          '<td class="p-3 text-right">' + actions + '</td></tr>';
+      }).join('');
+    }
+
+    window.openVehicleGroupModal = function (row) {
+      if (!isAdmin || !adminToken) return;
+      const item = row ? vehicleGroupRows.find(function (g) { return g.row === row; }) : null;
+      document.getElementById('group-form').reset();
+      document.getElementById('vg-row').value = item ? item.row : '';
+      document.getElementById('vg-id').value = item ? item.id : '';
+      document.getElementById('vg-name').value = item ? item.name : '';
+      document.getElementById('vg-keywords').value = item ? (item.keywords || []).join(', ') : '';
+      document.getElementById('vg-sort').value = item ? (item.sortOrder || 10) : 10;
+      document.getElementById('group-modal-title').innerText = item ? 'แก้ไขกลุ่มงานรถ' : 'เพิ่มกลุ่มงานรถ';
+      document.getElementById('group-modal').style.display = 'flex';
+    };
+
+    window.submitVehicleGroup = function (e) {
+      e.preventDefault();
+      if (!isAdmin || !adminToken) return;
+      const btn = document.getElementById('vg-submit-btn');
+      btn.disabled = true;
+      btn.innerText = 'กำลังบันทึก...';
+      const obj = {
+        row: document.getElementById('vg-row').value,
+        id: document.getElementById('vg-id').value,
+        name: document.getElementById('vg-name').value,
+        keywords: document.getElementById('vg-keywords').value,
+        sortOrder: document.getElementById('vg-sort').value
+      };
+      apiCall('saveVehicleGroup', [obj], adminToken).then(function (res) {
+        showToast(res.msg, res.success);
+        if (res.success) {
+          window.closeModal('group-modal');
+          applyVehicleGroupRows(res.groups || vehicleGroupRows);
+        } else {
+          Swal.fire('ผิดพลาด', res.msg, 'error');
+        }
+      }).catch(function (err) {
+        Swal.fire('ผิดพลาด', err.message || 'บันทึกไม่สำเร็จ', 'error');
+      }).finally(function () {
+        btn.disabled = false;
+        btn.innerText = 'บันทึกกลุ่ม';
+      });
+    };
+
+    window.deleteVehicleGroupAction = async function (row) {
+      if (!isAdmin || !adminToken) return;
+      const item = vehicleGroupRows.find(function (g) { return g.row === row; });
+      if (!item || item.id === 'ALL') return;
+      const confirmed = await Swal.fire({
+        title: 'ลบกลุ่มนี้?',
+        text: item.name + ' — รถในกลุ่มจะย้ายกลับเป็น "ทุกงาน"',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#ef4444',
+        confirmButtonText: 'ลบ',
+        cancelButtonText: 'ยกเลิก'
+      });
+      if (!confirmed.isConfirmed) return;
+      apiCall('deleteVehicleGroup', [row], adminToken).then(function (res) {
+        showToast(res.msg, res.success);
+        if (res.success) applyVehicleGroupRows(res.groups || []);
+        else Swal.fire('ผิดพลาด', res.msg, 'error');
+      }).catch(function (err) {
+        Swal.fire('ผิดพลาด', err.message || 'ลบไม่สำเร็จ', 'error');
+      });
+    };
+
     function populateSearchMonthOptions(bookings) {
       const monthSet = new Set();
       bookings.forEach(b => {
@@ -3234,6 +3697,22 @@
       }
     };
 
+    function requiresBookingPhoneForPlate(plate) {
+      const car = (appData.vehicles || []).find(function (v) { return v.plate === plate; });
+      return car && (car.vehicleGroup || 'ALL') !== 'ALL';
+    }
+
+    function syncBookingPhoneField() {
+      const wrap = document.getElementById('bk-phone-wrap');
+      const input = document.getElementById('bk-phone');
+      const plate = document.getElementById('bk-plate').value;
+      if (!wrap || !input) return;
+      const needPhone = requiresBookingPhoneForPlate(plate);
+      wrap.classList.toggle('hidden', !needPhone);
+      input.required = needPhone;
+      if (!needPhone) input.value = '';
+    }
+
     window.updateCarImage = function() {
       const car = appData.vehicles.find(v => v.plate === document.getElementById('bk-plate').value);
       const img = document.getElementById('bk-car-img');
@@ -3255,12 +3734,44 @@
           remarksEl.classList.add('hidden');
         }
       }
+      syncBookingPhoneField();
     };
+
+    window.onBookingContextChanged = function () {
+      const startEl = document.getElementById('bk-start');
+      const endEl = document.getElementById('bk-end');
+      if (startEl && endEl && startEl.value && endEl.value) {
+        window.filterAvailableCars();
+      }
+    };
+
+    function getVehicleGroupLabel(car) {
+      const groupId = car.vehicleGroup || 'ALL';
+      const groups = appData.vehicleGroups || [];
+      const found = groups.find(function (g) { return g.id === groupId; });
+      if (found) return found.name;
+      return groupId === 'ALL' ? 'ทุกงาน' : groupId;
+    }
+
+    function sortVehiclesForBookingDropdown(cars) {
+      return cars.slice().sort(function (a, b) {
+        const aAll = (a.vehicleGroup || 'ALL') === 'ALL' ? 0 : 1;
+        const bAll = (b.vehicleGroup || 'ALL') === 'ALL' ? 0 : 1;
+        if (aAll !== bAll) return aAll - bAll;
+        const ga = (appData.vehicleGroups || []).find(function (g) { return g.id === (a.vehicleGroup || 'ALL'); });
+        const gb = (appData.vehicleGroups || []).find(function (g) { return g.id === (b.vehicleGroup || 'ALL'); });
+        const sa = ga ? (ga.sortOrder || 999) : 0;
+        const sb = gb ? (gb.sortOrder || 999) : 0;
+        if (sa !== sb) return sa - sb;
+        return String(a.plate).localeCompare(String(b.plate), 'th');
+      });
+    }
 
     window.filterAvailableCars = function() {
       const startEl = document.getElementById('bk-start').value;
       const endEl = document.getElementById('bk-end').value;
       const plateSelect = document.getElementById('bk-plate');
+      const hintEl = document.getElementById('bk-plate-hint');
       const currentId = document.getElementById('bk-id').value; 
       const submitBtn = document.getElementById('bk-submit-btn');
 
@@ -3271,6 +3782,7 @@
 
       if (!startEl || !endEl) {
          plateSelect.innerHTML = '<option value="">-- กรุณาระบุเวลาด้านบนเพื่อค้นหารถ --</option>';
+         if (hintEl) { hintEl.classList.add('hidden'); hintEl.textContent = ''; }
          submitBtn.disabled = true; return;
       }
       
@@ -3279,17 +3791,15 @@
 
       if (sTime >= eTime) {
          plateSelect.innerHTML = '<option value="">-- ⚠️ เวลาเริ่ม-สิ้นสุดไม่ถูกต้อง --</option>';
+         if (hintEl) { hintEl.classList.add('hidden'); hintEl.textContent = ''; }
          submitBtn.disabled = true; return;
       }
 
-      let availableVehicles = appData.vehicles.filter(car => {
+      let availableVehicles = appData.vehicles.filter(function (car) {
          if(car.status !== 'ACTIVE') return false; 
-         const isOverlap = appData.bookings.some(b => {
+         const isOverlap = appData.bookings.some(function (b) {
             if (String(b.plate).trim() !== String(car.plate).trim() || String(b.id).trim() === String(currentId).trim()) return false;
-            
-            // ✨ แก้ไขจุดสำคัญ: ถ้ารถคันนี้ถูกคืนแล้ว (มีเลขไมล์จบ > 0) ให้ถือว่าคิวนี้สิ้นสุดแล้ว ให้คนอื่นจองต่อได้เลย
             if (bookingHasPostTripData(b)) return false;
-
             const bStart = parseTimeSafe(b.start);
             const bEnd = parseTimeSafe(b.end);
             return (sTime < bEnd && eTime > bStart);
@@ -3297,13 +3807,40 @@
          return !isOverlap;
       });
 
-      if (availableVehicles.length === 0) {
+      const sorted = sortVehiclesForBookingDropdown(availableVehicles);
+      let hasBookable = false;
+      let html = '<option value="">-- เลือกรถที่ว่าง --</option>';
+
+      sorted.forEach(function (v) {
+        const groupLabel = getVehicleGroupLabel(v);
+        const label = escapeHtml(v.plate) + ' (' + escapeHtml(groupLabel) + ')';
+        if (isCarBookableForCurrentContext(v)) {
+          html += '<option value="' + escapeHtml(v.plate) + '">' + label + '</option>';
+          hasBookable = true;
+        } else {
+          html += '<option value="" disabled>' + label + '</option>';
+        }
+      });
+
+      if (!availableVehicles.length) {
          plateSelect.innerHTML = '<option value="">❌ ไม่มีรถว่างในช่วงเวลานี้</option>';
+         if (hintEl) { hintEl.classList.add('hidden'); hintEl.textContent = ''; }
+         submitBtn.disabled = true;
+      } else if (!hasBookable) {
+         plateSelect.innerHTML = html;
+         if (hintEl) {
+           hintEl.textContent = '⚠️ กรอกแผนก/จุดหมายให้ตรงงานเพื่อเลือกรถเฉพาะกลุ่ม (เช่น การประปา)';
+           hintEl.classList.remove('hidden');
+         }
          submitBtn.disabled = true;
       } else {
-         plateSelect.innerHTML = '<option value="">-- เลือกรถที่ว่าง --</option>' + availableVehicles.map(v => `<option value="${v.plate}">${v.plate}</option>`).join('');
+         plateSelect.innerHTML = html;
+         if (hintEl) {
+           hintEl.textContent = 'รถกลุ่มเฉพาะงานจะเลือกได้เมื่อแผนก/จุดหมายตรงกับงานนั้น';
+           hintEl.classList.remove('hidden');
+         }
          submitBtn.disabled = false;
-         if (prevSelected && availableVehicles.some(v => v.plate === prevSelected)) {
+         if (prevSelected && availableVehicles.some(function (v) { return v.plate === prevSelected && isCarBookableForCurrentContext(v); })) {
              plateSelect.value = prevSelected;
          }
       }
@@ -3394,6 +3931,10 @@
     };
 
     window.openBookingModal = function(id) {
+      if (isReadOnly || userRole === 'COMPANY') {
+        Swal.fire('ไม่มีสิทธิ์', 'บริษัทมีสิทธิ์ดูข้อมูลอย่างเดียว', 'info');
+        return;
+      }
       id = (typeof id === 'undefined') ? null : id;
       document.getElementById('booking-form').reset(); 
       document.getElementById('bk-id').value = '';
@@ -3411,6 +3952,8 @@
 
       window.toggleDept();
       document.getElementById('bk-plate').innerHTML = '<option value="">-- กรุณาระบุเวลาด้านบนเพื่อค้นหารถ --</option>';
+      document.getElementById('bk-phone').value = '';
+      syncBookingPhoneField();
       document.getElementById('bk-submit-btn').disabled = true;
 
       const fpStart = document.getElementById('bk-start')._flatpickr;
@@ -3428,6 +3971,7 @@
           document.getElementById('bk-dept').value = bk.dept || '';
           document.getElementById('bk-dest').value = bk.dest || '';
           document.getElementById('bk-driver').value = bk.driver || '';
+          document.getElementById('bk-phone').value = bk.contactPhone || '';
           document.getElementById('bk-start-mile').value = bk.startMile || '';
           document.getElementById('bk-end-mile').value = bk.endMile || '';
           const carData = appData.vehicles.find(v => String(v.plate).trim() === String(bk.plate).trim());
@@ -3501,7 +4045,19 @@
       const isReadonly = !isAdmin;
       document.getElementById('vh-plate').readOnly = isReadonly;
       document.getElementById('vh-type').disabled = isReadonly;
-      document.getElementById('vh-is-active').disabled = isReadonly; 
+      document.getElementById('vh-is-active').disabled = isReadonly;
+      populateVehicleGroupSelects();
+      const groupSel = document.getElementById('vh-vehicle-group');
+      if (groupSel) {
+        groupSel.disabled = isReadonly;
+        document.getElementById('vh-vehicle-group-wrap').classList.toggle('hidden', isReadonly);
+      }
+      const managedCb = document.getElementById('vh-managed-company');
+      if (managedCb) {
+        managedCb.checked = false;
+        managedCb.disabled = isReadonly;
+        managedCb.closest('#vh-managed-company-wrap').classList.toggle('hidden', isReadonly);
+      }
       document.getElementById('img-upload-div').style.display = isReadonly ? 'none' : 'block';
 
       if(isReadonly) {
@@ -3531,6 +4087,8 @@
           document.getElementById('vh-remarks').value = v.remarks || '';
           document.getElementById('vh-existing-img').value = v.img || ''; 
           document.getElementById('vh-is-active').value = v.status || 'ACTIVE';
+          if (managedCb) managedCb.checked = v.managedBy === 'COMPANY';
+          if (groupSel) groupSel.value = v.vehicleGroup || 'ALL';
           
           if(v.actExpiry && fpAct) {
             fpAct.setDate(new Date(v.actExpiry));
@@ -3846,7 +4404,9 @@
         startMile: mileageValidation.startMile,
         endMile: mileageValidation.endMile,
         parkingSpot: parking,
-        originalEmail: bk.userEmail || ''
+        originalEmail: bk.userEmail || '',
+        contactPhone: bk.contactPhone || '',
+        skipLineNotify: true
       };
       apiCall('saveBooking', [obj]).then(function (res) {
         if (res.success) {
@@ -3930,8 +4490,8 @@
       if (activeEl) activeEl.innerHTML = sk;
       if (availEl) availEl.innerHTML = '<div class="h-32 rounded-2xl skeleton"></div>';
       if (deptEl) deptEl.innerHTML = sk;
-      const list = document.getElementById('car-list');
-      list.innerHTML = '<div class="h-72 rounded-3xl skeleton"></div><div class="h-72 rounded-3xl skeleton"></div><div class="h-72 rounded-3xl skeleton"></div><div class="h-72 rounded-3xl skeleton"></div>';
+      const list = document.getElementById('car-list-sections');
+      if (list) list.innerHTML = '<div class="h-72 rounded-3xl skeleton"></div><div class="h-72 rounded-3xl skeleton"></div>';
     }
 
     function hideLoading() {
@@ -4037,6 +4597,18 @@
       obj.startMile = mileageValidation.startMile === null ? '' : mileageValidation.startMile;
       obj.endMile = mileageValidation.endMile === null ? '' : mileageValidation.endMile;
       obj.parkingSpot = mileageValidation.endMile !== null ? obj.parkingSpot : '';
+      obj.contactPhone = document.getElementById('bk-phone').value || '';
+
+      if (requiresBookingPhoneForPlate(plate)) {
+        const phoneDigits = String(obj.contactPhone).replace(/\D/g, '');
+        if (phoneDigits.length < 9) {
+          Swal.fire('กรุณาระบุเบอร์โทร', 'รถโครงการเฉพาะต้องใส่เบอร์ติดต่อสำหรับบริษัทส่งรถ', 'warning');
+          btn.innerText = 'บันทึกข้อมูล';
+          btn.disabled = false;
+          return;
+        }
+        obj.contactPhone = phoneDigits;
+      }
 
       apiCall('saveBooking', [obj]).then(res => {
         if(res.success) { 
@@ -4069,7 +4641,9 @@
         imageBase64: document.getElementById('vh-img-base64').value,
         remarks: document.getElementById('vh-remarks').value,
         status: document.getElementById('vh-is-active').value,
-        leaseExpiry: document.getElementById('vh-lease').value 
+        leaseExpiry: document.getElementById('vh-lease').value,
+        managedBy: document.getElementById('vh-managed-company').checked ? 'COMPANY' : 'EMD',
+        vehicleGroup: document.getElementById('vh-vehicle-group').value || 'ALL'
       };
       apiCall('saveVehicle', [obj]).then(res => { 
         showToast(res.msg, res.success); 
