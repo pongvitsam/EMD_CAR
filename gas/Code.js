@@ -253,6 +253,14 @@ function filterPayloadForCompany_(payload) {
   const bookings = (payload.bookings || []).filter(function (b) {
     return companyPlates[normalizePlateKey_(b.plate)];
   });
+  const companyGroupIds = {};
+  vehicles.forEach(function (v) {
+    const groupId = normalizeVehicleGroupId_(v.vehicleGroup);
+    if (groupId && groupId !== DEFAULT_VEHICLE_GROUP_ALL) companyGroupIds[groupId] = true;
+  });
+  const vehicleGroups = (payload.vehicleGroups || []).filter(function (g) {
+    return g.id !== DEFAULT_VEHICLE_GROUP_ALL && companyGroupIds[g.id];
+  });
   return {
     vehicles: vehicles,
     bookings: bookings,
@@ -263,7 +271,7 @@ function filterPayloadForCompany_(payload) {
       bannerText: payload.settings && payload.settings.bannerText,
       mileageReminderExempt: []
     },
-    vehicleGroups: payload.vehicleGroups || []
+    vehicleGroups: vehicleGroups
   };
 }
 
