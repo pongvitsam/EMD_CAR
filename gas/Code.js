@@ -229,6 +229,20 @@ function requireAppSession_(token) {
   return role;
 }
 
+function filterHiddenVehiclesFromPayload_(payload) {
+  const vehicles = (payload.vehicles || []).filter(function (v) {
+    return String(v.status || '') !== 'HIDDEN';
+  });
+  const visiblePlates = {};
+  vehicles.forEach(function (v) {
+    visiblePlates[normalizePlateKey_(v.plate)] = true;
+  });
+  const bookings = (payload.bookings || []).filter(function (b) {
+    return visiblePlates[normalizePlateKey_(b.plate)];
+  });
+  return Object.assign({}, payload, { vehicles: vehicles, bookings: bookings });
+}
+
 function filterPayloadForCompany_(payload) {
   const vehicles = (payload.vehicles || []).filter(function (v) {
     if (String(v.status || '') === 'HIDDEN') return false;
@@ -773,6 +787,10 @@ function getAppData(includeLogs, token) {
     payload = attachCurrentUser_(filterPayloadForCompany_(payload));
     payload.role = 'COMPANY';
     payload.readOnly = true;
+    payload.logs = [];
+  } else if (role === 'EMD') {
+    payload = attachCurrentUser_(filterHiddenVehiclesFromPayload_(payload));
+    payload.role = 'EMD';
     payload.logs = [];
   } else if (role !== 'ADMIN') {
     payload.logs = [];

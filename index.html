@@ -829,7 +829,10 @@
       setTimeout(() => calendar.updateSize(), 80);
     }
     function getCalendarBookings() {
-      const bookings = appData.bookings || [];
+      let bookings = appData.bookings || [];
+      if (userRole !== 'COMPANY' && !isAdmin) {
+        bookings = getVisibleBookings(bookings, appData.vehicles);
+      }
       if (userRole !== 'COMPANY') return bookings;
       const projectPlateKeys = {};
       (appData.vehicles || []).forEach(function (v) {
@@ -2148,10 +2151,14 @@
 
       appData.vehicleGroups = appData.vehicleGroups || [];
       vehicleGroupRows = appData.vehicleGroups.slice();
+      if (!isAdmin) {
+        appData.bookings = getVisibleBookings(appData.bookings, appData.vehicles);
+        appData.vehicles = getVisibleVehicles(appData.vehicles);
+      }
 
       renderDashboard();
       renderCars(appData.vehicles);
-      setupFormOptions(appData.names, appData.vehicles);
+      setupFormOptions(appData.names, getVisibleVehicles(appData.vehicles));
       populateSearchMonthOptions(appData.bookings);
       renderLogs(appData.logs);
       if (isCalendarInitialized) {
@@ -2564,6 +2571,23 @@
         }).join('');
     }
 
+    function getVisibleVehicles(vehicles) {
+      const list = vehicles || [];
+      if (isAdmin) return list;
+      return list.filter(function (v) { return String(v.status || '') !== 'HIDDEN'; });
+    }
+
+    function getVisibleBookings(bookings, vehicles) {
+      if (isAdmin) return bookings || [];
+      const hiddenPlates = {};
+      (vehicles || []).forEach(function (v) {
+        if (String(v.status || '') === 'HIDDEN') hiddenPlates[normalizePlateForSearch(v.plate)] = true;
+      });
+      return (bookings || []).filter(function (b) {
+        return !hiddenPlates[normalizePlateForSearch(b.plate)];
+      });
+    }
+
     function buildCarCardHtml(car) {
       const now = new Date();
       const nowTime = now.getTime();
@@ -2671,7 +2695,10 @@
     }
 
     function renderCarGroupSection(title, subtitle, cars) {
-      const cards = (cars || []).map(buildCarCardHtml).filter(Boolean).join('');
+      const visibleCars = getVisibleVehicles(cars);
+      if (!visibleCars.length) return '';
+      const cards = visibleCars.map(buildCarCardHtml).filter(Boolean).join('');
+      if (!cards) return '';
       return '<section class="mb-10 space-y-4">' +
         '<div class="border-b border-purple-100 dark:border-purple-800 pb-2">' +
           '<h3 class="text-lg font-semibold text-purple-600 dark:text-purple-400">' + escapeHtml(title) + '</h3>' +
@@ -3837,7 +3864,7 @@
          submitBtn.disabled = true; return;
       }
 
-      let availableVehicles = appData.vehicles.filter(function (car) {
+      let availableVehicles = getVisibleVehicles(appData.vehicles).filter(function (car) {
          if(car.status !== 'ACTIVE') return false; 
          const isOverlap = appData.bookings.some(function (b) {
             if (String(b.plate).trim() !== String(car.plate).trim() || String(b.id).trim() === String(currentId).trim()) return false;
