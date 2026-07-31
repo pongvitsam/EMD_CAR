@@ -533,6 +533,30 @@
     </div>
   </div>
 
+  <div id="handover-modal" class="fixed inset-0 bg-slate-900/60 hidden items-center justify-center z-50 px-4">
+    <div class="bg-white dark:bg-slate-800 rounded-3xl p-6 w-full max-w-md shadow-2xl relative border-t-4 border-blue-500">
+      <button type="button" onclick="window.closeModal('handover-modal')" class="absolute top-4 right-4 text-slate-400 hover:text-blue-600 text-2xl">&times;</button>
+      <h3 class="text-xl font-semibold text-blue-600 dark:text-blue-400 mb-2 text-center">🔑 ส่งมอบกุญแจรถ</h3>
+      <p id="handover-summary" class="text-sm text-slate-500 dark:text-slate-400 text-center mb-4"></p>
+      <form id="handover-form" onsubmit="window.submitVehicleHandover(event)" class="space-y-4">
+        <input type="hidden" id="handover-booking-id">
+        <div>
+          <label class="block text-sm font-medium mb-1">📍 จุดจอดรถ <span class="text-red-500">*</span></label>
+          <input type="text" id="handover-parking" required autocomplete="off" placeholder="เช่น ชั้น 2 ช่อง A-12" class="w-full px-3 py-3 text-base rounded-xl border outline-none dark:bg-slate-700 dark:border-slate-600">
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">🔋 แบตเตอรี่คงเหลือ <span class="text-red-500">*</span></label>
+          <input type="text" id="handover-battery" required autocomplete="off" placeholder="เช่น 85% หรือ 280 km" class="w-full px-3 py-3 text-base rounded-xl border outline-none dark:bg-slate-700 dark:border-slate-600">
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">👤 ผู้รับกุญแจรถ <span class="text-red-500">*</span></label>
+          <input type="text" id="handover-recipient" required autocomplete="off" placeholder="ชื่อผู้รับกุญแจ" class="w-full px-3 py-3 text-base rounded-xl border outline-none dark:bg-slate-700 dark:border-slate-600">
+        </div>
+        <button type="submit" id="handover-submit-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3.5 rounded-xl">บันทึกและแจ้ง LINE</button>
+      </form>
+    </div>
+  </div>
+
   <div id="vehicle-modal" class="fixed inset-0 bg-slate-900/60 hidden items-center justify-center z-50 px-4">
     <div class="bg-white dark:bg-slate-800 rounded-3xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl relative border-t-4 border-purple-400">
       <button onclick="window.closeModal('vehicle-modal')" class="absolute top-4 right-4 text-slate-400 hover:text-purple-500 text-2xl">&times;</button>
@@ -1473,18 +1497,52 @@
       });
     }
 
+    function bookingHasHandover(b) {
+      return !!(b && (String(b.handoverAt || '').trim() || String(b.handoverRecipient || '').trim()));
+    }
+
+    function canCompanyHandoverBooking(b) {
+      if (!b || bookingHasHandover(b) || userRole !== 'COMPANY') return false;
+      const start = parseTimeSafe(b.start);
+      const end = parseTimeSafe(b.end);
+      if (!start || !end) return false;
+      const now = Date.now();
+      return now >= (start - (3 * 60 * 60 * 1000)) && now <= end;
+    }
+
+    function buildHandoverDetailHtml(b) {
+      if (!bookingHasHandover(b)) return '';
+      return '<div class="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-xl mt-2 space-y-1 border border-blue-100 dark:border-blue-800/40 text-sm">' +
+        '<p><strong>🔑 ส่งมอบกุญแจแล้ว</strong></p>' +
+        '<p><strong>จุดจอด:</strong> ' + escapeHtml(b.handoverParking || '-') + '</p>' +
+        '<p><strong>แบตคงเหลือ:</strong> ' + escapeHtml(b.handoverBattery || '-') + '</p>' +
+        '<p><strong>ผู้รับกุญแจ:</strong> ' + escapeHtml(b.handoverRecipient || '-') + '</p>' +
+        (b.handoverAt ? '<p><strong>เวลา:</strong> ' + escapeHtml(formatThaiDateTime(b.handoverAt)) + '</p>' : '') +
+      '</div>';
+    }
+
+    function buildCompanyHandoverButtonHtml(bookingId, className) {
+      return '<button type="button" onclick="window.openHandoverModal(\'' + escapeHtml(bookingId) + '\')" class="' +
+        (className || 'mt-2 w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-xl shadow-md transition text-sm') +
+        '">🔑 ส่งมอบกุญแจรถ</button>';
+    }
+
     function renderCompanyDeliveryPanel() {
       const wrap = document.getElementById('company-delivery-content');
       if (!wrap || userRole !== 'COMPANY') return;
       const now = Date.now();
       const dayMs = 24 * 60 * 60 * 1000;
-      const todayEnd = new Date();
-      todayEnd.setHours(23, 59, 59, 999);
-      const tomorrowEnd = new Date(todayEnd.getTime() + dayMs);
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const tomorrowEnd = new Date(todayStart.getTime() + (2 * dayMs) - 1);
       const allowedPlates = buildVehiclePlateKeySet(appData.vehicles);
       const upcoming = (appData.bookings || []).filter(function (b) {
+        if (!allowedPlates[normalizePlateForSearch(b.plate)]) return false;
         const start = parseTimeSafe(b.start);
-        return start >= now && start <= tomorrowEnd.getTime() && allowedPlates[normalizePlateForSearch(b.plate)];
+        if (!start) return false;
+        if (bookingHasHandover(b)) return start >= todayStart.getTime() && start <= tomorrowEnd.getTime();
+        if (canCompanyHandoverBooking(b)) return true;
+        return start >= now && start <= tomorrowEnd.getTime();
       }).sort(function (a, b) { return parseTimeSafe(a.start) - parseTimeSafe(b.start); });
       if (!upcoming.length) {
         wrap.innerHTML = '<p class="text-slate-500">ไม่มีรายการส่งรถวันนี้/พรุ่งนี้</p>';
@@ -1492,15 +1550,91 @@
       }
       wrap.innerHTML = upcoming.map(function (b) {
         const name = getBookingDisplayName(b);
-        return '<div class="p-2 rounded-lg bg-white/70 dark:bg-slate-700/50">' +
-          '<strong>' + escapeHtml(formatThaiDateTime(b.start)) + '</strong> — ' +
-          escapeHtml(b.plate) + ' · ' + escapeHtml(name) +
-          (b.dept ? ' (' + escapeHtml(b.dept) + ')' : '') +
-          ' → ' + escapeHtml(b.dest || '-') +
-          (b.contactPhone ? '<br><span class="text-blue-600">📞 ' + escapeHtml(b.contactPhone) + '</span>' : '') +
-          '</div>';
+        const done = bookingHasHandover(b);
+        const canHandover = canCompanyHandoverBooking(b);
+        let actionHtml = '';
+        if (done) {
+          actionHtml = buildHandoverDetailHtml(b);
+        } else if (canHandover) {
+          actionHtml = buildCompanyHandoverButtonHtml(b.id, 'mt-3 w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-xl shadow-md transition text-sm');
+        } else {
+          actionHtml = '<p class="text-xs text-slate-500 mt-2">ส่งมอบได้ก่อนเวลาเริ่มจอง 3 ชั่วโมง</p>';
+        }
+        return '<div class="p-3 rounded-xl bg-white/70 dark:bg-slate-700/50 border border-blue-100 dark:border-slate-600">' +
+          '<div class="flex items-start justify-between gap-2">' +
+            '<div><strong>' + escapeHtml(formatThaiDateTime(b.start)) + '</strong> — ' +
+            escapeHtml(b.plate) + ' · ' + escapeHtml(name) +
+            (b.dept ? ' (' + escapeHtml(b.dept) + ')' : '') +
+            '<br>→ ' + escapeHtml(b.dest || '-') +
+            (b.contactPhone ? '<br><span class="text-blue-600">📞 ' + escapeHtml(b.contactPhone) + '</span>' : '') +
+            '</div>' +
+            (done ? '<span class="shrink-0 text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-semibold">ส่งมอบแล้ว</span>' : '') +
+          '</div>' +
+          actionHtml +
+        '</div>';
       }).join('');
     }
+
+    window.openHandoverModal = function (bookingId) {
+      if (userRole !== 'COMPANY') return;
+      const bk = (appData.bookings || []).find(function (b) { return String(b.id) === String(bookingId); });
+      if (!bk) {
+        Swal.fire('ไม่พบข้อมูล', 'ไม่พบการจองนี้', 'warning');
+        return;
+      }
+      if (bookingHasHandover(bk)) {
+        Swal.fire('ส่งมอบแล้ว', 'รายการนี้บันทึกส่งมอบกุญแจแล้ว', 'info');
+        return;
+      }
+      if (!canCompanyHandoverBooking(bk)) {
+        Swal.fire('ยังไม่ถึงเวลา', 'ส่งมอบได้ก่อนเวลาเริ่มจอง 3 ชั่วโมง', 'info');
+        return;
+      }
+      document.getElementById('handover-form').reset();
+      document.getElementById('handover-booking-id').value = bk.id || '';
+      const car = (appData.vehicles || []).find(function (v) { return v.plate === bk.plate; });
+      document.getElementById('handover-parking').value = (car && car.parkingSpot) ? car.parkingSpot : '';
+      document.getElementById('handover-summary').textContent =
+        (bk.plate || '-') + ' · ' + getBookingDisplayName(bk) + ' · ' + formatThaiDateTime(bk.start);
+      document.getElementById('handover-modal').style.display = 'flex';
+      setTimeout(function () {
+        const el = document.getElementById('handover-recipient');
+        if (el) el.focus();
+      }, 80);
+    };
+
+    window.submitVehicleHandover = function (e) {
+      e.preventDefault();
+      if (userRole !== 'COMPANY') return;
+      const btn = document.getElementById('handover-submit-btn');
+      const obj = {
+        bookingId: document.getElementById('handover-booking-id').value,
+        handoverParking: document.getElementById('handover-parking').value.trim(),
+        handoverBattery: document.getElementById('handover-battery').value.trim(),
+        handoverRecipient: document.getElementById('handover-recipient').value.trim()
+      };
+      if (!obj.handoverParking || !obj.handoverBattery || !obj.handoverRecipient) {
+        Swal.fire('กรุณากรอกข้อมูล', 'จุดจอด แบตเตอรี่ และผู้รับกุญแจ ต้องครบ', 'warning');
+        return;
+      }
+      btn.disabled = true;
+      btn.textContent = 'กำลังบันทึก...';
+      apiCall('recordVehicleHandover', [obj]).then(function (res) {
+        if (res && res.success) {
+          showToast(res.msg);
+          showBookingLineNotifyFeedback(res.lineNotify);
+          window.closeModal('handover-modal');
+          reloadAfterMutation();
+        } else {
+          Swal.fire('ผิดพลาด', (res && res.msg) || 'บันทึกไม่สำเร็จ', 'error');
+        }
+      }).catch(function (err) {
+        Swal.fire('ผิดพลาด', err.message || 'บันทึกไม่สำเร็จ', 'error');
+      }).finally(function () {
+        btn.disabled = false;
+        btn.textContent = 'บันทึกและแจ้ง LINE';
+      });
+    };
 
     window.onload = async function() {
       showSkeletonState();
@@ -2889,6 +3023,10 @@
               ✏️ แก้ไขการจอง / ยกเลิก
             </button>
           `;
+          const handoverDetailHtml = buildHandoverDetailHtml(b);
+          const handoverButtonHtml = (userRole === 'COMPANY' && canCompanyHandoverBooking(b))
+            ? buildCompanyHandoverButtonHtml(b.id, 'mt-3 w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-xl shadow-md transition')
+            : '';
 
           document.getElementById('cal-details').innerHTML = `
             <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-700/60 mb-4 border border-slate-200 dark:border-slate-600" style="border-left: 4px solid ${color}">
@@ -2904,6 +3042,8 @@
               <p><strong>🏁 สิ้นสุด:</strong> <br>${formatThaiDateTime(b.end)}</p>
             </div>
             ${returnInfoHtml}
+            ${handoverDetailHtml}
+            ${handoverButtonHtml}
             ${mileageUpdateButtonHtml}
             ${editBookingButtonHtml}
           `;

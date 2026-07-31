@@ -223,6 +223,12 @@ function requireMutationAccess_(token) {
   throw new Error('กรุณาเข้าสู่ระบบก่อนดำเนินการ');
 }
 
+function requireCompanyHandoverAccess_(token) {
+  const role = resolveSessionRole_(token);
+  if (role !== 'COMPANY') throw new Error('เฉพาะบริษัท (TC) เท่านั้นที่ส่งมอบกุญแจได้');
+  refreshSession_(token, 'COMPANY');
+}
+
 function requireAppSession_(token) {
   const role = resolveSessionRole_(token);
   if (!role) throw new Error('กรุณาเข้าสู่ระบบ');
@@ -433,6 +439,18 @@ function ensureBookingsPhoneColumn_(ss) {
   if (String(header || '').trim() !== 'เบอร์ติดต่อ') {
     sheet.getRange(1, 14).setValue('เบอร์ติดต่อ');
   }
+}
+
+function ensureBookingsHandoverColumns_(ss) {
+  const sheet = ss.getSheetByName('Bookings');
+  if (!sheet) return;
+  const headers = ['จุดจอดส่งมอบ', 'แบตส่งมอบ', 'ผู้รับกุญแจ', 'เวลาส่งมอบ'];
+  headers.forEach(function (h, i) {
+    const col = 15 + i;
+    if (String(sheet.getRange(1, col).getValue() || '').trim() !== h) {
+      sheet.getRange(1, col).setValue(h);
+    }
+  });
 }
 
 function normalizeContactPhone_(value) {
@@ -668,6 +686,7 @@ function dispatchApi_(action, args, token, clientIp) {
     case 'saveVehicleGroup': return saveVehicleGroup(token, args[0]);
     case 'deleteVehicleGroup': return deleteVehicleGroup(token, args[0]);
     case 'testLineUpcomingSummary': return testLineUpcomingSummary(token, args[0]);
+    case 'recordVehicleHandover': return recordVehicleHandover(args[0], clientIp, token);
     default: throw new Error('Unknown action: ' + action);
   }
 }
@@ -679,6 +698,7 @@ function setupDatabase() {
   ensureVehicleGroupsSheet_(ss);
   if (!ss.getSheetByName('Bookings')) ss.insertSheet('Bookings').appendRow(['Booking_ID', 'ทะเบียนรถ', 'ชื่อ', 'นามสกุล', 'แผนก', 'เริ่ม', 'สิ้นสุด', 'จุดหมาย', 'ผู้ขับขี่', 'อีเมลผู้บันทึก', 'ไมล์ก่อนใช้', 'ไมล์หลังใช้', 'จุดจอดหลังใช้งาน', 'เบอร์ติดต่อ']);
   ensureBookingsPhoneColumn_(ss);
+  ensureBookingsHandoverColumns_(ss);
   if (!ss.getSheetByName('Logs')) ss.insertSheet('Logs').appendRow(['Timestamp', 'อีเมลผู้ทำรายการ', 'Action', 'Target', 'รายละเอียด', 'เหตุผลการแก้ไข', 'IP']);
   ensureLogsIpColumn_(ss);
   
@@ -722,7 +742,11 @@ function buildAppPayload_(ss, includeLogs) {
     id: r[0], plate: r[1], name: r[2], surname: r[3],
     dept: r[4], start: r[5], end: r[6], dest: r[7], driver: r[8],
     userEmail: r[9], startMile: r[10], endMile: r[11], parkingSpot: r[12] || '',
-    contactPhone: r[13] || ''
+    contactPhone: r[13] || '',
+    handoverParking: r[14] || '',
+    handoverBattery: r[15] || '',
+    handoverRecipient: r[16] || '',
+    handoverAt: r[17] || ''
   }));
 
   const nData = getSheetOrThrow_(ss, 'Name').getDataRange().getValues();
@@ -1355,6 +1379,86 @@ function saveBooking(form, clientIp, token) {
   } catch (error) { return {success: false, msg: error.message}; }
 }
 
+function recordVehicleHandover(form, clientIp, token) {
+  try {
+    requireCompanyHandoverAccess_(token);
+    const bookingId = String((form && form.bookingId) || '').trim();
+    const parking = String((form && form.handoverParking) || '').trim();
+    const battery = String((form && form.handoverBattery) || '').trim();
+    const recipient = String((form && form.handoverRecipient) || '').trim();
+    if (!bookingId) return { success: false, msg: 'ไม่พบรหัสการจอง' };
+    if (!parking) return { success: false, msg: 'กรุณาระบุจุดจอดรถ' };
+    if (!battery) return { success: false, msg: 'กรุณาระบุแบตเตอรี่คงเหลือ' };
+    if (!recipient) return { success: false, msg: 'กรุณาระบุผู้รับกุญแจรถ' };
+
+    const ss = getSpreadsheet_();
+    setupDatabase();
+    ensureBookingsHandoverColumns_(ss);
+    const bSheet = getSheetOrThrow_(ss, 'Bookings');
+    const bData = bSheet.getDataRange().getValues();
+    let rowIndex = -1;
+    let row = null;
+    for (let i = 1; i < bData.length; i++) {
+      if (String(bData[i][0] || '').trim() === bookingId) {
+        rowIndex = i + 1;
+        row = bData[i];
+        break;
+      }
+    }
+    if (!row) return { success: false, msg: 'ไม่พบการจอง' };
+    const plate = String(row[1] || '').trim();
+    if (!isCompanyManagedPlate_(ss, plate)) {
+      return { success: false, msg: 'รถคันนี้ไม่ใช่รถที่บริษัทดูแล' };
+    }
+    if (String(row[17] || '').trim() || String(row[16] || '').trim()) {
+      return { success: false, msg: 'ส่งมอบกุญแจรถครั้งนี้แล้ว' };
+    }
+
+    const handoverAt = new Date();
+    bSheet.getRange(rowIndex, 15, 1, 4).setValues([[parking, battery, recipient, handoverAt]]);
+
+    const vSheet = getSheetOrThrow_(ss, 'Vehicles');
+    const vData = vSheet.getDataRange().getValues();
+    for (let i = 1; i < vData.length; i++) {
+      if (normalizePlateKey_(vData[i][1]) === normalizePlateKey_(plate)) {
+        vSheet.getRange(i + 1, 9).setValue(parking);
+        break;
+      }
+    }
+
+    clearAppCache_();
+    const ip = resolveClientIp_(clientIp, form);
+    const logSheet = getSheetOrThrow_(ss, 'Logs');
+    appendLogRow_(logSheet, 'TC Company', 'HANDOVER', plate,
+      'ส่งมอบกุญแจ จุดจอด: ' + parking + ', แบต: ' + battery + ', ผู้รับ: ' + recipient, '-', ip);
+
+    const notifyBooking = {
+      id: bookingId,
+      plate: plate,
+      name: row[2] || '',
+      surname: row[3] || '',
+      dept: row[4] || '',
+      start: row[5],
+      end: row[6],
+      dest: row[7] || '',
+      driver: row[8] || '',
+      contactPhone: row[13] || '',
+      handoverParking: parking,
+      handoverBattery: battery,
+      handoverRecipient: recipient,
+      handoverAt: handoverAt
+    };
+    const lineNotify = notifyCompanyHandoverLine_(ss, notifyBooking);
+    return {
+      success: true,
+      msg: lineNotify.status === 'sent' ? 'บันทึกส่งมอบกุญแจและแจ้ง LINE แล้ว' : 'บันทึกส่งมอบกุญแจแล้ว',
+      lineNotify: lineNotify
+    };
+  } catch (error) {
+    return { success: false, msg: error.message };
+  }
+}
+
 function deleteBooking(id, reason, clientIp, token) {
   if (id && typeof id === 'object') {
     const p = id;
@@ -1503,6 +1607,44 @@ function isCompanyManagedPlate_(ss, plate) {
     }
   }
   return false;
+}
+
+function formatHandoverLineMessage_(booking) {
+  const userName = String((booking.name || '') + ' ' + (booking.surname || '')).trim() || '-';
+  const lines = [
+    '🔑 ส่งมอบกุญแจรถแล้ว',
+    'ทะเบียน: ' + (booking.plate || '-'),
+    'ผู้จอง: ' + userName + (booking.dept ? ' (' + booking.dept + ')' : ''),
+    'เวลาจอง: ' + formatLineDateTime_(booking.start) + ' - ' + formatLineDateTime_(booking.end),
+    'จุดหมาย: ' + (booking.dest || '-'),
+    '📍 จุดจอด: ' + (booking.handoverParking || '-'),
+    '🔋 แบตคงเหลือ: ' + (booking.handoverBattery || '-'),
+    '👤 ผู้รับกุญแจ: ' + (booking.handoverRecipient || '-')
+  ];
+  if (booking.handoverAt) {
+    lines.push('⏱ ส่งมอบเมื่อ: ' + formatLineDateTime_(booking.handoverAt));
+  }
+  if (booking.contactPhone) {
+    lines.push('📞 ติดต่อผู้จอง: ' + booking.contactPhone);
+  }
+  return lines.join('\n');
+}
+
+function notifyCompanyHandoverLine_(ss, booking) {
+  if (!booking || !booking.plate) return { status: 'skipped', reason: 'no_booking' };
+  if (!isCompanyManagedPlate_(ss, booking.plate)) {
+    return { status: 'skipped', reason: 'not_company_car', msg: 'รถคันนี้ไม่ใช่รถ TC' };
+  }
+  const cfg = getLineConfig_();
+  if (!cfg.token || !cfg.groupId) {
+    return { status: 'failed', reason: 'missing_config', msg: 'ยังไม่ได้บันทึก LINE Token / Group ID' };
+  }
+  const sendResult = sendLineMessageDetailed_(formatHandoverLineMessage_(booking));
+  return {
+    status: sendResult.success ? 'sent' : 'failed',
+    reason: sendResult.success ? 'ok' : 'line_api',
+    msg: sendResult.msg
+  };
 }
 
 function formatBookingLineMessage_(eventType, booking) {

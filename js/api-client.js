@@ -3,7 +3,8 @@
   const MAX_GET_URL_LEN = 7500;
   const MUTATION_ACTIONS = new Set([
     'saveVehicle', 'saveVehicleManagement', 'deleteVehicle', 'saveBooking', 'deleteBooking',
-    'quickUpdateMileage', 'saveAdminSettings', 'saveNameOption', 'saveManagedName', 'deleteManagedName'
+    'quickUpdateMileage', 'saveAdminSettings', 'saveNameOption', 'saveManagedName', 'deleteManagedName',
+    'recordVehicleHandover'
   ]);
 
   function getApiUrl() {
