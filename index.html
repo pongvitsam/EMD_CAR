@@ -1276,23 +1276,54 @@
       return sessionToken || '';
     };
 
+    function readPersistedItem(key) {
+      try {
+        let value = localStorage.getItem(key);
+        if (value == null || value === '') {
+          value = sessionStorage.getItem(key) || '';
+          if (value) {
+            localStorage.setItem(key, value);
+            sessionStorage.removeItem(key);
+          }
+        }
+        return value || '';
+      } catch (e) {
+        try { return sessionStorage.getItem(key) || ''; } catch (e2) { return ''; }
+      }
+    }
+
+    function writePersistedItem(key, value) {
+      try {
+        if (value) localStorage.setItem(key, value);
+        else localStorage.removeItem(key);
+        sessionStorage.removeItem(key);
+      } catch (e) {}
+    }
+
+    function removePersistedItem(key) {
+      try {
+        localStorage.removeItem(key);
+        sessionStorage.removeItem(key);
+      } catch (e) {}
+    }
+
     function saveSessionToken(role, token) {
       try {
         if (role === 'EMD') {
-          sessionStorage.setItem(EMD_SESSION_STORAGE_KEY, token || '');
-          sessionStorage.removeItem(COMPANY_SESSION_STORAGE_KEY);
+          writePersistedItem(EMD_SESSION_STORAGE_KEY, token || '');
+          removePersistedItem(COMPANY_SESSION_STORAGE_KEY);
         }
         if (role === 'COMPANY') {
-          sessionStorage.setItem(COMPANY_SESSION_STORAGE_KEY, token || '');
-          sessionStorage.removeItem(EMD_SESSION_STORAGE_KEY);
+          writePersistedItem(COMPANY_SESSION_STORAGE_KEY, token || '');
+          removePersistedItem(EMD_SESSION_STORAGE_KEY);
         }
       } catch (e) {}
     }
 
     function readStoredSession() {
       try {
-        const emd = sessionStorage.getItem(EMD_SESSION_STORAGE_KEY) || '';
-        const company = sessionStorage.getItem(COMPANY_SESSION_STORAGE_KEY) || '';
+        const emd = readPersistedItem(EMD_SESSION_STORAGE_KEY);
+        const company = readPersistedItem(COMPANY_SESSION_STORAGE_KEY);
         if (emd) return { role: 'EMD', token: emd };
         if (company) return { role: 'COMPANY', token: company };
       } catch (e) {}
@@ -1300,10 +1331,8 @@
     }
 
     function clearStoredSession() {
-      try {
-        sessionStorage.removeItem(EMD_SESSION_STORAGE_KEY);
-        sessionStorage.removeItem(COMPANY_SESSION_STORAGE_KEY);
-      } catch (e) {}
+      removePersistedItem(EMD_SESSION_STORAGE_KEY);
+      removePersistedItem(COMPANY_SESSION_STORAGE_KEY);
     }
 
     function showLoginGate(msg) {
@@ -1421,21 +1450,26 @@
     function restoreUserSession() {
       const stored = readStoredSession();
       if (!stored) return Promise.resolve(false);
+      userRole = stored.role;
+      sessionToken = stored.token;
+      isReadOnly = stored.role === 'COMPANY';
+      hideLoginGate();
+      setRoleUiState();
       const checkAction = stored.role === 'COMPANY' ? 'checkCompanySession' : 'checkEmdSession';
       return apiCall(checkAction, [stored.token], stored.token).then(function (res) {
         if (res && res.success) {
-          userRole = stored.role;
-          sessionToken = stored.token;
-          isReadOnly = stored.role === 'COMPANY';
-          hideLoginGate();
-          setRoleUiState();
+          saveSessionToken(stored.role, stored.token);
           return true;
         }
         clearStoredSession();
+        userRole = null;
+        sessionToken = '';
+        isReadOnly = false;
+        if (!isAdmin) showLoginGate((res && res.msg) || 'เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่');
+        setRoleUiState();
         return false;
       }).catch(function () {
-        clearStoredSession();
-        return false;
+        return true;
       });
     }
 
@@ -2205,15 +2239,15 @@
     }
 
     function saveAdminSessionToken(token) {
-      try { sessionStorage.setItem(ADMIN_SESSION_STORAGE_KEY, token || ''); } catch (e) {}
+      writePersistedItem(ADMIN_SESSION_STORAGE_KEY, token || '');
     }
 
     function readAdminSessionToken() {
-      try { return sessionStorage.getItem(ADMIN_SESSION_STORAGE_KEY) || ''; } catch (e) { return ''; }
+      return readPersistedItem(ADMIN_SESSION_STORAGE_KEY);
     }
 
     function clearAdminSessionToken() {
-      try { sessionStorage.removeItem(ADMIN_SESSION_STORAGE_KEY); } catch (e) {}
+      removePersistedItem(ADMIN_SESSION_STORAGE_KEY);
     }
 
     function setAdminUiState(enabled) {
@@ -2264,16 +2298,16 @@
       isAdmin = true;
       adminToken = token;
       setAdminUiState(true);
+      hideLoginGate();
       return apiCall('checkAdminSession', [token], token).then(function (res) {
         if (!res || !res.success) {
           deactivateAdminSession(false);
           return false;
         }
-        hideLoginGate();
+        saveAdminSessionToken(token);
         return true;
       }).catch(function () {
-        deactivateAdminSession(false);
-        return false;
+        return true;
       });
     }
 
