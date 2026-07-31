@@ -1438,7 +1438,7 @@ function recordVehicleHandover(form, clientIp, token) {
     if (!bookingId) return { success: false, msg: 'ไม่พบรหัสการจอง' };
     if (!parking) return { success: false, msg: 'กรุณาระบุจุดจอดรถ' };
     if (!battery) return { success: false, msg: 'กรุณาระบุแบตเตอรี่คงเหลือ' };
-    if (!recipient) return { success: false, msg: 'กรุณาระบุผู้รับกุญแจรถ' };
+    if (!recipient) return { success: false, msg: 'กรุณาระบุผู้ใช้รถที่รับกุญแจ' };
 
     const ss = getSpreadsheet_();
     setupDatabase();
@@ -1666,16 +1666,18 @@ function isCompanyManagedPlate_(ss, plate) {
 
 function formatHandoverLineMessage_(booking) {
   const userName = String((booking.name || '') + ' ' + (booking.surname || '')).trim() || '-';
+  const driverName = String(booking.driver || '').trim();
   const lines = [
-    '🔑 ส่งมอบกุญแจรถแล้ว',
+    '🔑 บริษัทส่งมอบกุญแจให้ผู้ใช้รถแล้ว',
     'ทะเบียน: ' + (booking.plate || '-'),
     'ผู้จอง: ' + userName + (booking.dept ? ' (' + booking.dept + ')' : ''),
+    driverName ? ('ผู้ขับขี่: ' + driverName) : '',
     'เวลาจอง: ' + formatLineDateTime_(booking.start) + ' - ' + formatLineDateTime_(booking.end),
     'จุดหมาย: ' + (booking.dest || '-'),
     '📍 จุดจอด: ' + (booking.handoverParking || '-'),
     '🔋 แบตคงเหลือ: ' + (booking.handoverBattery || '-'),
-    '👤 ผู้รับกุญแจ: ' + (booking.handoverRecipient || '-')
-  ];
+    '👤 ผู้ใช้รถ (ผู้รับกุญแจ): ' + (booking.handoverRecipient || '-')
+  ].filter(function (line) { return line; });
   if (booking.handoverAt) {
     lines.push('⏱ ส่งมอบเมื่อ: ' + formatLineDateTime_(booking.handoverAt));
   }

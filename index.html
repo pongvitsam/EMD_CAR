@@ -282,7 +282,7 @@
     <div id="view-dashboard" class="space-y-8 block">
       <div id="company-delivery-panel" class="hidden bg-blue-50 dark:bg-slate-800 border border-blue-200 dark:border-slate-600 rounded-2xl p-5">
         <h2 class="text-xl font-semibold text-blue-600 dark:text-blue-400 mb-1">🚚 รายการส่งรถ (บริษัท)</h2>
-        <p class="text-xs text-slate-500 dark:text-slate-400 mb-3">ส่งมอบกุญแจล่วงหน้าได้ก่อนถึงวันใช้รถ</p>
+        <p class="text-xs text-slate-500 dark:text-slate-400 mb-3">บริษัท (TC) กรอกข้อมูลเมื่อส่งมอบกุญแจให้ผู้ใช้รถ — ส่งล่วงหน้าได้ก่อนถึงวันใช้รถ</p>
         <div id="company-delivery-content" class="text-sm space-y-2"></div>
       </div>
       <h2 id="dashboard-cars-title" class="text-2xl font-semibold text-purple-500 dark:text-purple-400 border-b-2 border-purple-100 dark:border-purple-800 pb-2">🚙 รถในโครงการและสถานะปัจจุบัน</h2>
@@ -542,21 +542,24 @@
   <div id="handover-modal" class="fixed inset-0 bg-slate-900/60 hidden items-center justify-center z-50 px-4">
     <div class="bg-white dark:bg-slate-800 rounded-3xl p-6 w-full max-w-md shadow-2xl relative border-t-4 border-blue-500">
       <button type="button" onclick="window.closeModal('handover-modal')" class="absolute top-4 right-4 text-slate-400 hover:text-blue-600 text-2xl">&times;</button>
-      <h3 class="text-xl font-semibold text-blue-600 dark:text-blue-400 mb-2 text-center">🔑 ส่งมอบกุญแจรถ</h3>
-      <p id="handover-summary" class="text-sm text-slate-500 dark:text-slate-400 text-center mb-4"></p>
+      <h3 class="text-xl font-semibold text-blue-600 dark:text-blue-400 mb-1 text-center">🔑 ส่งมอบกุญแจรถ</h3>
+      <p class="text-xs text-slate-500 dark:text-slate-400 text-center mb-3">บริษัท (TC) บันทึกข้อมูลเมื่อส่งมอบให้ผู้ใช้รถ</p>
+      <p id="handover-summary" class="text-sm text-slate-500 dark:text-slate-400 text-center mb-3"></p>
+      <div id="handover-car-user" class="mb-4 p-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800/40 text-sm space-y-1"></div>
       <form id="handover-form" onsubmit="window.submitVehicleHandover(event)" class="space-y-4">
         <input type="hidden" id="handover-booking-id">
         <div>
           <label class="block text-sm font-medium mb-1">📍 จุดจอดรถ <span class="text-red-500">*</span></label>
-          <input type="text" id="handover-parking" required autocomplete="off" placeholder="เช่น ชั้น 2 ช่อง A-12" class="w-full px-3 py-3 text-base rounded-xl border outline-none dark:bg-slate-700 dark:border-slate-600">
+          <input type="text" id="handover-parking" required autocomplete="off" placeholder="กรอกจุดจอดตอนส่งมอบ เช่น ชั้น 2 ช่อง A-12" class="w-full px-3 py-3 text-base rounded-xl border outline-none dark:bg-slate-700 dark:border-slate-600">
         </div>
         <div>
           <label class="block text-sm font-medium mb-1">🔋 แบตเตอรี่คงเหลือ <span class="text-red-500">*</span></label>
-          <input type="text" id="handover-battery" required autocomplete="off" placeholder="เช่น 85% หรือ 280 km" class="w-full px-3 py-3 text-base rounded-xl border outline-none dark:bg-slate-700 dark:border-slate-600">
+          <input type="text" id="handover-battery" required autocomplete="off" placeholder="กรอกแบตตอนส่งมอบ เช่น 85% หรือ 280 km" class="w-full px-3 py-3 text-base rounded-xl border outline-none dark:bg-slate-700 dark:border-slate-600">
         </div>
         <div>
-          <label class="block text-sm font-medium mb-1">👤 ผู้รับกุญแจรถ <span class="text-red-500">*</span></label>
-          <input type="text" id="handover-recipient" required autocomplete="off" placeholder="ชื่อผู้รับกุญแจ" class="w-full px-3 py-3 text-base rounded-xl border outline-none dark:bg-slate-700 dark:border-slate-600">
+          <label class="block text-sm font-medium mb-1">👤 ผู้รับกุญแจ (ผู้ใช้รถ) <span class="text-red-500">*</span></label>
+          <input type="text" id="handover-recipient" required autocomplete="off" placeholder="ชื่อผู้ใช้รถที่รับกุญแจไปใช้งาน" class="w-full px-3 py-3 text-base rounded-xl border outline-none dark:bg-slate-700 dark:border-slate-600">
+          <p class="text-xs text-slate-500 mt-1">โดยปกติคือผู้ขับขี่หรือผู้จอง — แก้ไขได้หากมีผู้รับแทน</p>
         </div>
         <button type="submit" id="handover-submit-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3.5 rounded-xl">บันทึกและแจ้ง LINE</button>
       </form>
@@ -933,6 +936,12 @@
     function getBookingDisplayName(b) {
       if (!b) return '';
       return String((b.name || '') + ' ' + (b.surname || '')).trim().replace(/\s+/g, ' ');
+    }
+    function getBookingCarUserName(b) {
+      if (!b) return '';
+      const driver = String(b.driver || '').trim();
+      if (driver) return driver;
+      return getBookingDisplayName(b);
     }
     function getBookingFullName(b) {
       if (!b) return '';
@@ -1530,7 +1539,7 @@
         '<p><strong>🔑 ส่งมอบกุญแจแล้ว</strong></p>' +
         '<p><strong>จุดจอด:</strong> ' + escapeHtml(b.handoverParking || '-') + '</p>' +
         '<p><strong>แบตคงเหลือ:</strong> ' + escapeHtml(b.handoverBattery || '-') + '</p>' +
-        '<p><strong>ผู้รับกุญแจ:</strong> ' + escapeHtml(b.handoverRecipient || '-') + '</p>' +
+        '<p><strong>ผู้ใช้รถ (ผู้รับกุญแจ):</strong> ' + escapeHtml(b.handoverRecipient || '-') + '</p>' +
         (b.handoverAt ? '<p><strong>เวลา:</strong> ' + escapeHtml(formatThaiDateTime(b.handoverAt)) + '</p>' : '') +
       '</div>';
     }
@@ -1580,6 +1589,22 @@
       }).join('');
     }
 
+    function buildHandoverCarUserHtml(b) {
+      if (!b) return '';
+      const booker = getBookingDisplayName(b) || '-';
+      const driver = String(b.driver || '').trim();
+      const driverLine = driver && normalizeUserNameKey(driver) !== normalizeUserNameKey(booker)
+        ? '<p><strong>ผู้ขับขี่:</strong> ' + escapeHtml(driver) + '</p>'
+        : '';
+      const phoneLine = b.contactPhone
+        ? '<p><strong>📞 ติดต่อ:</strong> ' + escapeHtml(b.contactPhone) + '</p>'
+        : '';
+      return '<p class="text-xs font-semibold text-blue-700 dark:text-blue-300 mb-1">ผู้ใช้รถจากการจอง</p>' +
+        '<p><strong>ผู้จอง:</strong> ' + escapeHtml(booker) + (b.dept ? ' (' + escapeHtml(b.dept) + ')' : '') + '</p>' +
+        driverLine +
+        phoneLine;
+    }
+
     window.openHandoverModal = function (bookingId) {
       if (userRole !== 'COMPANY') return;
       const bk = (appData.bookings || []).find(function (b) { return String(b.id) === String(bookingId); });
@@ -1599,11 +1624,14 @@
       document.getElementById('handover-booking-id').value = bk.id || '';
       const car = (appData.vehicles || []).find(function (v) { return v.plate === bk.plate; });
       document.getElementById('handover-parking').value = (car && car.parkingSpot) ? car.parkingSpot : '';
+      document.getElementById('handover-recipient').value = getBookingCarUserName(bk);
       document.getElementById('handover-summary').textContent =
-        (bk.plate || '-') + ' · ' + getBookingDisplayName(bk) + ' · ' + formatThaiDateTime(bk.start);
+        (bk.plate || '-') + ' · ' + formatThaiDateTime(bk.start) + ' → ' + (bk.dest || '-');
+      const carUserEl = document.getElementById('handover-car-user');
+      if (carUserEl) carUserEl.innerHTML = buildHandoverCarUserHtml(bk);
       document.getElementById('handover-modal').style.display = 'flex';
       setTimeout(function () {
-        const el = document.getElementById('handover-recipient');
+        const el = document.getElementById('handover-parking');
         if (el) el.focus();
       }, 80);
     };
@@ -1619,7 +1647,7 @@
         handoverRecipient: document.getElementById('handover-recipient').value.trim()
       };
       if (!obj.handoverParking || !obj.handoverBattery || !obj.handoverRecipient) {
-        Swal.fire('กรุณากรอกข้อมูล', 'จุดจอด แบตเตอรี่ และผู้รับกุญแจ ต้องครบ', 'warning');
+        Swal.fire('กรุณากรอกข้อมูล', 'บริษัท (TC) ต้องกรอกจุดจอด แบตเตอรี่ และผู้ใช้รถที่รับกุญแจให้ครบ', 'warning');
         return;
       }
       btn.disabled = true;
