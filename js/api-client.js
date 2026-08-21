@@ -19,7 +19,8 @@
     const params = {
       action: action,
       args: JSON.stringify(args || []),
-      token: token || ''
+      token: token || '',
+      emdToken: token || ''
     };
     if (MUTATION_ACTIONS.has(action)) {
       const ip = getClientIp();
@@ -81,7 +82,7 @@
   function emdApiPost(action, args, token) {
     const url = getApiUrl();
     if (!url) return Promise.reject(new Error('ยังไม่ได้ตั้งค่า EMD_GAS_API_URL ใน config.js'));
-    const payload = { action: action, args: args || [], token: token || '' };
+    const payload = { action: action, args: args || [], token: token || '', emdToken: token || '' };
     if (MUTATION_ACTIONS.has(action)) {
       const ip = getClientIp();
       if (ip) payload.clientIp = ip;

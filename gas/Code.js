@@ -17,6 +17,7 @@ const COMPANY_USERNAME = 'tc';
 const COMPANY_BOOKING_VISIBLE_FROM = '2026-07-29';
 const COMPANY_VISIBLE_VEHICLE_GROUP = 'pwa';
 const SESSION_TTL_SEC = 21600;
+const SESSION_PROP_PREFIX = 'SESS_';
 const VEHICLE_HEADERS = ['Vehicle_ID', 'ทะเบียน', 'รูปรถ(URL)', 'ประเภท', 'Email', 'Password', 'ระยะ Service (km)', 'ไมล์ล่าสุด (km)', 'จุดจอดล่าสุด', 'พรบ.หมดอายุ', 'หมายเหตุ', 'สถานะ', 'วันคืนรถ/หมดสัญญา', 'วันที่เช็คระยะล่าสุด', 'กม.เช็คระยะล่าสุด', 'ผู้นำเข้าเช็คระยะ', 'ระยะกม.ต่อรอบ', 'ประวัติเช็คระยะ(JSON)', 'แผนรอบถัดไป(JSON)', 'หมายเหตุบำรุงรักษา', 'ManagedBy', 'VehicleGroup'];
 const DEFAULT_VEHICLE_GROUP_ALL = 'ALL';
 const VEHICLE_GROUP_HEADERS = ['Group_ID', 'ชื่อกลุ่ม', 'คำค้นงาน(JSON)', 'ลำดับ', 'ระบบ'];
@@ -172,40 +173,105 @@ function putCacheSafe_(cache, key, value, ttlSec) {
   }
 }
 
-function createAdminSession_() {
+function sessionCachePrefix_(role) {
+  if (role === 'ADMIN') return ADMIN_SESSION_CACHE_PREFIX;
+  if (role === 'EMD') return EMD_SESSION_CACHE_PREFIX;
+  return COMPANY_SESSION_CACHE_PREFIX;
+}
+
+function maybePruneExpiredSessions_() {
+  try {
+    const props = PropertiesService.getScriptProperties();
+    const all = props.getProperties();
+    const keys = Object.keys(all).filter(function (key) {
+      return key.indexOf(SESSION_PROP_PREFIX) === 0;
+    });
+    if (keys.length < 40) return;
+    const now = Date.now();
+    keys.forEach(function (key) {
+      try {
+        const data = JSON.parse(all[key]);
+        if (!data || !data.exp || now > Number(data.exp)) props.deleteProperty(key);
+      } catch (err) {
+        props.deleteProperty(key);
+      }
+    });
+  } catch (err) {}
+}
+
+function writeSession_(token, role) {
+  if (!token || !role) return;
+  const expiresAt = Date.now() + (SESSION_TTL_SEC * 1000);
+  try {
+    CacheService.getScriptCache().put(sessionCachePrefix_(role) + token, '1', SESSION_TTL_SEC);
+  } catch (err) {}
+  try {
+    PropertiesService.getScriptProperties().setProperty(
+      SESSION_PROP_PREFIX + token,
+      JSON.stringify({ role: role, exp: expiresAt })
+    );
+  } catch (err) {}
+}
+
+function createSessionToken_(role) {
+  maybePruneExpiredSessions_();
   const token = Utilities.getUuid();
-  CacheService.getScriptCache().put(ADMIN_SESSION_CACHE_PREFIX + token, '1', SESSION_TTL_SEC);
+  writeSession_(token, role);
   return token;
+}
+
+function createAdminSession_() {
+  return createSessionToken_('ADMIN');
 }
 
 function createEmdSession_() {
-  const token = Utilities.getUuid();
-  CacheService.getScriptCache().put(EMD_SESSION_CACHE_PREFIX + token, '1', SESSION_TTL_SEC);
-  return token;
+  return createSessionToken_('EMD');
 }
 
 function createCompanySession_() {
-  const token = Utilities.getUuid();
-  CacheService.getScriptCache().put(COMPANY_SESSION_CACHE_PREFIX + token, '1', SESSION_TTL_SEC);
-  return token;
+  return createSessionToken_('COMPANY');
+}
+
+function readSessionFromProperties_(token) {
+  try {
+    const raw = PropertiesService.getScriptProperties().getProperty(SESSION_PROP_PREFIX + token);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (!data || !data.role) return null;
+    if (Number(data.exp) && Date.now() > Number(data.exp)) {
+      try { PropertiesService.getScriptProperties().deleteProperty(SESSION_PROP_PREFIX + token); } catch (err) {}
+      return null;
+    }
+    return data.role;
+  } catch (err) {
+    return null;
+  }
 }
 
 function resolveSessionRole_(token) {
   if (!token) return null;
-  const cache = CacheService.getScriptCache();
-  if (cache.get(ADMIN_SESSION_CACHE_PREFIX + token) === '1') return 'ADMIN';
-  if (cache.get(EMD_SESSION_CACHE_PREFIX + token) === '1') return 'EMD';
-  if (cache.get(COMPANY_SESSION_CACHE_PREFIX + token) === '1') return 'COMPANY';
-  return null;
+  try {
+    const cache = CacheService.getScriptCache();
+    if (cache.get(ADMIN_SESSION_CACHE_PREFIX + token) === '1') return 'ADMIN';
+    if (cache.get(EMD_SESSION_CACHE_PREFIX + token) === '1') return 'EMD';
+    if (cache.get(COMPANY_SESSION_CACHE_PREFIX + token) === '1') return 'COMPANY';
+  } catch (err) {}
+  const role = readSessionFromProperties_(token);
+  if (role) {
+    try {
+      CacheService.getScriptCache().put(sessionCachePrefix_(role) + token, '1', SESSION_TTL_SEC);
+    } catch (err) {}
+  }
+  return role;
 }
 
 function refreshSession_(token, role) {
-  if (!token || !role) return;
-  const cache = CacheService.getScriptCache();
-  const prefix = role === 'ADMIN' ? ADMIN_SESSION_CACHE_PREFIX
-    : role === 'EMD' ? EMD_SESSION_CACHE_PREFIX
-    : COMPANY_SESSION_CACHE_PREFIX;
-  cache.put(prefix + token, '1', SESSION_TTL_SEC);
+  writeSession_(token, role);
+}
+
+function pickRequestToken_(source) {
+  if (!source) return '';
+  return String(source.emdToken || source.token || '').trim();
 }
 
 function requireAdminSession_(token) {
@@ -615,7 +681,7 @@ function doGet(e) {
         }
       }
       if (!Array.isArray(args)) args = [];
-      return jsonOutput_(dispatchApi_(params.action, args, params.token || '', params.clientIp || ''));
+      return jsonOutput_(dispatchApi_(params.action, args, pickRequestToken_(params), params.clientIp || ''));
     } catch (err) {
       return jsonOutput_({ success: false, msg: String(err.message || err) });
     }
@@ -632,7 +698,7 @@ function doPost(e) {
     const action = body.action;
     if (!action) return jsonOutput_({ success: false, msg: 'ไม่ระบุ action' });
     const args = Array.isArray(body.args) ? body.args : [];
-    const result = dispatchApi_(action, args, body.token || '', body.clientIp || '');
+    const result = dispatchApi_(action, args, pickRequestToken_(body), body.clientIp || '');
     return jsonOutput_(result);
   } catch (err) {
     return jsonOutput_({ success: false, msg: String(err.message || err) });
@@ -681,7 +747,7 @@ function appendLogRow_(logSheet, email, action, target, detail, reason, clientIp
 function dispatchApi_(action, args, token, clientIp) {
   args = Array.isArray(args) ? args : [];
   switch (action) {
-    case 'getAppData': return getAppData(!(args.length > 0 && args[0] === false), token);
+    case 'getAppData': return getAppData(!(args.length > 0 && args[0] === false), token || String(args[1] || ''));
     case 'getAppLogs': return getAppLogs_(token);
     case 'verifyAdminLogin': return verifyAdminLogin(args[0], args[1]);
     case 'verifyEmdLogin': return verifyEmdLogin(args[0]);
@@ -871,27 +937,45 @@ function getAppLogs_(token) {
   return { success: true, logs: logs };
 }
 
+function sha256Hex_(text, charset) {
+  const rawHash = charset
+    ? Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(text == null ? '' : text), charset)
+    : Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(text == null ? '' : text));
+  return rawHash.map(function (b) {
+    return (b < 0 ? b + 256 : b).toString(16).padStart(2, '0');
+  }).join('');
+}
+
 function verifyAdminLogin(user, passText) {
   const ss = getSpreadsheet_();
   const sData = getSheetOrThrow_(ss, 'Settings').getDataRange().getValues();
-  let savedUser = '', savedHash = '';
-  
-  for(let i=1; i<sData.length; i++) {
-    if(sData[i][0] === 'AdminUser') savedUser = sData[i][1];
-    if(sData[i][0] === 'AdminPass') savedHash = sData[i][1];
+  let savedUser = '', savedPass = '';
+
+  for (let i = 1; i < sData.length; i++) {
+    if (String(sData[i][0] || '').trim() === 'AdminUser') savedUser = sData[i][1];
+    if (String(sData[i][0] || '').trim() === 'AdminPass') savedPass = sData[i][1];
   }
 
-  const rawHash = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, passText);
-  const txtHash = rawHash.map(b => (b < 0 ? b + 256 : b).toString(16).padStart(2, '0')).join('');
-  
-  if(user === savedUser && txtHash === savedHash) {
+  const enteredUser = String(user || '').trim();
+  const storedUser = String(savedUser || '').trim();
+  const storedPass = String(savedPass || '').trim();
+  const enteredPass = String(passText == null ? '' : passText);
+  if (!enteredUser || enteredPass === '' || enteredUser.toLowerCase() !== storedUser.toLowerCase()) {
+    return { success: false, msg: 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง' };
+  }
+
+  const utf8Hash = sha256Hex_(enteredPass, Utilities.Charset.UTF_8);
+  const defaultHash = sha256Hex_(enteredPass);
+  const storedLower = storedPass.toLowerCase();
+  const hashMatch = utf8Hash.toLowerCase() === storedLower || defaultHash.toLowerCase() === storedLower;
+  if (hashMatch || enteredPass === storedPass) {
     return { success: true, token: createAdminSession_(), role: 'ADMIN' };
   }
   return { success: false, msg: 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง' };
 }
 
 function verifyEmdLogin(accessCode) {
-  if (String(accessCode || 'emd2').trim().toLowerCase() === EMD_ACCESS_CODE) {
+  if (String(accessCode || '').trim().toLowerCase() === EMD_ACCESS_CODE) {
     return { success: true, token: createEmdSession_(), role: 'EMD' };
   }
   return { success: false, msg: 'รหัสเข้าใช้งานไม่ถูกต้อง' };

@@ -2431,7 +2431,8 @@
       }
 
       const seq = ++loadDataSeq;
-      const fetchPromise = apiCall('getAppData', [includeLogs]);
+      const authToken = (typeof window.getEmdApiToken === 'function' ? window.getEmdApiToken('getAppData') : '') || adminToken || sessionToken || '';
+      const fetchPromise = apiCall('getAppData', [includeLogs, authToken], authToken);
       const tracked = fetchPromise.then(function (data) {
         if (seq !== loadDataSeq) return data;
         if (data && data.requiresAuth) {
