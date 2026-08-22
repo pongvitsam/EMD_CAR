@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <title>🚗 EMD CAR 🚗</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes">
   <meta name="theme-color" content="#0a1628">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="alternate icon" href="favicon.ico">
@@ -168,6 +168,80 @@
       .calendar-panel {
         height: calc(100vh - 270px);
         min-height: 460px;
+      }
+    }
+    /* Mobile: show full month grid in viewport — no horizontal scroll; user can pinch-zoom */
+    @media (max-width: 767px) {
+      #view-calendar {
+        overflow-x: hidden;
+      }
+      #view-calendar .calendar-panel--main {
+        overflow-x: hidden !important;
+        overflow-y: hidden;
+        padding: 0.5rem !important;
+        height: auto;
+        min-height: 0;
+        max-height: none;
+      }
+      #calendar.calendar-fit,
+      #calendar {
+        min-width: 0 !important;
+        width: 100% !important;
+        max-width: 100%;
+      }
+      #calendar .fc {
+        width: 100% !important;
+        max-width: 100%;
+      }
+      #calendar .fc-scrollgrid,
+      #calendar .fc-scrollgrid-sync-table,
+      #calendar .fc-daygrid-body,
+      #calendar .fc-col-header {
+        width: 100% !important;
+      }
+      #calendar .fc-toolbar {
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+      #calendar .fc-toolbar-title {
+        font-size: 0.95rem !important;
+      }
+      #calendar .fc-button {
+        padding: 0.35rem 0.7rem !important;
+        font-size: 0.75rem !important;
+      }
+      #calendar .fc-col-header-cell-cushion {
+        font-size: 0.65rem !important;
+        padding: 2px 0 !important;
+      }
+      #calendar .fc-daygrid-day-number {
+        font-size: 0.7rem !important;
+        padding: 2px 4px !important;
+      }
+      #calendar.calendar-month-expand .fc-daygrid-day-frame {
+        min-height: 3.75rem;
+      }
+      #calendar.calendar-month-expand .fc-event,
+      #calendar .fc-event {
+        font-size: 0.58rem !important;
+        padding: 1px 4px !important;
+        line-height: 1.15 !important;
+        border-radius: 0.35rem !important;
+      }
+      #calendar.calendar-month-expand .fc-event-title {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      #view-calendar .calendar-panel:not(.calendar-panel--main) {
+        height: auto;
+        min-height: 200px;
+        max-height: none;
+      }
+    }
+    @media (min-width: 768px) {
+      #calendar.calendar-fit {
+        min-width: 0;
       }
     }
 
@@ -360,8 +434,8 @@
     <div id="view-calendar" class="hidden space-y-6">
       <h2 class="text-2xl font-semibold text-purple-500 dark:text-purple-400 border-b-2 border-purple-100 dark:border-purple-800 pb-2 mb-4">📅 ตารางการใช้รถ</h2>
       <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        <div class="lg:col-span-3 bg-white dark:bg-slate-800 p-6 rounded-[2rem] shadow-sm border border-slate-100 dark:border-slate-700 calendar-panel overflow-x-auto overflow-y-hidden">
-          <div id="calendar" class="h-full min-w-[600px]"></div>
+        <div class="lg:col-span-3 bg-white dark:bg-slate-800 p-3 sm:p-6 rounded-[2rem] shadow-sm border border-slate-100 dark:border-slate-700 calendar-panel calendar-panel--main overflow-x-hidden overflow-y-hidden">
+          <div id="calendar" class="h-full w-full calendar-fit"></div>
         </div>
         <div class="lg:col-span-1 bg-white dark:bg-slate-800 p-6 rounded-[2rem] shadow-sm border border-slate-100 dark:border-slate-700 calendar-panel overflow-y-auto">
           <h3 class="text-xl font-semibold text-purple-500 dark:text-purple-400 mb-4 border-b-2 border-purple-100 dark:border-purple-800 pb-2">📋 รายละเอียดการจอง</h3>
@@ -2427,11 +2501,11 @@
           ensureFullCalendar().then(function () {
             setupCalendar();
             isCalendarInitialized = true;
-            if (calendar) setTimeout(function () { calendar.render(); }, 100);
+            if (calendar) setTimeout(function () { calendar.updateSize(); calendar.render(); }, 100);
           });
         } else {
           refreshCalendarEvents();
-          if (calendar) setTimeout(function () { calendar.render(); }, 100);
+          if (calendar) setTimeout(function () { calendar.updateSize(); }, 100);
         }
       } else if (tabId === 'vehicles') {
         renderVehicleManager();
@@ -3297,8 +3371,8 @@
    function setupCalendar(bookings) {
       if(calendar) calendar.destroy();
       const calendarBookings = bookings || getCalendarBookings();
-      const initialView = window.innerWidth < 768 ? 'listMonth' : 'dayGridMonth';
-      const isListInitial = initialView.indexOf('list') === 0;
+      const initialView = 'dayGridMonth';
+      const isListInitial = false;
       calendar = new FullCalendar.Calendar(document.getElementById('calendar'), {
         initialView: initialView,
         headerToolbar: { left: 'prev,next', center: 'title', right: 'dayGridMonth,listMonth' },
