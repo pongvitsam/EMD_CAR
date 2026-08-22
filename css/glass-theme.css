@@ -770,13 +770,15 @@ select.flatpickr-monthDropdown-months {
   border-radius: 1rem;
   padding: 0.625rem 0.75rem 0.75rem;
   border: 2px solid rgba(147, 51, 234, 0.38);
-  background: rgba(255, 255, 255, 0.5);
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+  background: transparent;
+  box-shadow: none;
 }
 
 .emd-glass .car-group-panel {
-  backdrop-filter: blur(var(--emd-blur));
-  -webkit-backdrop-filter: blur(var(--emd-blur));
+  background: transparent !important;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none !important;
 }
 
 .car-group-panel--all {
@@ -790,11 +792,6 @@ select.flatpickr-monthDropdown-months {
 .car-group-panel__head {
   margin-bottom: 0.5rem;
   padding-bottom: 0.375rem;
-  border-bottom: 1px solid rgba(147, 51, 234, 0.12);
-}
-
-.car-group-panel--restricted .car-group-panel__head {
-  border-bottom-color: rgba(245, 158, 11, 0.2);
 }
 
 .car-group-panel__title {
