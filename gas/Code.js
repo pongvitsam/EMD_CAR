@@ -1248,9 +1248,6 @@ function deleteVehicleGroup(token, rowOrId, moveToGroupId) {
     if (targetRow < 2 || targetRow > sheet.getLastRow()) {
       return { success: false, msg: 'ไม่พบกลุ่มที่ต้องการลบ' };
     }
-    if (groupId === DEFAULT_VEHICLE_GROUP_ALL) {
-      return { success: false, msg: 'ไม่สามารถลบกลุ่ม "ทุกงาน" ได้' };
-    }
     const destId = normalizeVehicleGroupId_(moveToGroupId || DEFAULT_VEHICLE_GROUP_ALL);
     if (destId === groupId) {
       return { success: false, msg: 'กลุ่มปลายทางต้องไม่ใช่กลุ่มที่กำลังลบ' };
