@@ -586,7 +586,7 @@
         <h2 class="text-2xl font-semibold text-purple-500 dark:text-purple-400">🏷️ จัดการกลุ่มงานรถ</h2>
         <button type="button" onclick="window.openVehicleGroupModal()" class="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-xl text-sm font-medium">+ เพิ่มกลุ่มงาน</button>
       </div>
-      <p class="text-sm text-slate-500">สร้าง / แก้ชื่อ / ย้ายรถทั้งกลุ่ม / ลบกลุ่ม ได้ที่นี่ — รถแต่ละคันยังเปลี่ยนกลุ่มได้จากฟอร์มแก้ไขรถด้วย</p>
+      <p class="text-sm text-slate-500">สร้าง / แก้ชื่อ / ย้ายรถทีละคัน / ลบกลุ่ม ได้ที่นี่ — หรือเปลี่ยนกลุ่มจากฟอร์มแก้ไขรถได้ด้วย</p>
       <div class="overflow-x-auto bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700">
         <table class="w-full text-left text-sm">
           <thead class="bg-purple-50 dark:bg-slate-700 text-purple-700 dark:text-purple-300">
@@ -4414,36 +4414,60 @@
         .join('');
     }
 
+    function getCarsInGroupLocal(groupId) {
+      const id = groupId || 'ALL';
+      return (appData.vehicles || []).filter(function (v) {
+        return (v.vehicleGroup || 'ALL') === id && String(v.status || '') !== 'HIDDEN';
+      }).sort(function (a, b) {
+        return String(a.plate || '').localeCompare(String(b.plate || ''), 'th');
+      });
+    }
+
     window.moveVehicleGroupAction = async function (fromGroupId) {
       if (!isAdmin || !adminToken) return;
       const item = vehicleGroupRows.find(function (g) { return g.id === fromGroupId; });
       if (!item) return;
-      const count = (typeof item.vehicleCount === 'number') ? item.vehicleCount : countCarsInGroupLocal(item.id);
-      if (!count) {
+      const cars = getCarsInGroupLocal(item.id);
+      if (!cars.length) {
         Swal.fire('ไม่มีรถในกลุ่มนี้', 'ยังไม่มีรถที่ต้องย้าย', 'info');
         return;
       }
-      const optionsHtml = buildGroupSelectOptionsHtml(item.id, 'ALL');
-      if (!optionsHtml) {
+      const groupOptionsHtml = buildGroupSelectOptionsHtml(item.id, 'ALL');
+      if (!groupOptionsHtml) {
         Swal.fire('ไม่มีกลุ่มปลายทาง', 'สร้างกลุ่มอื่นก่อนแล้วค่อยย้าย', 'info');
         return;
       }
+      const carOptionsHtml = cars.map(function (v) {
+        return '<option value="' + escapeHtml(v.id) + '">' + escapeHtml(v.plate || v.id) + '</option>';
+      }).join('');
       const result = await Swal.fire({
-        title: 'ย้ายรถทั้งหมดจาก "' + item.name + '"',
-        html: '<p class="text-sm text-slate-500 mb-3">มีรถ ' + count + ' คัน — เลือกกลุ่มปลายทาง</p>' +
-          '<select id="swal-move-to" class="swal2-input" style="display:block;width:100%;max-width:100%;margin:0">' + optionsHtml + '</select>',
+        title: 'ย้ายรถจาก "' + item.name + '"',
+        html: '<p class="text-sm text-slate-500 mb-3">เลือกรถทีละคัน แล้วเลือกกลุ่มปลายทาง</p>' +
+          '<label class="block text-xs font-medium text-left mb-1">รถที่จะย้าย</label>' +
+          '<select id="swal-move-car" class="swal2-input" style="display:block;width:100%;max-width:100%;margin:0 0 12px">' + carOptionsHtml + '</select>' +
+          '<label class="block text-xs font-medium text-left mb-1">ย้ายไปกลุ่ม</label>' +
+          '<select id="swal-move-to" class="swal2-input" style="display:block;width:100%;max-width:100%;margin:0">' + groupOptionsHtml + '</select>',
         showCancelButton: true,
         confirmButtonText: 'ย้ายรถ',
         cancelButtonText: 'ยกเลิก',
         confirmButtonColor: '#f59e0b',
         preConfirm: function () {
-          const sel = document.getElementById('swal-move-to');
-          return sel ? sel.value : '';
+          const carSel = document.getElementById('swal-move-car');
+          const groupSel = document.getElementById('swal-move-to');
+          if (!carSel || !carSel.value) {
+            Swal.showValidationMessage('กรุณาเลือกรถที่จะย้าย');
+            return false;
+          }
+          if (!groupSel || !groupSel.value) {
+            Swal.showValidationMessage('กรุณาเลือกกลุ่มปลายทาง');
+            return false;
+          }
+          return { vehicleId: carSel.value, toGroupId: groupSel.value };
         }
       });
-      if (!result.isConfirmed || !result.value) return;
+      if (!result.isConfirmed || !result.value || !result.value.vehicleId) return;
       Swal.fire({ title: 'กำลังย้าย...', allowOutsideClick: false, didOpen: function () { Swal.showLoading(); } });
-      apiCall('moveVehiclesBetweenGroups', [item.id, result.value], adminToken).then(function (res) {
+      apiCall('moveVehiclesToGroup', [[result.value.vehicleId], result.value.toGroupId], adminToken).then(function (res) {
         Swal.close();
         showToast(res.msg, res.success);
         if (res.success) {

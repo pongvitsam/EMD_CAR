@@ -792,6 +792,7 @@ function dispatchApi_(action, args, token, clientIp) {
     case 'saveVehicleGroup': return saveVehicleGroup(token, args[0]);
     case 'deleteVehicleGroup': return deleteVehicleGroup(token, args[0], args[1]);
     case 'moveVehiclesBetweenGroups': return moveVehiclesBetweenGroups(token, args[0], args[1]);
+    case 'moveVehiclesToGroup': return moveVehiclesToGroup(token, args[0], args[1]);
     case 'testLineUpcomingSummary': return testLineUpcomingSummary(token, args[0]);
     case 'recordVehicleHandover': return recordVehicleHandover(args[0], clientIp, token);
     case 'setVehicleTcLineNotify': return setVehicleTcLineNotify(token, args[0], args[1]);
@@ -1214,6 +1215,49 @@ function moveVehiclesBetweenGroups(token, fromGroupId, toGroupId) {
     if (!fromOk) return { success: false, msg: 'ไม่พบกลุ่มต้นทาง' };
     if (!toOk) return { success: false, msg: 'ไม่พบกลุ่มปลายทาง' };
     const moved = reassignVehiclesGroup_(fromId, toId);
+    clearAppCache_();
+    return {
+      success: true,
+      msg: 'ย้ายรถ ' + moved + ' คันเรียบร้อยครับ',
+      moved: moved,
+      groups: getVehicleGroups_().map(function (g) {
+        return Object.assign({}, g, { vehicleCount: countVehiclesInGroup_(g.id) });
+      })
+    };
+  } catch (error) { return { success: false, msg: error.message }; }
+}
+
+function moveVehiclesToGroup(token, vehicleIds, toGroupId) {
+  try {
+    requireAdminSession_(token);
+    const toId = normalizeVehicleGroupId_(toGroupId);
+    if (!toId) return { success: false, msg: 'กรุณาเลือกกลุ่มปลายทาง' };
+    const groups = getVehicleGroups_();
+    if (!groups.some(function (g) { return g.id === toId; })) {
+      return { success: false, msg: 'ไม่พบกลุ่มปลายทาง' };
+    }
+    const ids = (Array.isArray(vehicleIds) ? vehicleIds : [vehicleIds])
+      .map(function (id) { return String(id || '').trim(); })
+      .filter(Boolean);
+    if (!ids.length) return { success: false, msg: 'กรุณาเลือกรถที่จะย้าย' };
+    const idSet = {};
+    ids.forEach(function (id) { idSet[id] = true; });
+
+    const ss = getSpreadsheet_();
+    const vSheet = getSheetOrThrow_(ss, 'Vehicles');
+    const vData = vSheet.getDataRange().getValues();
+    let moved = 0;
+    for (let i = 1; i < vData.length; i++) {
+      const vid = String(vData[i][0] || '').trim();
+      if (!idSet[vid]) continue;
+      if (normalizeVehicleGroupId_(vData[i][21]) === toId) continue;
+      vSheet.getRange(i + 1, 22).setValue(toId);
+      if (toId !== COMPANY_VISIBLE_VEHICLE_GROUP) {
+        vSheet.getRange(i + 1, 21).setValue('EMD');
+      }
+      moved++;
+    }
+    if (!moved) return { success: false, msg: 'ไม่พบรถที่เลือก หรือรถอยู่ในกลุ่มปลายทางแล้ว' };
     clearAppCache_();
     return {
       success: true,
