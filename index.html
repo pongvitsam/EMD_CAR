@@ -854,8 +854,8 @@
 
   <datalist id="user-list"></datalist>
   <datalist id="dept-list"></datalist>
-  <script src="js/api-client.js"></script>
   <script>
+    const EMD_API_CLIENT_SRC = 'js/api-client.js';
     const EMD_CHART_SRC = 'https://cdn.jsdelivr.net/npm/chart.js';
     const EMD_FC_SRC = 'https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js';
     const scriptLoaders = {};
@@ -873,6 +873,32 @@
         document.head.appendChild(s);
       });
       return scriptLoaders[src];
+    }
+
+    function ensureApiClient() {
+      if (typeof window.apiCall === 'function') return Promise.resolve();
+      const cacheBust = 'v=' + encodeURIComponent(String(Date.now()));
+      const src = EMD_API_CLIENT_SRC + '?' + cacheBust;
+
+      function loadOnce(url) {
+        delete scriptLoaders[url];
+        return loadScriptOnce(url).then(function () {
+          if (typeof window.apiCall !== 'function') {
+            throw new Error('api-client.js โหลดแล้วแต่ apiCall ยังไม่พร้อม');
+          }
+        });
+      }
+
+      return loadOnce(src).catch(function () {
+        const retrySrc = EMD_API_CLIENT_SRC + '?retry=' + encodeURIComponent(String(Date.now()));
+        return new Promise(function (resolve, reject) {
+          setTimeout(function () {
+            loadOnce(retrySrc).then(resolve).catch(function () {
+              reject(new Error('โหลด js/api-client.js ไม่สำเร็จ — ลองรีเฟรช (Ctrl+F5) หรือรอสักครู่แล้วเปิดใหม่'));
+            });
+          }, 1200);
+        });
+      });
     }
 
     function ensureChartJs() { return loadScriptOnce(EMD_CHART_SRC); }
@@ -1701,6 +1727,7 @@
     };
 
     function restoreUserSession() {
+      if (typeof apiCall !== 'function') return Promise.resolve(false);
       const stored = readStoredSession();
       if (!stored) return Promise.resolve(false);
       userRole = stored.role;
@@ -1933,6 +1960,13 @@
 
     window.onload = async function() {
       showSkeletonState();
+      try {
+        await ensureApiClient();
+      } catch (err) {
+        hideLoading();
+        showLoginGate((err && err.message) || 'โหลดระบบเชื่อมต่อไม่สำเร็จ — ลองรีเฟรช (Ctrl+F5)');
+        return;
+      }
       ensureChartJs();
       resolveClientIpOnce();
       initBookingComboboxes();
@@ -2738,6 +2772,7 @@
     }
 
     function restoreAdminSession() {
+      if (typeof apiCall !== 'function') return Promise.resolve(false);
       const token = readAdminSessionToken();
       if (!token) return Promise.resolve(false);
       isAdmin = true;
