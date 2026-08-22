@@ -1,8 +1,8 @@
 const SHEET_ID = '1W5XJ6_JIFr4UHSLWsjb_YfpbF6He7Crz7Vrcdbbqaw8';
 const DRIVE_FOLDER_ID = '1R7JySsplPoCZI_Kjq51GAukOKUAzJhKz'; 
 const ADMIN_EMAIL = 'admin@yourdomain.com';
-const APP_DATA_CACHE_KEY = 'APP_DATA_V2';
-const APP_DATA_CORE_CACHE_KEY = 'APP_DATA_CORE_V2';
+const APP_DATA_CACHE_KEY = 'APP_DATA_V3';
+const APP_DATA_CORE_CACHE_KEY = 'APP_DATA_CORE_V3';
 const APP_LOGS_CACHE_KEY = 'APP_LOGS_V1';
 const LEGACY_APP_DATA_CACHE_KEY = 'APP_DATA_V1';
 const CACHE_TTL_SEC = 120;
@@ -424,23 +424,40 @@ function ensureVehiclesSheet_(ss) {
   return sheet;
 }
 
+function ensureDefaultVehicleGroups_(sheet) {
+  const data = sheet.getDataRange().getValues();
+  const existingIds = {};
+  for (let i = 1; i < data.length; i++) {
+    existingIds[normalizeVehicleGroupId_(data[i][0]).toLowerCase()] = true;
+  }
+  const defaults = [
+    [DEFAULT_VEHICLE_GROUP_ALL, 'รถที่จองใช้ได้ทุกงาน', '[]', 1, 'YES'],
+    ['pwa', 'รถเฉพาะงานการประปา', '["การประปา","ประปา","กปน","กปน."]', 2, ''],
+    ['other', 'อื่นๆ', '["อื่นๆ","อื่น","other"]', 99, '']
+  ];
+  let added = false;
+  defaults.forEach(function (row) {
+    if (!existingIds[String(row[0]).toLowerCase()]) {
+      sheet.appendRow(row);
+      added = true;
+    }
+  });
+  if (added) clearAppCache_();
+}
+
 function ensureVehicleGroupsSheet_(ss) {
   let sheet = ss.getSheetByName('VehicleGroups');
   if (!sheet) {
     sheet = ss.insertSheet('VehicleGroups');
     sheet.appendRow(VEHICLE_GROUP_HEADERS);
-    sheet.appendRow([DEFAULT_VEHICLE_GROUP_ALL, 'รถที่จองใช้ได้ทุกงาน', '[]', 1, 'YES']);
-    sheet.appendRow(['pwa', 'รถเฉพาะงานการประปา', '["การประปา","ประปา","กปน","กปน."]', 2, '']);
+    ensureDefaultVehicleGroups_(sheet);
     return sheet;
   }
   const headers = sheet.getRange(1, 1, 1, VEHICLE_GROUP_HEADERS.length).getValues()[0];
   VEHICLE_GROUP_HEADERS.forEach(function (h, idx) {
     if (!headers[idx]) sheet.getRange(1, idx + 1).setValue(h);
   });
-  if (sheet.getLastRow() < 2) {
-    sheet.appendRow([DEFAULT_VEHICLE_GROUP_ALL, 'รถที่จองใช้ได้ทุกงาน', '[]', 1, 'YES']);
-    sheet.appendRow(['pwa', 'รถเฉพาะงานการประปา', '["การประปา","ประปา","กปน","กปน."]', 2, '']);
-  }
+  ensureDefaultVehicleGroups_(sheet);
   return sheet;
 }
 
@@ -561,8 +578,13 @@ function validateVehicleGroupBooking_(plate, dept, dest) {
 }
 
 function vehicleFormField_(form, key, row, colIndex, fallback) {
-  if (form && Object.prototype.hasOwnProperty.call(form, key) && form[key] !== undefined && form[key] !== null && String(form[key]).trim() !== '') {
-    return form[key];
+  if (form && Object.prototype.hasOwnProperty.call(form, key) && form[key] !== undefined && form[key] !== null) {
+    const raw = String(form[key]).trim();
+    if (raw !== '') return form[key];
+    // Allow explicit 0 for numeric mileage fields on create/update
+    if ((key === 'currentMile' || key === 'serviceMile') && (form[key] === 0 || form[key] === '0')) {
+      return 0;
+    }
   }
   if (row && row[colIndex] !== undefined && row[colIndex] !== null && String(row[colIndex]).trim() !== '') {
     return row[colIndex];
@@ -1084,16 +1106,28 @@ function saveVehicleGroup(token, form) {
     const sortOrder = parseInt(form.sortOrder, 10) || 999;
     if (!name) return { success: false, msg: 'กรุณาระบุชื่อกลุ่ม' };
     if (!id) {
-      id = 'grp_' + new Date().getTime();
+      const slug = name.toLowerCase()
+        .replace(/\s+/g, '_')
+        .replace(/[^\u0E00-\u0E7Fa-z0-9_]/g, '')
+        .slice(0, 40);
+      id = slug || ('grp_' + new Date().getTime());
     }
     if (id === DEFAULT_VEHICLE_GROUP_ALL) {
       return { success: false, msg: 'ไม่สามารถแก้ไขกลุ่มระบบ ALL ได้' };
     }
     const groups = getVehicleGroups_();
-    const duplicate = groups.some(function (g) {
+    const duplicateId = groups.some(function (g) {
       return g.row !== row && g.id === id;
     });
-    if (duplicate) return { success: false, msg: 'รหัสกลุ่มซ้ำ' };
+    if (duplicateId && !row) {
+      id = id + '_' + new Date().getTime();
+    } else if (duplicateId) {
+      return { success: false, msg: 'รหัสกลุ่มซ้ำ' };
+    }
+    const duplicateName = groups.some(function (g) {
+      return g.row !== row && String(g.name || '').trim() === name;
+    });
+    if (duplicateName) return { success: false, msg: 'มีชื่อกลุ่มนี้อยู่แล้ว' };
     const values = [id, name, JSON.stringify(keywords), sortOrder, ''];
     if (row >= 2 && row <= sheet.getLastRow()) {
       const existingId = String(sheet.getRange(row, 1).getValue() || '').trim();
@@ -1240,7 +1274,7 @@ function uploadImageToDrive(base64Data, filename) {
 
 function saveVehicleManagement(token, form, clientIp) {
   requireAdminSession_(token);
-  return saveVehicle(form, clientIp);
+  return saveVehicle(form, clientIp, token);
 }
 
 function saveVehicle(form, clientIp, token) {
@@ -1343,10 +1377,15 @@ function saveVehicle(form, clientIp, token) {
       }
     } else {
       const newId = 'V_' + new Date().getTime();
+      const currentMileNum = parseFloat(form.currentMile);
+      if (!isFinite(currentMileNum) || currentMileNum < 0) {
+        return { success: false, msg: 'กรุณาระบุไมล์ล่าสุดของรถใหม่' };
+      }
+      form.currentMile = currentMileNum;
       const values = buildVehicleRowValues_(form, [], imgUrl || '', activeStatus);
       sheet.appendRow([newId].concat(values));
       clearAppCache_();
-      appendLogRow_(logSheet, actionEmail, 'ADD_VEHICLE', values[0], 'เพิ่มรถใหม่เข้าระบบ', '-', ip);
+      appendLogRow_(logSheet, actionEmail, 'ADD_VEHICLE', values[0], 'เพิ่มรถใหม่เข้าระบบ (ไมล์ ' + currentMileNum + ')', '-', ip);
       return {success: true, msg: 'เพิ่มรถเข้าระบบเรียบร้อยครับ'};
     }
   } catch (error) { return {success: false, msg: error.message}; }
@@ -2059,18 +2098,26 @@ function dailyExpiryCheck() {
 function quickUpdateMileage(id, plate, newMile, clientIp, token) {
   try {
     requireMutationAccess_(token);
+    const mile = parseFloat(newMile);
+    if (!isFinite(mile) || mile < 0) {
+      return { success: false, msg: 'กรุณาระบุเลขไมล์ให้ถูกต้อง' };
+    }
     const ss = getSpreadsheet_();
     const sheet = getSheetOrThrow_(ss, 'Vehicles');
     const data = sheet.getDataRange().getValues();
     const actionEmail = Session.getActiveUser().getEmail() || 'Unknown User';
     const ip = sanitizeClientIp_(clientIp);
-    
+    const wantId = String(id || '').trim();
+    const wantPlate = normalizePlateKey_(plate);
+
     for (let i = 1; i < data.length; i++) {
-      if (data[i][0] == id) {
-        sheet.getRange(i + 1, 8).setValue(newMile); 
+      const rowId = String(data[i][0] || '').trim();
+      const rowPlate = normalizePlateKey_(data[i][1]);
+      if ((wantId && rowId === wantId) || (!wantId && wantPlate && rowPlate === wantPlate)) {
+        sheet.getRange(i + 1, 8).setValue(mile);
         clearAppCache_();
-        appendLogRow_(getSheetOrThrow_(ss, 'Logs'), actionEmail, 'UPDATE_MILEAGE', plate, `แก้ไขไมล์ด่วน: ${newMile} km`, 'แก้เลขไมล์ที่กรอกผิด', ip);
-        return { success: true, msg: 'อัปเดตเลขไมล์เรียบร้อยครับ' };
+        appendLogRow_(getSheetOrThrow_(ss, 'Logs'), actionEmail, 'UPDATE_MILEAGE', data[i][1] || plate, 'แก้ไขไมล์ด่วน: ' + mile + ' km', 'แก้เลขไมล์ที่กรอกผิด', ip);
+        return { success: true, msg: 'อัปเดตเลขไมล์เรียบร้อยครับ', currentMile: mile };
       }
     }
     return { success: false, msg: 'ไม่พบรถในระบบ' };

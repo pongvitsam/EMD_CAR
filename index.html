@@ -423,7 +423,7 @@
         <h2 class="text-2xl font-semibold text-purple-500 dark:text-purple-400">🏷️ จัดการกลุ่มงานรถ</h2>
         <button type="button" onclick="window.openVehicleGroupModal()" class="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-xl text-sm font-medium">+ เพิ่มกลุ่มงาน</button>
       </div>
-      <p class="text-sm text-slate-500">หมวด 1 「ทุกงาน」เป็นค่าเริ่มต้น (บริษัทไม่เห็น) — หมวด 2 แอดมินตั้งชื่อกลุ่มงานเฉพาะได้เอง เช่น การประปา</p>
+      <p class="text-sm text-slate-500">หมวด 「ทุกงาน」เป็นค่าเริ่มต้น — สร้างกลุ่มเองได้ เช่น การประปา, อื่นๆ หรือชื่องานใหม่ แล้วไปกำหนดที่รถแต่ละคัน</p>
       <div class="overflow-x-auto bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700">
         <table class="w-full text-left text-sm">
           <thead class="bg-purple-50 dark:bg-slate-700 text-purple-700 dark:text-purple-300">
@@ -596,8 +596,9 @@
           <div class="flex flex-col justify-end"><label class="block text-sm font-medium text-blue-700 dark:text-blue-400 mb-1">วันคืนรถ (หมดสัญญา)</label><input type="text" id="vh-lease" placeholder="วว/ดด/ปปปป" class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600 bg-white"></div>
         </div>
         <div>
-           <label class="block text-sm font-medium mb-1 text-slate-500">ไมล์ล่าสุด</label>
-           <input type="number" id="vh-current-mile" class="w-full px-3 py-2 rounded-lg border outline-none text-slate-500 bg-slate-100 dark:bg-slate-700 dark:border-slate-600" readonly>
+           <label class="block text-sm font-medium mb-1 text-purple-700 dark:text-purple-300">ไมล์ล่าสุด (กม.)</label>
+           <input type="number" id="vh-current-mile" min="0" step="1" placeholder="ใส่เลขไมล์ปัจจุบันของรถ" class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600">
+           <p class="text-xs text-slate-400 mt-1">รถใหม่ต้องใส่ไมล์เริ่มต้นที่นี่ หรือกดแก้ไขจากการ์ดรถภายหลัง</p>
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -615,8 +616,11 @@
            </div>
            <div id="vh-vehicle-group-wrap" class="md:col-span-2">
              <label class="block text-sm font-medium mb-1 text-purple-700 dark:text-purple-300">กลุ่มงานที่จองได้</label>
-             <select id="vh-vehicle-group" onchange="window.syncVehicleTcLineCheckbox()" class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600"></select>
-             <p class="text-xs text-slate-400 mt-1">เลือก "ทุกงาน" หรือกลุ่มเฉพาะ เช่น การประปา</p>
+             <div class="flex gap-2">
+               <select id="vh-vehicle-group" onchange="window.onVehicleGroupSelectChange()" class="flex-1 px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600"></select>
+               <button type="button" id="vh-add-group-btn" onclick="window.openVehicleGroupModal()" class="shrink-0 px-3 py-2 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium whitespace-nowrap">+ สร้างกลุ่ม</button>
+             </div>
+             <p class="text-xs text-slate-400 mt-1">เลือก "ทุกงาน" / การประปา / อื่นๆ หรือกดสร้างกลุ่มใหม่ได้เอง</p>
            </div>
            <div id="vh-managed-company-wrap" class="md:col-span-2 hidden">
              <label class="flex items-start gap-2 cursor-pointer">
@@ -3029,9 +3033,10 @@
       });
     };
 
-    function populateVehicleGroupSelects() {
+    function populateVehicleGroupSelects(selectedId) {
       const sel = document.getElementById('vh-vehicle-group');
       if (!sel) return;
+      const prev = selectedId || sel.value || 'ALL';
       const groups = getSortedVehicleGroups();
       const allGroup = groups.find(function (g) { return g.id === 'ALL'; }) || { id: 'ALL', name: 'รถที่จองใช้ได้ทุกงาน' };
       const restricted = groups.filter(function (g) { return g.id !== 'ALL'; });
@@ -3039,7 +3044,16 @@
         restricted.map(function (g) {
           return '<option value="' + escapeHtml(g.id) + '">' + escapeHtml(g.name) + '</option>';
         }).join('');
+      if (prev && Array.from(sel.options).some(function (o) { return o.value === prev; })) {
+        sel.value = prev;
+      } else {
+        sel.value = 'ALL';
+      }
     }
+
+    window.onVehicleGroupSelectChange = function () {
+      window.syncVehicleTcLineCheckbox();
+    };
 
     function getVisibleVehicles(vehicles) {
       const list = vehicles || [];
@@ -3107,8 +3121,10 @@
 
       const currentMile = parseFloat(car.currentMile) || 0;
       const serviceMile = parseFloat(car.serviceMile) || 0;
+      const safeId = String(car.id || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      const safePlate = String(car.plate || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
       const mileDisplay = isAdmin
-        ? '<button onclick="window.promptEditMileage(\'' + car.id + '\', \'' + escapeHtml(car.plate) + '\', ' + currentMile + ')" class="font-bold text-purple-600 bg-purple-100 hover:bg-purple-200 dark:text-purple-300 dark:bg-purple-900/40 px-2 py-0.5 rounded cursor-pointer transition shadow-sm">' + currentMile.toLocaleString() + ' ✏️</button>'
+        ? '<button type="button" onclick="window.promptEditMileage(\'' + safeId + '\', \'' + safePlate + '\', ' + currentMile + ')" class="font-bold text-purple-600 bg-purple-100 hover:bg-purple-200 dark:text-purple-300 dark:bg-purple-900/40 px-2 py-0.5 rounded cursor-pointer transition shadow-sm">' + currentMile.toLocaleString() + ' ✏️</button>'
         : '<span class="font-bold text-purple-600 dark:text-purple-300">' + currentMile.toLocaleString() + '</span>';
       let serviceHtml = '<p class="text-sm text-slate-500 dark:text-slate-400 mb-1">ไมล์ล่าสุด: ' + mileDisplay + ' / ' + serviceMile.toLocaleString() + '</p>';
       const svcInfo = getVehicleServiceInfo(car);
@@ -4156,6 +4172,10 @@
       document.getElementById('vg-sort').value = item ? (item.sortOrder || 10) : 10;
       document.getElementById('group-modal-title').innerText = item ? 'แก้ไขกลุ่มงานรถ' : 'เพิ่มกลุ่มงานรถ';
       document.getElementById('group-modal').style.display = 'flex';
+      setTimeout(function () {
+        const nameEl = document.getElementById('vg-name');
+        if (nameEl) nameEl.focus();
+      }, 80);
     };
 
     window.submitVehicleGroup = function (e) {
@@ -4176,6 +4196,12 @@
         if (res.success) {
           window.closeModal('group-modal');
           applyVehicleGroupRows(res.groups || vehicleGroupRows);
+          const groups = res.groups || vehicleGroupRows;
+          const created = groups.find(function (g) {
+            return String(g.name || '').trim() === String(obj.name || '').trim();
+          });
+          if (created) populateVehicleGroupSelects(created.id);
+          window.syncVehicleTcLineCheckbox();
         } else {
           Swal.fire('ผิดพลาด', res.msg, 'error');
         }
@@ -4237,24 +4263,27 @@
     window.promptEditMileage = async function(id, plate, currentMile) {
       if (!isAdmin) return;
       const { value: newMile } = await Swal.fire({
-        title: `แก้เลขไมล์: ${plate}`,
-        text: 'แก้ไขไมล์ล่าสุดในกรณีที่กรอกผิด',
+        title: 'แก้เลขไมล์: ' + String(plate || ''),
+        text: 'แก้ไขไมล์ล่าสุดในกรณีที่กรอกผิด หรือใส่ไมล์เริ่มต้นของรถใหม่',
         input: 'number',
-        inputValue: currentMile,
+        inputValue: (currentMile === 0 || currentMile) ? currentMile : '',
+        inputAttributes: { min: 0, step: 1 },
         showCancelButton: true,
         confirmButtonText: 'บันทึก',
         cancelButtonText: 'ยกเลิก',
         confirmButtonColor: '#3b82f6',
         inputValidator: (value) => {
-          if (!value || value < 0) return 'กรุณาระบุเลขไมล์ให้ถูกต้อง!'
+          if (value === '' || value === null || value === undefined) return 'กรุณาระบุเลขไมล์ให้ถูกต้อง!';
+          if (Number(value) < 0 || !isFinite(Number(value))) return 'กรุณาระบุเลขไมล์ให้ถูกต้อง!';
         }
       });
 
-      if (newMile) {
+      if (newMile !== undefined && newMile !== null && String(newMile).trim() !== '') {
         Swal.fire({ title: 'กำลังบันทึก...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
         apiCall('quickUpdateMileage', [id, plate, parseFloat(newMile)]).then(res => {
           showToast(res.msg, res.success);
-          if (res.success) reloadAfterMutation(); 
+          if (res.success) reloadAfterMutation();
+          else Swal.fire('ผิดพลาด', res.msg || 'อัปเดตไมล์ไม่สำเร็จ', 'error');
         }).catch(function (err) {
           Swal.close();
           Swal.fire('ผิดพลาด', err.message || 'อัปเดตไมล์ไม่สำเร็จ', 'error');
@@ -4590,6 +4619,15 @@
       document.getElementById('vh-plate').readOnly = isReadonly;
       document.getElementById('vh-type').disabled = isReadonly;
       document.getElementById('vh-is-active').disabled = isReadonly;
+      const currentMileEl = document.getElementById('vh-current-mile');
+      if (currentMileEl) {
+        currentMileEl.readOnly = isReadonly;
+        currentMileEl.classList.toggle('bg-slate-100', isReadonly);
+        currentMileEl.classList.toggle('text-slate-500', isReadonly);
+        currentMileEl.classList.toggle('dark:bg-slate-600', isReadonly);
+      }
+      const addGroupBtn = document.getElementById('vh-add-group-btn');
+      if (addGroupBtn) addGroupBtn.classList.toggle('hidden', isReadonly);
       populateVehicleGroupSelects();
       const groupSel = document.getElementById('vh-vehicle-group');
       if (groupSel) {
@@ -4651,8 +4689,12 @@
         }
       } else {
         document.getElementById('vh-is-active').value = "ACTIVE";
+        if (currentMileEl) currentMileEl.value = '';
       }
       document.getElementById('vehicle-modal').style.display = 'flex';
+      if (!isReadonly && !id && currentMileEl) {
+        setTimeout(function () { currentMileEl.focus(); }, 80);
+      }
     };
 
     window.handleImageSelect = e => {
@@ -5228,13 +5270,20 @@
       e.preventDefault(); 
       const btn = document.getElementById('vh-submit-btn'); btn.innerText = 'กำลังบันทึก...'; btn.disabled = true;
       const vehicleGroup = document.getElementById('vh-vehicle-group').value || 'ALL';
+      const currentMileRaw = String(document.getElementById('vh-current-mile').value || '').trim();
+      const currentMileNum = currentMileRaw === '' ? null : Number(currentMileRaw);
+      if (currentMileRaw === '' || currentMileNum === null || !isFinite(currentMileNum) || currentMileNum < 0) {
+        Swal.fire('กรุณาใส่ไมล์ล่าสุด', 'รถใหม่ต้องระบุเลขไมล์ปัจจุบันก่อนบันทึก', 'warning');
+        btn.innerText = 'บันทึกข้อมูลรถ'; btn.disabled = false;
+        return;
+      }
       const obj = { 
         id: document.getElementById('vh-id').value, 
         plate: document.getElementById('vh-plate').value, 
         type: document.getElementById('vh-type').value, 
         actExpiry: document.getElementById('vh-act').value, 
         serviceMile: document.getElementById('vh-service-mile').value, 
-        currentMile: document.getElementById('vh-current-mile').value, 
+        currentMile: currentMileNum, 
         existingImg: document.getElementById('vh-existing-img').value, 
         imageBase64: document.getElementById('vh-img-base64').value,
         remarks: document.getElementById('vh-remarks').value,
