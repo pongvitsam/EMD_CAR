@@ -1056,7 +1056,7 @@ function saveManagedName(token, form) {
     setupDatabase();
     const sheet = getSheetOrThrow_(ss, 'Name');
     const rows = getNameRows_();
-    const isDuplicate = rows.some(r => r.row !== row && r.fullName === fullName && String(r.dept).trim() === dept);
+    const isDuplicate = rows.some(r => Number(r.row) !== Number(row) && r.fullName === fullName && String(r.dept).trim() === dept);
     if (isDuplicate) return { success: false, msg: 'มีรายชื่อและแผนกนี้อยู่แล้ว' };
 
     const nameParts = fullName.split(' ');
@@ -1372,7 +1372,7 @@ function saveVehicleManagement(token, form, clientIp) {
 
 function saveVehicle(form, clientIp, token) {
   try {
-    requireMutationAccess_(token);
+    requireAdminSession_(token);
     const ss = getSpreadsheet_();
     setupDatabase();
     const sheet = getSheetOrThrow_(ss, 'Vehicles');

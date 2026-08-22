@@ -248,6 +248,7 @@ body.emd-glass {
 .emd-glass #tab-search,
 .emd-glass #tab-names,
 .emd-glass #tab-vehicles,
+.emd-glass #tab-groups,
 .emd-glass #tab-logs {
   color: var(--emd-text-muted);
 }
@@ -257,6 +258,7 @@ body.emd-glass {
 .emd-glass #tab-search:hover,
 .emd-glass #tab-names:hover,
 .emd-glass #tab-vehicles:hover,
+.emd-glass #tab-groups:hover,
 .emd-glass #tab-logs:hover {
   color: var(--emd-accent-soft);
 }

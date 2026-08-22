@@ -135,6 +135,12 @@
       height: auto;
       max-height: none;
     }
+    #calendar.calendar-fit {
+      min-height: 280px;
+    }
+    #calendar.calendar-month-expand {
+      min-height: 320px;
+    }
     #calendar.calendar-allow-vscroll {
       min-height: 360px;
       height: 100%;
@@ -159,7 +165,6 @@
     .fc-list-event .fc-list-event-title,
     .fc-list-event .fc-list-event-title a {
       font-weight: 600;
-      color: var(--emd-text, #e8f0fc) !important;
     }
     .fc-list-event .fc-list-event-time {
       color: var(--emd-text-muted) !important;
@@ -219,7 +224,7 @@
         overflow-y: hidden;
         padding: 0.5rem !important;
         height: auto;
-        min-height: 0;
+        min-height: 320px;
         max-height: none;
       }
       #view-calendar .calendar-panel--main.calendar-panel--list {
@@ -480,7 +485,7 @@
       <h2 class="text-2xl font-semibold text-purple-500 dark:text-purple-400 border-b-2 border-purple-100 dark:border-purple-800 pb-2 mb-4">📅 ตารางการใช้รถ</h2>
       <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
         <div class="lg:col-span-3 bg-white dark:bg-slate-800 p-3 sm:p-6 rounded-[2rem] shadow-sm border border-slate-100 dark:border-slate-700 calendar-panel calendar-panel--main overflow-x-hidden overflow-y-hidden">
-          <div id="calendar" class="h-full w-full calendar-fit"></div>
+          <div id="calendar" class="w-full calendar-fit"></div>
         </div>
         <div class="lg:col-span-1 bg-white dark:bg-slate-800 p-6 rounded-[2rem] shadow-sm border border-slate-100 dark:border-slate-700 calendar-panel overflow-y-auto">
           <h3 class="text-xl font-semibold text-purple-500 dark:text-purple-400 mb-4 border-b-2 border-purple-100 dark:border-purple-800 pb-2">📋 รายละเอียดการจอง</h3>
@@ -1723,7 +1728,8 @@
         if (!isAdmin) showLoginGate((res && res.msg) || 'เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่');
         return false;
       }).catch(function () {
-        return true;
+        // Keep cached UI on transient network errors, but do not treat as verified success.
+        return !!(stored && stored.token);
       });
     }
 
@@ -2746,11 +2752,10 @@
         saveAdminSessionToken(token);
         return true;
       }).catch(function () {
-        return true;
+        // Keep optimistic admin UI on transient errors; token stays for retry.
+        return !!token;
       });
     }
-
-    window.promptLogin = async function() {
       const { value: formValues } = await Swal.fire({
         title: 'ผู้ดูแลระบบ (Admin)',
         html: '<input id="swal-user" class="swal2-input" placeholder="Username"><input id="swal-pass" type="password" class="swal2-input" placeholder="Password">',
@@ -3431,7 +3436,7 @@
         views: {
           dayGridMonth: {
             expandRows: true,
-            fixedWeekNumber: true,
+            fixedWeekCount: false,
             dayMaxEvents: false,
             dayMaxEventRows: false
           },
@@ -4544,6 +4549,7 @@
       if (newMile !== undefined && newMile !== null && String(newMile).trim() !== '') {
         Swal.fire({ title: 'กำลังบันทึก...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
         apiCall('quickUpdateMileage', [id, plate, parseFloat(newMile)]).then(res => {
+          Swal.close();
           showToast(res.msg, res.success);
           if (res.success) reloadAfterMutation();
           else Swal.fire('ผิดพลาด', res.msg || 'อัปเดตไมล์ไม่สำเร็จ', 'error');
@@ -4882,6 +4888,10 @@
       document.getElementById('vh-plate').readOnly = isReadonly;
       document.getElementById('vh-type').disabled = isReadonly;
       document.getElementById('vh-is-active').disabled = isReadonly;
+      document.getElementById('vh-service-mile').readOnly = isReadonly;
+      document.getElementById('vh-remarks').readOnly = isReadonly;
+      const submitBtn = document.getElementById('vh-submit-btn');
+      if (submitBtn) submitBtn.classList.toggle('hidden', isReadonly);
       const currentMileEl = document.getElementById('vh-current-mile');
       if (currentMileEl) {
         currentMileEl.readOnly = isReadonly;
@@ -4930,8 +4940,8 @@
           document.getElementById('vh-id').value = v.id || '';
           document.getElementById('vh-plate').value = v.plate || '';
           document.getElementById('vh-type').value = v.type || 'ICE';
-          document.getElementById('vh-service-mile').value = v.serviceMile || '';
-          document.getElementById('vh-current-mile').value = v.currentMile || '';
+          document.getElementById('vh-service-mile').value = (v.serviceMile === 0 || v.serviceMile) ? v.serviceMile : '';
+          document.getElementById('vh-current-mile').value = (v.currentMile === 0 || v.currentMile) ? v.currentMile : '';
           document.getElementById('vh-remarks').value = v.remarks || '';
           document.getElementById('vh-existing-img').value = v.img || ''; 
           document.getElementById('vh-is-active').value = v.status || 'ACTIVE';
@@ -5530,23 +5540,33 @@
     };
 
     window.submitVehicle = function(e) {
-      e.preventDefault(); 
+      e.preventDefault();
+      if (!isAdmin || !adminToken) {
+        Swal.fire('ไม่มีสิทธิ์', 'เฉพาะ Admin เท่านั้นที่แก้ไขข้อมูลรถได้', 'warning');
+        return;
+      }
       const btn = document.getElementById('vh-submit-btn'); btn.innerText = 'กำลังบันทึก...'; btn.disabled = true;
       const vehicleGroup = document.getElementById('vh-vehicle-group').value || 'ALL';
+      const vehicleId = String(document.getElementById('vh-id').value || '').trim();
+      const isNew = !vehicleId;
       const currentMileRaw = String(document.getElementById('vh-current-mile').value || '').trim();
       const currentMileNum = currentMileRaw === '' ? null : Number(currentMileRaw);
-      if (currentMileRaw === '' || currentMileNum === null || !isFinite(currentMileNum) || currentMileNum < 0) {
+      if (isNew && (currentMileRaw === '' || currentMileNum === null || !isFinite(currentMileNum) || currentMileNum < 0)) {
         Swal.fire('กรุณาใส่ไมล์ล่าสุด', 'รถใหม่ต้องระบุเลขไมล์ปัจจุบันก่อนบันทึก', 'warning');
         btn.innerText = 'บันทึกข้อมูลรถ'; btn.disabled = false;
         return;
       }
+      if (!isNew && currentMileRaw !== '' && (currentMileNum === null || !isFinite(currentMileNum) || currentMileNum < 0)) {
+        Swal.fire('เลขไมล์ไม่ถูกต้อง', 'กรุณาใส่ตัวเลขไมล์ล่าสุดให้ถูกต้อง', 'warning');
+        btn.innerText = 'บันทึกข้อมูลรถ'; btn.disabled = false;
+        return;
+      }
       const obj = { 
-        id: document.getElementById('vh-id').value, 
+        id: vehicleId, 
         plate: document.getElementById('vh-plate').value, 
         type: document.getElementById('vh-type').value, 
         actExpiry: document.getElementById('vh-act').value, 
         serviceMile: document.getElementById('vh-service-mile').value, 
-        currentMile: currentMileNum, 
         existingImg: document.getElementById('vh-existing-img').value, 
         imageBase64: document.getElementById('vh-img-base64').value,
         remarks: document.getElementById('vh-remarks').value,
@@ -5555,7 +5575,8 @@
         managedBy: (vehicleGroup === COMPANY_VISIBLE_VEHICLE_GROUP && document.getElementById('vh-managed-company').checked) ? 'COMPANY' : 'EMD',
         vehicleGroup: vehicleGroup
       };
-      apiCall('saveVehicle', [obj]).then(res => { 
+      if (currentMileNum !== null && isFinite(currentMileNum)) obj.currentMile = currentMileNum;
+      apiCall('saveVehicle', [obj], adminToken).then(res => { 
         showToast(res.msg, res.success); 
         if (res.success) { window.closeModal('vehicle-modal'); reloadAfterMutation(); }
         else Swal.fire('ผิดพลาด', res.msg, 'error');

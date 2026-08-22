@@ -3188,9 +3188,14 @@
       if (newMile) {
         Swal.fire({ title: 'กำลังบันทึก...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
         google.script.run.withSuccessHandler(res => {
+          Swal.close();
           showToast(res.msg, res.success);
-          if (res.success) loadData(); 
-        }).quickUpdateMileage(id, plate, parseFloat(newMile), emdClientIp());
+          if (res.success) loadData();
+          else Swal.fire('ผิดพลาด', (res && res.msg) || 'อัปเดตไมล์ไม่สำเร็จ', 'error');
+        }).withFailureHandler(function (err) {
+          Swal.close();
+          Swal.fire('ผิดพลาด', (err && err.message) || 'อัปเดตไมล์ไม่สำเร็จ', 'error');
+        }).quickUpdateMileage(id, plate, parseFloat(newMile), emdClientIp(), adminToken);
       }
     };
 
