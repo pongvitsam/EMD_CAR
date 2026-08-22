@@ -135,14 +135,53 @@
       height: auto;
       max-height: none;
     }
+    #calendar.calendar-allow-vscroll {
+      min-height: 360px;
+      height: 100%;
+    }
+    #calendar.calendar-allow-vscroll .fc,
+    #calendar.calendar-allow-vscroll .fc-view-harness,
+    #calendar.calendar-allow-vscroll .fc-view-harness-active {
+      height: 100% !important;
+      min-height: 320px;
+    }
     #calendar.calendar-allow-vscroll .fc-scroller {
       overflow-y: auto !important;
+      -webkit-overflow-scrolling: touch;
     }
-    .fc-event { border-radius: 999px !important; padding: 4px 10px !important; font-size: 0.8rem; border: none !important; cursor: pointer; color: #ffffff !important; text-shadow: 0px 1px 2px rgba(0,0,0,0.4); }
-    .fc-button { border-radius: 999px !important; padding: 0.5rem 1.25rem !important; }
+    .calendar-panel--main.calendar-panel--list {
+      overflow-x: hidden !important;
+      overflow-y: auto !important;
+      height: calc(100vh - 240px);
+      min-height: 420px;
+      max-height: none;
+    }
     .fc-list-event .fc-list-event-title,
-    .fc-list-event .fc-list-event-title a { font-weight: 600; }
-    .fc-list-event .fc-list-event-time { color: var(--emd-text-muted) !important; }
+    .fc-list-event .fc-list-event-title a {
+      font-weight: 600;
+      color: var(--emd-text, #e8f0fc) !important;
+    }
+    .fc-list-event .fc-list-event-time {
+      color: var(--emd-text-muted) !important;
+    }
+    .fc-list-day-cushion,
+    .fc-list-day-text,
+    .fc-list-day-side-text {
+      color: var(--emd-text, #e8f0fc) !important;
+    }
+    .fc-list-empty {
+      color: var(--emd-text-muted, #94a3b8) !important;
+    }
+    .fc-event {
+      border-radius: 999px !important;
+      padding: 4px 10px !important;
+      font-size: 0.8rem;
+      border: none !important;
+      cursor: pointer;
+      color: #ffffff !important;
+      text-shadow: 0px 1px 2px rgba(0,0,0,0.4);
+    }
+    .fc-button { border-radius: 999px !important; padding: 0.5rem 1.25rem !important; }
     .fc-list-event .fc-list-event-dot { border-width: 8px; }
     .skeleton { animation: pulse 1.2s ease-in-out infinite; background-size: 200% 100%; }
     @keyframes pulse { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
@@ -182,6 +221,12 @@
         height: auto;
         min-height: 0;
         max-height: none;
+      }
+      #view-calendar .calendar-panel--main.calendar-panel--list {
+        overflow-y: auto !important;
+        height: calc(100vh - 220px) !important;
+        min-height: 360px !important;
+        max-height: none !important;
       }
       #calendar.calendar-fit,
       #calendar {
@@ -3361,23 +3406,28 @@
       const isList = String(viewType || '').indexOf('list') === 0;
       el.classList.toggle('calendar-month-expand', !isList);
       el.classList.toggle('calendar-allow-vscroll', isList);
-      if (panel) panel.classList.toggle('calendar-panel--grow', !isList);
+      if (panel) {
+        panel.classList.toggle('calendar-panel--grow', !isList);
+        panel.classList.toggle('calendar-panel--list', isList);
+      }
       if (calendar) {
+        // List needs a concrete height so FullCalendar can render rows;
+        // month uses auto so the full grid can expand without clipping.
         calendar.setOption('height', isList ? '100%' : 'auto');
-        setTimeout(() => calendar.updateSize(), 80);
+        setTimeout(function () {
+          calendar.updateSize();
+        }, 80);
       }
     }
 
    function setupCalendar(bookings) {
       if(calendar) calendar.destroy();
       const calendarBookings = bookings || getCalendarBookings();
-      const initialView = 'dayGridMonth';
-      const isListInitial = false;
       calendar = new FullCalendar.Calendar(document.getElementById('calendar'), {
-        initialView: initialView,
+        initialView: 'dayGridMonth',
         headerToolbar: { left: 'prev,next', center: 'title', right: 'dayGridMonth,listMonth' },
         locale: 'th',
-        height: isListInitial ? '100%' : 'auto',
+        height: 'auto',
         views: {
           dayGridMonth: {
             expandRows: true,
@@ -3385,9 +3435,13 @@
             dayMaxEvents: false,
             dayMaxEventRows: false
           },
-          listMonth: { height: '100%' }
+          listMonth: {
+            listDayFormat: { weekday: 'long', day: 'numeric', month: 'long' },
+            listDaySideFormat: false
+          }
         },
         datesSet: function(info) { applyCalendarScrollMode(info.view.type); },
+        viewDidMount: function(info) { applyCalendarScrollMode(info.view.type); },
         displayEventTime: false,
         eventDidMount: mountCalendarEventStyle,
         events: calendarBookings.map(mapBookingToCalendarEvent),
