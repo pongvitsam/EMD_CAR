@@ -2756,6 +2756,8 @@
         return !!token;
       });
     }
+
+    window.promptLogin = async function() {
       const { value: formValues } = await Swal.fire({
         title: 'ผู้ดูแลระบบ (Admin)',
         html: '<input id="swal-user" class="swal2-input" placeholder="Username"><input id="swal-pass" type="password" class="swal2-input" placeholder="Password">',
