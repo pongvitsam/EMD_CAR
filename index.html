@@ -70,6 +70,45 @@
     .toast-leave { transform: translateY(100%); opacity: 0; }
     .fc { font-family: 'Kanit', sans-serif; }
     .fc-daygrid-day-frame { border-radius: 0.75rem; margin: 2px; border: 1px solid transparent; }
+    /* Calendar weekday header: avoid white-on-white */
+    .fc .fc-col-header-cell,
+    .fc .fc-col-header-cell .fc-scrollgrid-sync-inner,
+    .fc th.fc-col-header-cell {
+      background: rgba(30, 64, 120, 0.92) !important;
+    }
+    .fc .fc-col-header-cell-cushion,
+    .fc .fc-col-header-cell a,
+    .fc .fc-col-header-cell .fc-scrollgrid-sync-inner {
+      color: #e8f0fc !important;
+      font-weight: 600;
+    }
+    .fc .fc-daygrid-day-number,
+    .fc .fc-daygrid-day-top a {
+      color: #e2e8f0 !important;
+    }
+    .fc .fc-toolbar-title {
+      color: #e8f0fc !important;
+    }
+    .fc .fc-button {
+      color: #fff !important;
+    }
+    html {
+      scroll-padding-top: 9.5rem;
+    }
+    .emd-nav {
+      z-index: 50;
+      isolation: isolate;
+    }
+    main > [id^="view-"] > h2:first-child,
+    #view-calendar > h2,
+    #view-dashboard > h2:first-of-type,
+    #view-search > h2:first-child,
+    #view-groups > div:first-child h2,
+    #view-names h2:first-child,
+    #view-vehicles h2:first-child,
+    #view-logs h2:first-child {
+      scroll-margin-top: 9.5rem;
+    }
     #calendar.calendar-month-expand .fc-scroller,
     #calendar.calendar-month-expand .fc-scroller-liquid-absolute {
       overflow: visible !important;
@@ -256,7 +295,7 @@
     <div class="inline-block animate-marquee" id="banner-text-content"></div>
   </div>
 
-  <nav class="emd-nav text-white sticky top-0 z-40 transition-colors">
+  <nav class="emd-nav text-white sticky top-0 z-50 transition-colors">
     <div class="max-w-7xl mx-auto px-4 py-3 flex flex-col md:flex-row justify-between items-center gap-2">
       <h1 class="text-xl md:text-2xl font-semibold tracking-tight drop-shadow-sm">⚡️ EMD CAR 🚗</h1>
       <div class="space-x-2 flex items-center flex-wrap justify-center gap-y-2">
@@ -319,7 +358,7 @@
     </div>
 
     <div id="view-calendar" class="hidden space-y-6">
-      <h2 class="text-2xl font-semibold text-purple-500 dark:text-purple-400 border-b-2 border-purple-100 dark:border-purple-800 pb-2">📅 ตารางการใช้รถ</h2>
+      <h2 class="text-2xl font-semibold text-purple-500 dark:text-purple-400 border-b-2 border-purple-100 dark:border-purple-800 pb-2 mb-4">📅 ตารางการใช้รถ</h2>
       <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
         <div class="lg:col-span-3 bg-white dark:bg-slate-800 p-6 rounded-[2rem] shadow-sm border border-slate-100 dark:border-slate-700 calendar-panel overflow-x-auto overflow-y-hidden">
           <div id="calendar" class="h-full min-w-[600px]"></div>
@@ -2381,6 +2420,7 @@
       });
       document.getElementById('view-' + tabId).classList.remove('hidden');
       document.getElementById('tab-' + tabId).classList.add('tab-active');
+      try { window.scrollTo({ top: 0, left: 0, behavior: 'instant' in window ? 'instant' : 'auto' }); } catch (e) { window.scrollTo(0, 0); }
       if (tabId === 'calendar') {
         resetCalendarDetailHint();
         if (!isCalendarInitialized) {
