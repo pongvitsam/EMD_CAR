@@ -2084,10 +2084,7 @@ function dailyDeliverySummary() {
     });
   }
 
-  if (!items.length) {
-    sendLineMessage_('📋 สรุปรายการส่งรถพรุ่งนี้\nไม่มีรายการส่งรถของบริษัท');
-    return;
-  }
+  if (!items.length) return;
   items.sort(function (a, b) { return a.startMs - b.startMs; });
   const body = ['📋 สรุปรายการส่งรถพรุ่งนี้ (' + items.length + ' คัน)']
     .concat(items.map(function (item, idx) { return (idx + 1) + '. ' + item.line; }))
