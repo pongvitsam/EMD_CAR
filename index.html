@@ -3361,6 +3361,27 @@
       '</div>';
     }
 
+    function formatVehicleGroupSortLabel(group) {
+      const order = group && group.sortOrder != null && String(group.sortOrder).trim() !== ''
+        ? String(group.sortOrder).trim()
+        : '-';
+      return order + '. ';
+    }
+
+    function buildCarGroupPanelTitle(group) {
+      const prefix = formatVehicleGroupSortLabel(group);
+      const name = String((group && group.name) || '').trim() || (group && group.id) || 'กลุ่มรถ';
+      if (group && group.id === 'ALL') return prefix + name;
+      return prefix + 'รถที่จองเฉพาะใช้ใน' + name + 'เท่านั้น';
+    }
+
+    function buildCarGroupPanelSubtitle(group) {
+      if (!group) return '';
+      if (group.id === 'ALL') return 'จองได้ทุกแผนก/ทุกงาน';
+      const kwText = (group.keywords || []).join(', ');
+      return kwText ? ('งาน: ' + kwText) : '';
+    }
+
     function renderCarGroupPanel(title, subtitle, cars, panelClass) {
       const visibleCars = getVisibleVehicles(cars);
       if (!visibleCars.length) return '';
@@ -3388,31 +3409,26 @@
         });
         const pwaGroup = (appData.vehicleGroups || []).find(function (g) { return g.id === COMPANY_VISIBLE_VEHICLE_GROUP; });
         const groupName = pwaGroup ? pwaGroup.name : 'รถเฉพาะงานการประปา';
+        const companyTitle = formatVehicleGroupSortLabel(pwaGroup || { sortOrder: 1 }) + groupName;
         container.innerHTML = companyCars.length
-          ? '<div class="car-dashboard-flow">' + renderCarGroupPanel('1. ' + groupName, 'รถงานการประปาที่บริษัทดูแล/ส่งมอบ', companyCars, 'car-group-panel--restricted') + '</div>'
+          ? '<div class="car-dashboard-flow">' + renderCarGroupPanel(companyTitle, 'รถงานการประปาที่บริษัทดูแล/ส่งมอบ', companyCars, 'car-group-panel--restricted') + '</div>'
           : '<p class="text-center text-slate-400">ไม่พบรถงานการประปาที่บริษัทดูแลในระบบ</p>';
         return;
       }
 
       populateVehicleGroupSelects();
 
-      const allCars = vehicles.filter(function (v) { return (v.vehicleGroup || 'ALL') === 'ALL'; });
-      const restrictedGroups = getSortedVehicleGroups().filter(function (g) { return g.id !== 'ALL'; });
-
-      const panels = [
-        renderCarGroupPanel('1. รถที่จองใช้ได้ทุกงาน', 'จองได้ทุกแผนก/ทุกงาน', allCars, 'car-group-panel--all')
-      ];
-
-      restrictedGroups.forEach(function (group, idx) {
-        const groupCars = vehicles.filter(function (v) { return v.vehicleGroup === group.id; });
-        const kwText = (group.keywords || []).join(', ');
-        panels.push(renderCarGroupPanel(
-          (idx + 2) + '. รถที่จองเฉพาะใช้ใน' + group.name + 'เท่านั้น',
-          kwText ? ('งาน: ' + kwText) : '',
+      const panels = getSortedVehicleGroups().map(function (group) {
+        const groupCars = vehicles.filter(function (v) {
+          return (v.vehicleGroup || 'ALL') === group.id;
+        });
+        return renderCarGroupPanel(
+          buildCarGroupPanelTitle(group),
+          buildCarGroupPanelSubtitle(group),
           groupCars,
-          'car-group-panel--restricted'
-        ));
-      });
+          group.id === 'ALL' ? 'car-group-panel--all' : 'car-group-panel--restricted'
+        );
+      }).filter(Boolean);
 
       const panelHtml = panels.filter(Boolean).join('');
       container.innerHTML = panelHtml
