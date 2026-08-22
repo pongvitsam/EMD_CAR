@@ -752,3 +752,112 @@ select.flatpickr-monthDropdown-months {
 #app-loading .border-t-blue-500 {
   border-top-color: var(--emd-accent) !important;
 }
+
+/* Dashboard car groups — inline bordered panels, up to 5 cars per row */
+.car-dashboard-flow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.875rem;
+  align-items: flex-start;
+}
+
+.car-group-panel {
+  display: inline-flex;
+  flex-direction: column;
+  flex: 0 1 auto;
+  width: max-content;
+  max-width: 100%;
+  border-radius: 1rem;
+  padding: 0.625rem 0.75rem 0.75rem;
+  border: 2px solid rgba(147, 51, 234, 0.38);
+  background: rgba(255, 255, 255, 0.5);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+}
+
+.emd-glass .car-group-panel {
+  backdrop-filter: blur(var(--emd-blur));
+  -webkit-backdrop-filter: blur(var(--emd-blur));
+}
+
+.car-group-panel--all {
+  border-color: rgba(147, 51, 234, 0.45);
+}
+
+.car-group-panel--restricted {
+  border-color: rgba(245, 158, 11, 0.55);
+}
+
+.car-group-panel__head {
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.375rem;
+  border-bottom: 1px solid rgba(147, 51, 234, 0.12);
+}
+
+.car-group-panel--restricted .car-group-panel__head {
+  border-bottom-color: rgba(245, 158, 11, 0.2);
+}
+
+.car-group-panel__title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #7c3aed;
+  line-height: 1.35;
+}
+
+.car-group-panel--restricted .car-group-panel__title {
+  color: #b45309;
+}
+
+.car-group-panel__sub {
+  font-size: 0.6875rem;
+  color: #64748b;
+  margin-top: 0.125rem;
+}
+
+.car-group-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--group-cols, 5), minmax(10.5rem, 1fr));
+  gap: 0.625rem;
+}
+
+.emd-car-card--compact .car-card-status {
+  min-height: 4.25rem;
+  margin-bottom: 0.5rem;
+}
+
+.emd-car-card--compact .car-card-status > div p {
+  font-size: 0.75rem;
+  line-height: 1.25;
+}
+
+.emd-car-card--compact .car-card-status > div p.text-sm {
+  font-size: 0.6875rem;
+}
+
+@media (max-width: 1279px) {
+  .car-group-grid {
+    grid-template-columns: repeat(min(var(--group-cols, 5), 4), minmax(10rem, 1fr));
+  }
+}
+
+@media (max-width: 1023px) {
+  .car-group-grid {
+    grid-template-columns: repeat(min(var(--group-cols, 5), 3), minmax(9.5rem, 1fr));
+  }
+}
+
+@media (max-width: 767px) {
+  .car-group-panel {
+    width: 100%;
+  }
+
+  .car-group-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 479px) {
+  .car-group-grid {
+    grid-template-columns: 1fr;
+  }
+}

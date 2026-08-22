@@ -3238,7 +3238,14 @@
       });
     }
 
-    function buildCarCardHtml(car) {
+    function buildCarCardHtml(car, options) {
+      options = options || {};
+      const compact = options.compact === true;
+      const cardClass = compact ? 'emd-car-card emd-car-card--compact' : 'emd-car-card';
+      const imgH = compact ? 'h-32' : 'h-48';
+      const bodyPad = compact ? 'p-3' : 'p-5';
+      const titleClass = compact ? 'text-base font-semibold text-purple-900 dark:text-purple-300 mb-2' : 'text-xl font-semibold text-purple-900 dark:text-purple-300 mb-3';
+      const statusBoxClass = compact ? 'p-2 rounded-lg mb-2' : 'p-3 rounded-xl mb-3';
       const now = new Date();
       const nowTime = now.getTime();
       if (car.status === 'HIDDEN' && !isAdmin) return '';
@@ -3254,16 +3261,16 @@
       let borderClass = 'border-slate-100 dark:border-slate-700';
 
       if (car.status === 'HIDDEN') {
-        statusHtml = '<div class="bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 p-3 rounded-xl mb-3 border border-slate-300 dark:border-slate-600"><p class="font-bold text-sm">👻 ถูกซ่อนอยู่ (เฉพาะ Admin เห็น)</p></div>';
+        statusHtml = '<div class="bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 ' + statusBoxClass + ' border border-slate-300 dark:border-slate-600"><p class="font-bold text-sm">👻 ถูกซ่อนอยู่ (เฉพาะ Admin เห็น)</p></div>';
         imgFilter = 'grayscale opacity-30';
         borderClass = 'border-slate-300 border-dashed border-2 opacity-70';
       } else if (car.status === 'DISABLED') {
-        statusHtml = '<div class="bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 p-3 rounded-xl mb-3"><p class="font-bold text-sm">🔴 งดให้บริการ / ปิดจอง</p></div>';
+        statusHtml = '<div class="bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 ' + statusBoxClass + '"><p class="font-bold text-sm">🔴 งดให้บริการ / ปิดจอง</p></div>';
         imgFilter = 'grayscale opacity-70';
         borderClass = 'border-red-300 dark:border-red-800 border-2 shadow-red-100 dark:shadow-red-900/20';
       } else if (currentBooking) {
         const tripDest = escapeHtml(currentBooking.dest || '-');
-        statusHtml = '<div class="bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-400 p-3 rounded-xl mb-3"><p class="font-bold text-sm">🚗 กำลังใช้งาน</p><p class="text-sm mt-1">' + escapeHtml(getBookingDisplayName(currentBooking)) + ' → <strong>' + tripDest + '</strong></p></div>';
+        statusHtml = '<div class="bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-400 ' + statusBoxClass + '"><p class="font-bold text-sm">🚗 กำลังใช้งาน</p><p class="text-sm mt-1">' + escapeHtml(getBookingDisplayName(currentBooking)) + ' → <strong>' + tripDest + '</strong></p></div>';
         borderClass = 'border-orange-300 dark:border-orange-800 border-2';
       } else if (nextBooking) {
         const nextDate = new Date(parseTimeSafe(nextBooking.start));
@@ -3271,11 +3278,11 @@
         const isToday = nextDate.toDateString() === now.toDateString();
         const displayTime = isToday ? ('วันนี้ ' + timeStr + ' น.') : (formatThaiDate(nextDate) + ' ' + timeStr + ' น.');
         const nextDest = escapeHtml(nextBooking.dest || '-');
-        statusHtml = '<div class="bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 p-3 rounded-xl mb-3"><p class="font-bold text-sm">⏳ รอนำรถออก (ถูกจองแล้ว)</p><p class="text-sm mt-1">คิวถัดไป: ' + displayTime + '</p><p class="text-xs mt-1">' + escapeHtml(getBookingDisplayName(nextBooking)) + ' → <strong>' + nextDest + '</strong></p></div>';
+        statusHtml = '<div class="bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 ' + statusBoxClass + '"><p class="font-bold text-sm">⏳ รอนำรถออก (ถูกจองแล้ว)</p><p class="text-sm mt-1">คิวถัดไป: ' + displayTime + '</p><p class="text-xs mt-1">' + escapeHtml(getBookingDisplayName(nextBooking)) + ' → <strong>' + nextDest + '</strong></p></div>';
         borderClass = 'border-blue-300 dark:border-blue-800 border-2';
       } else {
         const idleLabel = getCarIdleLabel(car.plate, nowTime);
-        statusHtml = '<div class="bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 p-3 rounded-xl mb-3"><p class="font-bold text-sm">🟢 ว่าง (' + escapeHtml(idleLabel) + ')</p><p class="text-sm mt-1 truncate">จุดจอด: ' + escapeHtml(car.parkingSpot || '-') + '</p></div>';
+        statusHtml = '<div class="bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 ' + statusBoxClass + '"><p class="font-bold text-sm">🟢 ว่าง (' + escapeHtml(idleLabel) + ')</p><p class="text-sm mt-1 truncate">จุดจอด: ' + escapeHtml(car.parkingSpot || '-') + '</p></div>';
       }
 
       let actAlert = '';
@@ -3322,7 +3329,10 @@
         remarksHtml = '<div class="mt-2 text-xs text-red-700 dark:text-red-300 bg-red-100 dark:bg-red-900/30 p-2 rounded-lg border border-red-200 dark:border-red-800 font-bold">⚠️ เหตุผล: ' + escapeHtml(car.remarks) + '</div>';
       }
 
-      let settingBtn = isReadOnly ? '' : '<button onclick="window.openVehicleModal(\'' + car.id + '\')" class="absolute top-2 right-2 bg-white/95 hover:bg-white text-purple-600 px-3 py-1 rounded-full shadow-md text-xs font-bold border border-purple-200 z-10 transition backdrop-blur-sm">อัปเดตข้อมูล</button>';
+      const settingBtnClass = compact
+        ? 'absolute top-1.5 right-1.5 bg-white/95 hover:bg-white text-purple-600 px-2 py-0.5 rounded-full shadow text-[10px] font-bold border border-purple-200 z-10'
+        : 'absolute top-2 right-2 bg-white/95 hover:bg-white text-purple-600 px-3 py-1 rounded-full shadow-md text-xs font-bold border border-purple-200 z-10 transition backdrop-blur-sm';
+      let settingBtn = isReadOnly ? '' : '<button onclick="window.openVehicleModal(\'' + car.id + '\')" class="' + settingBtnClass + '">อัปเดตข้อมูล</button>';
       if (car.managedBy === 'COMPANY' && isProjectSpecificCar(car) && !isReadOnly) {
         settingBtn += '<span class="absolute top-2 left-2 bg-blue-500 text-white px-2 py-0.5 rounded-full text-xs font-bold z-10">TC</span>';
       }
@@ -3334,36 +3344,38 @@
         : '';
 
       let carImageHtml = String(car.img || '').trim()
-        ? '<img src="' + escapeHtml(car.img) + '" loading="lazy" decoding="async" alt="' + escapeHtml(car.plate) + '" class="w-full h-48 object-cover transition duration-300 ' + imgFilter + '">'
-        : '<div class="w-full h-48 flex items-center justify-center bg-slate-200 dark:bg-slate-600 text-5xl ' + imgFilter + '" aria-hidden="true">🚗</div>';
-      return '<div class="emd-car-card emd-panel bg-white dark:bg-slate-800 rounded-3xl overflow-hidden shadow-sm ' + borderClass + ' flex flex-col relative transition-colors">' +
+        ? '<img src="' + escapeHtml(car.img) + '" loading="lazy" decoding="async" alt="' + escapeHtml(car.plate) + '" class="w-full ' + imgH + ' object-cover transition duration-300 ' + imgFilter + '">'
+        : '<div class="w-full ' + imgH + ' flex items-center justify-center bg-slate-200 dark:bg-slate-600 text-5xl ' + imgFilter + '" aria-hidden="true">🚗</div>';
+      const cardRadius = compact ? 'rounded-2xl' : 'rounded-3xl';
+      return '<div class="' + cardClass + ' emd-panel bg-white dark:bg-slate-800 ' + cardRadius + ' overflow-hidden shadow-sm ' + borderClass + ' flex flex-col relative transition-colors">' +
         settingBtn + groupBadge +
         '<div class="relative bg-slate-100 dark:bg-slate-700">' +
           carImageHtml +
           '<div class="absolute bottom-0 w-full p-2 bg-gradient-to-t from-black/60 to-transparent">' + actAlert + '</div>' +
         '</div>' +
-        '<div class="p-5 flex-1 flex flex-col">' +
-          '<h3 class="text-xl font-semibold text-purple-900 dark:text-purple-300 mb-3">' + car.plate + ' <span class="text-xs font-normal text-slate-400">(' + car.type + ')</span></h3>' +
+        '<div class="' + bodyPad + ' flex-1 flex flex-col">' +
+          '<h3 class="' + titleClass + '">' + car.plate + ' <span class="text-xs font-normal text-slate-400">(' + car.type + ')</span></h3>' +
           '<div class="car-card-status">' + statusHtml + '</div>' +
           serviceHtml + leaseHtml + remarksHtml +
         '</div>' +
       '</div>';
     }
 
-    function renderCarGroupSection(title, subtitle, cars) {
+    function renderCarGroupPanel(title, subtitle, cars, panelClass) {
       const visibleCars = getVisibleVehicles(cars);
       if (!visibleCars.length) return '';
-      const cards = visibleCars.map(buildCarCardHtml).filter(Boolean).join('');
+      const cards = visibleCars.map(function (car) {
+        return buildCarCardHtml(car, { compact: true });
+      }).filter(Boolean).join('');
       if (!cards) return '';
-      return '<section class="mb-10 space-y-4">' +
-        '<div class="border-b border-purple-100 dark:border-purple-800 pb-2">' +
-          '<h3 class="text-lg font-semibold text-purple-600 dark:text-purple-400">' + escapeHtml(title) + '</h3>' +
-          (subtitle ? '<p class="text-xs text-slate-500 mt-1">' + escapeHtml(subtitle) + '</p>' : '') +
+      const cols = Math.min(visibleCars.length, 5);
+      return '<div class="car-group-panel ' + (panelClass || '') + '" style="--group-cols:' + cols + '">' +
+        '<div class="car-group-panel__head">' +
+          '<h3 class="car-group-panel__title">' + escapeHtml(title) + '</h3>' +
+          (subtitle ? '<p class="car-group-panel__sub">' + escapeHtml(subtitle) + '</p>' : '') +
         '</div>' +
-        '<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">' +
-          (cards || '<p class="col-span-full text-center text-slate-400 text-sm py-6">ไม่มีรถในกลุ่มนี้</p>') +
-        '</div>' +
-      '</section>';
+        '<div class="car-group-grid">' + cards + '</div>' +
+      '</div>';
     }
 
     function renderCars(vehicles) {
@@ -3377,7 +3389,7 @@
         const pwaGroup = (appData.vehicleGroups || []).find(function (g) { return g.id === COMPANY_VISIBLE_VEHICLE_GROUP; });
         const groupName = pwaGroup ? pwaGroup.name : 'รถเฉพาะงานการประปา';
         container.innerHTML = companyCars.length
-          ? renderCarGroupSection('1. ' + groupName, 'รถงานการประปาที่บริษัทดูแล/ส่งมอบ', companyCars)
+          ? '<div class="car-dashboard-flow">' + renderCarGroupPanel('1. ' + groupName, 'รถงานการประปาที่บริษัทดูแล/ส่งมอบ', companyCars, 'car-group-panel--restricted') + '</div>'
           : '<p class="text-center text-slate-400">ไม่พบรถงานการประปาที่บริษัทดูแลในระบบ</p>';
         return;
       }
@@ -3387,23 +3399,25 @@
       const allCars = vehicles.filter(function (v) { return (v.vehicleGroup || 'ALL') === 'ALL'; });
       const restrictedGroups = getSortedVehicleGroups().filter(function (g) { return g.id !== 'ALL'; });
 
-      let html = renderCarGroupSection(
-        '1. รถที่จองใช้ได้ทุกงาน',
-        'จองได้ทุกแผนก/ทุกงาน',
-        allCars
-      );
+      const panels = [
+        renderCarGroupPanel('1. รถที่จองใช้ได้ทุกงาน', 'จองได้ทุกแผนก/ทุกงาน', allCars, 'car-group-panel--all')
+      ];
 
       restrictedGroups.forEach(function (group, idx) {
         const groupCars = vehicles.filter(function (v) { return v.vehicleGroup === group.id; });
         const kwText = (group.keywords || []).join(', ');
-        html += renderCarGroupSection(
+        panels.push(renderCarGroupPanel(
           (idx + 2) + '. รถที่จองเฉพาะใช้ใน' + group.name + 'เท่านั้น',
           kwText ? ('งาน: ' + kwText) : '',
-          groupCars
-        );
+          groupCars,
+          'car-group-panel--restricted'
+        ));
       });
 
-      container.innerHTML = html || '<p class="text-center text-slate-400">ไม่พบรถในระบบ</p>';
+      const panelHtml = panels.filter(Boolean).join('');
+      container.innerHTML = panelHtml
+        ? '<div class="car-dashboard-flow">' + panelHtml + '</div>'
+        : '<p class="text-center text-slate-400">ไม่พบรถในระบบ</p>';
     }
 
     function applyCalendarScrollMode(viewType) {
