@@ -2006,6 +2006,10 @@ function deliveryReminderCheck() {
   const bData = getSheetOrThrow_(ss, 'Bookings').getDataRange().getValues();
   const now = Date.now();
   const windowMs = cfg.reminderMin * 60 * 1000;
+  // Trigger runs every 15 minutes — accept from (reminderMin) down to ~25 minutes before start
+  // so a booking is not skipped if the exact ±5min slice is missed between runs.
+  const earliestMs = windowMs;
+  const latestMs = 25 * 60 * 1000;
   const cache = CacheService.getScriptCache();
 
   for (let i = 1; i < bData.length; i++) {
@@ -2014,10 +2018,10 @@ function deliveryReminderCheck() {
     const startMs = parseTimeSafe_(bData[i][5]);
     if (!startMs || startMs <= now) continue;
     const diff = startMs - now;
-    if (diff > windowMs + 5 * 60 * 1000 || diff < windowMs - 5 * 60 * 1000) continue;
+    if (diff > earliestMs || diff < latestMs) continue;
     const bookingId = String(bData[i][0] || '');
     const cacheKey = LINE_REMINDER_CACHE_PREFIX + bookingId;
-    if (cache.get(cacheKey) === '1') continue;
+    if (wasReminderAlreadySent_(bookingId, cache)) continue;
     const booking = {
       id: bookingId,
       plate: bData[i][1],
@@ -2031,9 +2035,25 @@ function deliveryReminderCheck() {
       contactPhone: bData[i][13] || ''
     };
     if (sendLineMessage_(formatBookingLineMessage_('REMINDER', booking))) {
+      try {
+        PropertiesService.getScriptProperties().setProperty(cacheKey, String(startMs));
+      } catch (err) {}
       cache.put(cacheKey, '1', 86400);
     }
   }
+}
+
+function wasReminderAlreadySent_(bookingId, cache) {
+  const cacheKey = LINE_REMINDER_CACHE_PREFIX + bookingId;
+  if (cache.get(cacheKey) === '1') return true;
+  try {
+    const props = PropertiesService.getScriptProperties();
+    if (props.getProperty(cacheKey)) {
+      cache.put(cacheKey, '1', 86400);
+      return true;
+    }
+  } catch (err) {}
+  return false;
 }
 
 function dailyDeliverySummary() {
