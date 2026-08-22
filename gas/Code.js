@@ -790,7 +790,8 @@ function dispatchApi_(action, args, token, clientIp) {
     case 'quickUpdateMileage': return quickUpdateMileage(args[0], args[1], args[2], clientIp, token);
     case 'getVehicleGroupManagementData': return getVehicleGroupManagementData(token);
     case 'saveVehicleGroup': return saveVehicleGroup(token, args[0]);
-    case 'deleteVehicleGroup': return deleteVehicleGroup(token, args[0]);
+    case 'deleteVehicleGroup': return deleteVehicleGroup(token, args[0], args[1]);
+    case 'moveVehiclesBetweenGroups': return moveVehiclesBetweenGroups(token, args[0], args[1]);
     case 'testLineUpcomingSummary': return testLineUpcomingSummary(token, args[0]);
     case 'recordVehicleHandover': return recordVehicleHandover(args[0], clientIp, token);
     case 'setVehicleTcLineNotify': return setVehicleTcLineNotify(token, args[0], args[1]);
@@ -1086,10 +1087,44 @@ function deleteManagedName(token, row) {
   } catch (error) { return { success: false, msg: error.message }; }
 }
 
+function countVehiclesInGroup_(groupId) {
+  const ss = getSpreadsheet_();
+  const want = normalizeVehicleGroupId_(groupId);
+  const vData = getSheetOrThrow_(ss, 'Vehicles').getDataRange().getValues();
+  let count = 0;
+  for (let i = 1; i < vData.length; i++) {
+    if (normalizeVehicleGroupId_(vData[i][21]) === want) count++;
+  }
+  return count;
+}
+
+function reassignVehiclesGroup_(fromGroupId, toGroupId) {
+  const fromId = normalizeVehicleGroupId_(fromGroupId);
+  const toId = normalizeVehicleGroupId_(toGroupId);
+  if (fromId === toId) return 0;
+  const ss = getSpreadsheet_();
+  const vSheet = getSheetOrThrow_(ss, 'Vehicles');
+  const vData = vSheet.getDataRange().getValues();
+  let moved = 0;
+  for (let i = 1; i < vData.length; i++) {
+    if (normalizeVehicleGroupId_(vData[i][21]) !== fromId) continue;
+    vSheet.getRange(i + 1, 22).setValue(toId);
+    // TC LINE visibility only applies to waterworks group
+    if (toId !== COMPANY_VISIBLE_VEHICLE_GROUP) {
+      vSheet.getRange(i + 1, 21).setValue('EMD');
+    }
+    moved++;
+  }
+  return moved;
+}
+
 function getVehicleGroupManagementData(token) {
   try {
     requireAdminSession_(token);
-    return { success: true, groups: getVehicleGroups_() };
+    const groups = getVehicleGroups_().map(function (g) {
+      return Object.assign({}, g, { vehicleCount: countVehiclesInGroup_(g.id) });
+    });
+    return { success: true, groups: groups };
   } catch (error) { return { success: false, msg: error.message }; }
 }
 
@@ -1105,6 +1140,23 @@ function saveVehicleGroup(token, form) {
     const keywords = parseGroupKeywords_(form.keywords);
     const sortOrder = parseInt(form.sortOrder, 10) || 999;
     if (!name) return { success: false, msg: 'กรุณาระบุชื่อกลุ่ม' };
+
+    const groups = getVehicleGroups_();
+    const existing = row >= 2 ? groups.find(function (g) { return Number(g.row) === row; }) : null;
+
+    if (existing && existing.id === DEFAULT_VEHICLE_GROUP_ALL) {
+      // Allow renaming ALL display name / sort / keywords only — keep id
+      sheet.getRange(row, 2, 1, 3).setValues([[name, JSON.stringify(keywords), sortOrder]]);
+      clearAppCache_();
+      return {
+        success: true,
+        msg: 'อัปเดตชื่อกลุ่ม "ทุกงาน" แล้ว',
+        groups: getVehicleGroups_().map(function (g) {
+          return Object.assign({}, g, { vehicleCount: countVehiclesInGroup_(g.id) });
+        })
+      };
+    }
+
     if (!id) {
       const slug = name.toLowerCase()
         .replace(/\s+/g, '_')
@@ -1112,12 +1164,15 @@ function saveVehicleGroup(token, form) {
         .slice(0, 40);
       id = slug || ('grp_' + new Date().getTime());
     }
-    if (id === DEFAULT_VEHICLE_GROUP_ALL) {
-      return { success: false, msg: 'ไม่สามารถแก้ไขกลุ่มระบบ ALL ได้' };
+    if (id === DEFAULT_VEHICLE_GROUP_ALL && !existing) {
+      return { success: false, msg: 'ไม่สามารถสร้างกลุ่มรหัส ALL ซ้ำได้' };
     }
-    const groups = getVehicleGroups_();
+
+    // Keep stable id on rename (especially pwa / other)
+    if (existing) id = existing.id;
+
     const duplicateId = groups.some(function (g) {
-      return g.row !== row && g.id === id;
+      return Number(g.row) !== row && g.id === id;
     });
     if (duplicateId && !row) {
       id = id + '_' + new Date().getTime();
@@ -1125,42 +1180,70 @@ function saveVehicleGroup(token, form) {
       return { success: false, msg: 'รหัสกลุ่มซ้ำ' };
     }
     const duplicateName = groups.some(function (g) {
-      return g.row !== row && String(g.name || '').trim() === name;
+      return Number(g.row) !== row && String(g.name || '').trim() === name;
     });
     if (duplicateName) return { success: false, msg: 'มีชื่อกลุ่มนี้อยู่แล้ว' };
-    const values = [id, name, JSON.stringify(keywords), sortOrder, ''];
+
+    const values = [id, name, JSON.stringify(keywords), sortOrder, existing && existing.isSystem ? 'YES' : ''];
     if (row >= 2 && row <= sheet.getLastRow()) {
-      const existingId = String(sheet.getRange(row, 1).getValue() || '').trim();
-      if (existingId === DEFAULT_VEHICLE_GROUP_ALL) {
-        return { success: false, msg: 'ไม่สามารถแก้ไขกลุ่มระบบ ALL ได้' };
-      }
       sheet.getRange(row, 1, 1, values.length).setValues([values]);
     } else {
       sheet.appendRow(values);
     }
     clearAppCache_();
-    return { success: true, msg: 'บันทึกกลุ่มรถเรียบร้อยครับ', groups: getVehicleGroups_() };
+    return {
+      success: true,
+      msg: existing ? 'แก้ไขชื่อกลุ่มเรียบร้อยครับ' : 'สร้างกลุ่มใหม่เรียบร้อยครับ',
+      groups: getVehicleGroups_().map(function (g) {
+        return Object.assign({}, g, { vehicleCount: countVehiclesInGroup_(g.id) });
+      })
+    };
   } catch (error) { return { success: false, msg: error.message }; }
 }
 
-function deleteVehicleGroup(token, rowOrId) {
+function moveVehiclesBetweenGroups(token, fromGroupId, toGroupId) {
+  try {
+    requireAdminSession_(token);
+    const fromId = normalizeVehicleGroupId_(fromGroupId);
+    const toId = normalizeVehicleGroupId_(toGroupId);
+    if (!fromId || !toId) return { success: false, msg: 'กรุณาเลือกกลุ่มต้นทางและปลายทาง' };
+    if (fromId === toId) return { success: false, msg: 'กลุ่มต้นทางและปลายทางซ้ำกัน' };
+    const groups = getVehicleGroups_();
+    const fromOk = groups.some(function (g) { return g.id === fromId; });
+    const toOk = groups.some(function (g) { return g.id === toId; });
+    if (!fromOk) return { success: false, msg: 'ไม่พบกลุ่มต้นทาง' };
+    if (!toOk) return { success: false, msg: 'ไม่พบกลุ่มปลายทาง' };
+    const moved = reassignVehiclesGroup_(fromId, toId);
+    clearAppCache_();
+    return {
+      success: true,
+      msg: 'ย้ายรถ ' + moved + ' คันเรียบร้อยครับ',
+      moved: moved,
+      groups: getVehicleGroups_().map(function (g) {
+        return Object.assign({}, g, { vehicleCount: countVehiclesInGroup_(g.id) });
+      })
+    };
+  } catch (error) { return { success: false, msg: error.message }; }
+}
+
+function deleteVehicleGroup(token, rowOrId, moveToGroupId) {
   try {
     requireAdminSession_(token);
     const ss = getSpreadsheet_();
     setupDatabase();
     const sheet = getSheetOrThrow_(ss, 'VehicleGroups');
-    const vSheet = getSheetOrThrow_(ss, 'Vehicles');
     let targetRow = Number(rowOrId) || 0;
     let groupId = '';
+    const groups = getVehicleGroups_();
     if (!targetRow) {
-      const groups = getVehicleGroups_();
       const found = groups.find(function (g) { return g.id === String(rowOrId || '').trim(); });
       if (found) {
         targetRow = found.row;
         groupId = found.id;
       }
     } else {
-      groupId = String(sheet.getRange(targetRow, 1).getValue() || '').trim();
+      const foundByRow = groups.find(function (g) { return Number(g.row) === targetRow; });
+      groupId = foundByRow ? foundByRow.id : String(sheet.getRange(targetRow, 1).getValue() || '').trim();
     }
     if (targetRow < 2 || targetRow > sheet.getLastRow()) {
       return { success: false, msg: 'ไม่พบกลุ่มที่ต้องการลบ' };
@@ -1168,15 +1251,25 @@ function deleteVehicleGroup(token, rowOrId) {
     if (groupId === DEFAULT_VEHICLE_GROUP_ALL) {
       return { success: false, msg: 'ไม่สามารถลบกลุ่ม "ทุกงาน" ได้' };
     }
-    const vData = vSheet.getDataRange().getValues();
-    for (let i = 1; i < vData.length; i++) {
-      if (normalizeVehicleGroupId_(vData[i][21]) === groupId) {
-        vSheet.getRange(i + 1, 22).setValue(DEFAULT_VEHICLE_GROUP_ALL);
-      }
+    const destId = normalizeVehicleGroupId_(moveToGroupId || DEFAULT_VEHICLE_GROUP_ALL);
+    if (destId === groupId) {
+      return { success: false, msg: 'กลุ่มปลายทางต้องไม่ใช่กลุ่มที่กำลังลบ' };
     }
+    const destOk = groups.some(function (g) { return g.id === destId; });
+    if (!destOk) return { success: false, msg: 'ไม่พบกลุ่มปลายทางสำหรับย้ายรถ' };
+
+    const moved = reassignVehiclesGroup_(groupId, destId);
     sheet.deleteRow(targetRow);
     clearAppCache_();
-    return { success: true, msg: 'ลบกลุ่มและย้ายรถกลับเป็น "ทุกงาน" แล้ว', groups: getVehicleGroups_() };
+    const destName = (groups.find(function (g) { return g.id === destId; }) || {}).name || destId;
+    return {
+      success: true,
+      msg: 'ลบกลุ่มแล้ว และย้ายรถ ' + moved + ' คันไป "' + destName + '"',
+      moved: moved,
+      groups: getVehicleGroups_().map(function (g) {
+        return Object.assign({}, g, { vehicleCount: countVehiclesInGroup_(g.id) });
+      })
+    };
   } catch (error) { return { success: false, msg: error.message }; }
 }
 
