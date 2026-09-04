@@ -8,16 +8,30 @@
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="alternate icon" href="favicon.ico">
   <script src="config.js"></script>
+  <script>
+    (function () {
+      try {
+        var keys = ['emdcar_admin_token_v1', 'emdcar_emd_token_v1', 'emdcar_company_token_v1'];
+        for (var i = 0; i < keys.length; i++) {
+          if (localStorage.getItem(keys[i]) || sessionStorage.getItem(keys[i])) {
+            document.documentElement.classList.add('emd-has-session');
+            break;
+          }
+        }
+      } catch (e) {}
+    })();
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preconnect" href="https://cdn.tailwindcss.com">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
-  <script src="https://npmcdn.com/flatpickr/dist/l10n/th.js"></script>
-  
-  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+  <noscript><link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600&display=swap" rel="stylesheet"></noscript>
   <script>
-    tailwind.config = {
+    window.tailwind = window.tailwind || {};
+    window.tailwind.config = {
       darkMode: 'class',
       theme: {
         extend: {
@@ -35,11 +49,9 @@
           keyframes: { marquee: { '0%': { transform: 'translateX(100%)' }, '100%': { transform: 'translateX(-100%)' } } }
         }
       }
-    }
+    };
   </script>
-  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-  <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
-  <noscript><link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600&display=swap" rel="stylesheet"></noscript>
+  <script src="https://cdn.tailwindcss.com" defer></script>
   
   <style>
     :root {
@@ -51,6 +63,27 @@
       --emd-accent-light: #93c5fd;
     }
     html { color-scheme: dark; background-color: var(--emd-bg-deep); }
+    /* Critical first-paint: loading + login gate without waiting for Tailwind */
+    #app-loading {
+      position: fixed; inset: 0; z-index: 100;
+      display: flex; align-items: center; justify-content: center;
+      backdrop-filter: blur(4px); background: rgba(2, 6, 23, 0.55);
+    }
+    #app-loading .emd-boot-spin {
+      margin: 0 auto; height: 2.5rem; width: 2.5rem; border-radius: 9999px;
+      border: 4px solid #bfdbfe; border-top-color: #3b82f6;
+      animation: emd-spin 0.8s linear infinite;
+    }
+    @keyframes emd-spin { to { transform: rotate(360deg); } }
+    #app-loading p { margin-top: 0.75rem; font-size: 0.875rem; color: var(--emd-text); }
+    #login-gate {
+      position: fixed; inset: 0; z-index: 200;
+      display: flex; align-items: center; justify-content: center;
+      padding: 0 1rem; background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(4px);
+    }
+    #login-gate.hidden { display: none !important; }
+    #app-loading.hidden { display: none !important; }
+    html.emd-has-session #login-gate { display: none !important; }
     body.emd-glass {
       font-family: 'Kanit', sans-serif;
       display: flex;
@@ -394,7 +427,7 @@
 <body class="emd-glass flex flex-col min-h-screen">
   <div id="app-loading" class="fixed inset-0 z-[100] flex items-center justify-center backdrop-blur-sm">
     <div class="text-center">
-      <div class="mx-auto h-10 w-10 rounded-full border-4 border-blue-200 border-t-blue-500 animate-spin"></div>
+      <div class="emd-boot-spin mx-auto h-10 w-10 rounded-full border-4 border-blue-200 border-t-blue-500 animate-spin"></div>
       <p class="mt-3 text-sm">กำลังโหลดข้อมูล...</p>
     </div>
   </div>
@@ -854,16 +887,23 @@
 
   <datalist id="user-list"></datalist>
   <datalist id="dept-list"></datalist>
+  <script src="js/api-client.js?v=3" defer></script>
   <script>
     const EMD_API_CLIENT_SRC = 'js/api-client.js';
+    const EMD_API_CLIENT_VER = '3';
     const EMD_CHART_SRC = 'https://cdn.jsdelivr.net/npm/chart.js';
     const EMD_FC_SRC = 'https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js';
+    const EMD_FLATPICKR_SRC = 'https://cdn.jsdelivr.net/npm/flatpickr';
+    const EMD_FLATPICKR_TH_SRC = 'https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/th.js';
+    const EMD_SWAL_SRC = 'https://cdn.jsdelivr.net/npm/sweetalert2@11';
     const scriptLoaders = {};
 
     function loadScriptOnce(src) {
       if (scriptLoaders[src]) return scriptLoaders[src];
       if (src.indexOf('chart.js') !== -1 && window.Chart) return Promise.resolve();
       if (src.indexOf('fullcalendar') !== -1 && window.FullCalendar) return Promise.resolve();
+      if (src.indexOf('sweetalert2') !== -1 && window.Swal) return Promise.resolve();
+      if (src === EMD_FLATPICKR_SRC && window.flatpickr) return Promise.resolve();
       scriptLoaders[src] = new Promise(function (resolve, reject) {
         const s = document.createElement('script');
         s.src = src;
@@ -877,8 +917,7 @@
 
     function ensureApiClient() {
       if (typeof window.apiCall === 'function') return Promise.resolve();
-      const cacheBust = 'v=' + encodeURIComponent(String(Date.now()));
-      const src = EMD_API_CLIENT_SRC + '?' + cacheBust;
+      const src = EMD_API_CLIENT_SRC + '?v=' + EMD_API_CLIENT_VER;
 
       function loadOnce(url) {
         delete scriptLoaders[url];
@@ -890,7 +929,7 @@
       }
 
       return loadOnce(src).catch(function () {
-        const retrySrc = EMD_API_CLIENT_SRC + '?retry=' + encodeURIComponent(String(Date.now()));
+        const retrySrc = EMD_API_CLIENT_SRC + '?v=' + EMD_API_CLIENT_VER + '&retry=' + encodeURIComponent(String(Date.now()));
         return new Promise(function (resolve, reject) {
           setTimeout(function () {
             loadOnce(retrySrc).then(resolve).catch(function () {
@@ -898,6 +937,21 @@
             });
           }, 1200);
         });
+      });
+    }
+
+    function ensureSweetAlert() {
+      if (window.Swal) return Promise.resolve();
+      return loadScriptOnce(EMD_SWAL_SRC);
+    }
+
+    function ensureFlatpickr() {
+      if (window.flatpickr && window.flatpickr.l10ns && window.flatpickr.l10ns.th) {
+        return Promise.resolve();
+      }
+      return loadScriptOnce(EMD_FLATPICKR_SRC).then(function () {
+        if (window.flatpickr && window.flatpickr.l10ns && window.flatpickr.l10ns.th) return;
+        return loadScriptOnce(EMD_FLATPICKR_TH_SRC);
       });
     }
 
@@ -1606,6 +1660,7 @@
     }
 
     function showLoginGate(msg) {
+      try { document.documentElement.classList.remove('emd-has-session'); } catch (e) {}
       const gate = document.getElementById('login-gate');
       const err = document.getElementById('login-gate-error');
       if (gate) gate.classList.remove('hidden');
@@ -1620,6 +1675,7 @@
     function hideLoginGate() {
       const gate = document.getElementById('login-gate');
       if (gate) gate.classList.add('hidden');
+      try { document.documentElement.classList.add('emd-has-session'); } catch (e) {}
     }
 
     function setRoleUiState() {
@@ -1958,36 +2014,93 @@
       });
     };
 
-    window.onload = async function() {
+    function applyOptimisticLocalSession() {
+      let has = false;
+      const adminTok = readAdminSessionToken();
+      if (adminTok) {
+        isAdmin = true;
+        adminToken = adminTok;
+        setAdminUiState(true);
+        hideLoginGate();
+        has = true;
+      }
+      const stored = readStoredSession();
+      if (stored && stored.token) {
+        userRole = stored.role;
+        sessionToken = stored.token;
+        isReadOnly = stored.role === 'COMPANY';
+        hideLoginGate();
+        setRoleUiState();
+        has = true;
+      }
+      return has;
+    }
+
+    async function bootApp() {
       showSkeletonState();
+      const sweetReady = ensureSweetAlert();
+      const flatReady = ensureFlatpickr();
       try {
         await ensureApiClient();
       } catch (err) {
         hideLoading();
+        await sweetReady.catch(function () {});
         showLoginGate((err && err.message) || 'โหลดระบบเชื่อมต่อไม่สำเร็จ — ลองรีเฟรช (Ctrl+F5)');
         return;
       }
       ensureChartJs();
       resolveClientIpOnce();
       initBookingComboboxes();
-      const adminRestored = await restoreAdminSession();
-      const userRestored = await restoreUserSession();
-      if (userRestored || adminRestored) {
-        loadData({ full: isAdmin });
-        return;
+
+      const hasLocal = applyOptimisticLocalSession();
+      if (hasLocal) {
+        const dataPromise = loadData({ full: isAdmin });
+        const sessionPromise = Promise.all([restoreAdminSession(), restoreUserSession()]);
+        const sessionResults = await sessionPromise;
+        const adminOk = sessionResults[0];
+        const userOk = sessionResults[1];
+        if (!adminOk && !userOk && !isAdmin && !userRole) {
+          const gate = document.getElementById('login-gate');
+          const gateVisible = gate && !gate.classList.contains('hidden');
+          if (!gateVisible) {
+            const savedCode = readGateAccessCode();
+            if (savedCode) {
+              try {
+                const autoResult = await performGateLogin(savedCode, { remember: true });
+                if (autoResult.success) {
+                  loadData({ full: autoResult.loadFull });
+                  flatReady.then(initBookingDatePickers).catch(function () {});
+                  return;
+                }
+              } catch (e) {}
+            }
+            showLoginGate();
+          }
+        }
+        flatReady.then(initBookingDatePickers).catch(function () {});
+        return dataPromise;
       }
+
       const savedCode = readGateAccessCode();
       if (savedCode) {
         try {
           const autoResult = await performGateLogin(savedCode, { remember: true });
           if (autoResult.success) {
             loadData({ full: autoResult.loadFull });
+            flatReady.then(initBookingDatePickers).catch(function () {});
             return;
           }
         } catch (e) {}
       }
       showLoginGate();
-    };
+      flatReady.then(initBookingDatePickers).catch(function () {});
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', function () { bootApp(); });
+    } else {
+      bootApp();
+    }
 
 
     function estimateKmPerDayForPlate(plate) {
@@ -2231,7 +2344,11 @@
     }
 
     function initVehicleManagerDatePickers(root) {
-      if (!root || !window.flatpickr || !window.syncBuddhistDateAll) return;
+      if (!root || !window.syncBuddhistDateAll) return;
+      if (!window.flatpickr) {
+        ensureFlatpickr().then(function () { initVehicleManagerDatePickers(root); });
+        return;
+      }
       root.querySelectorAll('.vmgr-service-date').forEach(function (el) {
         if (el._flatpickr) return;
         flatpickr(el, {
@@ -2652,7 +2769,9 @@
       }).catch(function (err) {
         if (!stale) {
           hideLoading();
-          Swal.fire('ผิดพลาด', err.message || 'โหลดข้อมูลไม่สำเร็จ', 'error');
+          ensureSweetAlert().then(function () {
+            Swal.fire('ผิดพลาด', err.message || 'โหลดข้อมูลไม่สำเร็จ', 'error');
+          });
         }
         throw err;
       }).finally(function () {
@@ -2793,6 +2912,7 @@
     }
 
     window.promptLogin = async function() {
+      await ensureSweetAlert();
       const { value: formValues } = await Swal.fire({
         title: 'ผู้ดูแลระบบ (Admin)',
         html: '<input id="swal-user" class="swal2-input" placeholder="Username"><input id="swal-pass" type="password" class="swal2-input" placeholder="Password">',
@@ -5710,7 +5830,11 @@
       }
     };
 
-    document.addEventListener('DOMContentLoaded', function() {
+    function initBookingDatePickers() {
+      if (!window.flatpickr) return;
+      if (window._emdDatePickersReady) return;
+      window._emdDatePickersReady = true;
+
       const formatDateToBuddhistText = (dateObj) => {
         if (!dateObj || isNaN(dateObj.getTime())) return '';
         const dd = String(dateObj.getDate()).padStart(2, '0');
@@ -5811,7 +5935,7 @@
         onMonthChange: syncBuddhistDateAll,
         onYearChange: syncBuddhistDateAll
       });
-    });
+    }
   </script>
 </body>
 </html>
