@@ -3,10 +3,22 @@
 <head>
   <meta charset="UTF-8">
   <title>🚗 EMD CAR 🚗</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes, viewport-fit=cover">
+  <meta name="theme-color" content="#0a1628" media="(prefers-color-scheme: dark)">
   <meta name="theme-color" content="#0a1628">
+  <meta name="color-scheme" content="dark">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="EMD CAR">
+  <meta name="application-name" content="EMD CAR">
+  <meta name="description" content="ระบบจองและจัดการรถ EMD — ใช้งานได้บน iPhone, iPad และ Android">
+  <meta name="format-detection" content="telephone=no">
+  <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="alternate icon" href="favicon.ico">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
   <script src="config.js"></script>
   <script>
     (function () {
@@ -89,6 +101,7 @@
       display: flex;
       flex-direction: column;
       min-height: 100vh;
+      min-height: 100dvh;
       color: var(--emd-text);
       background-color: var(--emd-bg-deep) !important;
       background-image:
@@ -96,7 +109,13 @@
         radial-gradient(ellipse 90% 70% at 100% 0%, rgba(14, 165, 233, 0.2), transparent 45%),
         radial-gradient(ellipse 80% 60% at 50% 100%, rgba(30, 64, 175, 0.25), transparent 55%),
         linear-gradient(165deg, var(--emd-bg-deep) 0%, var(--emd-bg-mid) 45%, var(--emd-bg-accent) 100%) !important;
-      background-attachment: fixed;
+      background-attachment: scroll;
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: env(safe-area-inset-bottom);
+      padding-left: env(safe-area-inset-left);
+      padding-right: env(safe-area-inset-right);
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
     }
     main { flex: 1; color: var(--emd-text); }
     .toast-enter { transform: translateY(0); opacity: 1; }
@@ -131,7 +150,70 @@
     .emd-nav {
       z-index: 50;
       isolation: isolate;
+      padding-top: max(0px, env(safe-area-inset-top));
     }
+    /* iOS: avoid auto-zoom on focus — inputs need >=16px */
+    @media (max-width: 767px) {
+      input, select, textarea, .swal2-input, .swal2-textarea {
+        font-size: 16px !important;
+      }
+      .emd-tab-bar {
+        justify-content: flex-start !important;
+        gap: 0.75rem;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+      }
+      .emd-tab-bar::-webkit-scrollbar { display: none; }
+      .emd-tab-bar button {
+        min-height: 44px;
+        padding-left: 0.5rem;
+        padding-right: 0.5rem;
+      }
+      #btn-book, #btn-session-logout, #btn-login, #btn-logout, #btn-settings, #btn-add-car {
+        min-height: 44px;
+      }
+      #booking-modal > div,
+      #mileage-modal > div,
+      #handover-modal > div,
+      #vehicle-modal > div,
+      #settings-modal > div {
+        max-height: calc(100dvh - 2rem);
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+    }
+    #pwa-install-banner {
+      position: fixed;
+      left: max(0.75rem, env(safe-area-inset-left));
+      right: max(0.75rem, env(safe-area-inset-right));
+      bottom: max(0.75rem, env(safe-area-inset-bottom));
+      z-index: 90;
+      display: none;
+      align-items: flex-start;
+      gap: 0.75rem;
+      padding: 0.9rem 1rem;
+      border-radius: 1rem;
+      background: rgba(15, 23, 42, 0.96);
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+      color: #e8f0fc;
+    }
+    #pwa-install-banner.show { display: flex; }
+    #pwa-install-banner .pwa-install-text { flex: 1; min-width: 0; }
+    #pwa-install-banner .pwa-install-title { font-weight: 600; font-size: 0.95rem; margin: 0 0 0.2rem; }
+    #pwa-install-banner .pwa-install-desc { font-size: 0.8rem; color: #94a3b8; margin: 0; line-height: 1.35; }
+    #pwa-install-banner .pwa-install-actions { display: flex; flex-direction: column; gap: 0.35rem; flex-shrink: 0; }
+    #pwa-install-banner button {
+      border: none;
+      border-radius: 999px;
+      padding: 0.45rem 0.85rem;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      min-height: 36px;
+    }
+    #pwa-install-banner .pwa-install-primary { background: #2563eb; color: #fff; }
+    #pwa-install-banner .pwa-install-dismiss { background: transparent; color: #94a3b8; }
     main > [id^="view-"] > h2:first-child,
     #view-calendar > h2,
     #view-dashboard > h2:first-of-type,
@@ -262,9 +344,12 @@
       }
       #view-calendar .calendar-panel--main.calendar-panel--list {
         overflow-y: auto !important;
-        height: calc(100vh - 220px) !important;
+        height: calc(100dvh - 220px) !important;
         min-height: 360px !important;
         max-height: none !important;
+      }
+      .calendar-panel {
+        height: calc(100dvh - 240px);
       }
       #calendar.calendar-fit,
       #calendar {
@@ -450,6 +535,17 @@
 
   <div id="announcement-banner" class="hidden px-4 py-2 text-sm font-medium w-full overflow-hidden whitespace-nowrap">
     <div class="inline-block animate-marquee" id="banner-text-content"></div>
+  </div>
+
+  <div id="pwa-install-banner" role="dialog" aria-live="polite" aria-label="ติดตั้งแอป">
+    <div class="pwa-install-text">
+      <p class="pwa-install-title">ติดตั้ง EMD CAR บนมือถือ</p>
+      <p class="pwa-install-desc" id="pwa-install-desc">เพิ่มไปที่หน้าจอหลักเพื่อเปิดใช้งานเร็วขึ้นบน iPhone / Android</p>
+    </div>
+    <div class="pwa-install-actions">
+      <button type="button" class="pwa-install-primary" id="pwa-install-btn">ติดตั้ง</button>
+      <button type="button" class="pwa-install-dismiss" id="pwa-install-dismiss">ภายหลัง</button>
+    </div>
   </div>
 
   <nav class="emd-nav text-white sticky top-0 z-50 transition-colors">
@@ -5957,6 +6053,133 @@
         onYearChange: syncBuddhistDateAll
       });
     }
+  </script>
+  <script>
+    (function () {
+      const DISMISS_KEY = 'emdcar_pwa_install_dismiss_v1';
+      let deferredPrompt = null;
+
+      function isStandalone() {
+        try {
+          if (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) return true;
+          if (window.navigator.standalone === true) return true;
+        } catch (e) {}
+        return false;
+      }
+
+      function isIos() {
+        const ua = String(navigator.userAgent || '');
+        return /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      }
+
+      function isAndroid() {
+        return /Android/i.test(String(navigator.userAgent || ''));
+      }
+
+      function isMobileish() {
+        return isIos() || isAndroid() || (window.matchMedia && window.matchMedia('(max-width: 768px)').matches);
+      }
+
+      function wasDismissed() {
+        try {
+          const raw = localStorage.getItem(DISMISS_KEY);
+          if (!raw) return false;
+          const ts = Number(raw);
+          if (!ts) return true;
+          return (Date.now() - ts) < (14 * 24 * 60 * 60 * 1000);
+        } catch (e) { return false; }
+      }
+
+      function dismissBanner() {
+        try { localStorage.setItem(DISMISS_KEY, String(Date.now())); } catch (e) {}
+        const el = document.getElementById('pwa-install-banner');
+        if (el) el.classList.remove('show');
+      }
+
+      function showBanner(mode) {
+        if (isStandalone() || wasDismissed() || !isMobileish()) return;
+        const el = document.getElementById('pwa-install-banner');
+        const desc = document.getElementById('pwa-install-desc');
+        const btn = document.getElementById('pwa-install-btn');
+        if (!el || !desc || !btn) return;
+        if (mode === 'android-prompt') {
+          desc.textContent = 'ติดตั้งเป็นแอปบน Android เพื่อเปิดจากหน้าจอหลักได้ทันที';
+          btn.textContent = 'ติดตั้ง';
+          btn.style.display = '';
+        } else if (mode === 'ios') {
+          desc.textContent = 'บน iPhone/iPad: เปิดใน Safari → แชร์ → เพิ่มไปยังหน้าโฮมสกรีน';
+          btn.textContent = 'วิธีติดตั้ง';
+          btn.style.display = '';
+        } else {
+          desc.textContent = 'เพิ่มไปที่หน้าจอหลักเพื่อใช้งานเร็วขึ้นบนมือถือ';
+          btn.textContent = 'วิธีติดตั้ง';
+        }
+        el.classList.add('show');
+      }
+
+      function registerServiceWorker() {
+        if (!('serviceWorker' in navigator)) return;
+        const swUrl = 'sw.js';
+        window.addEventListener('load', function () {
+          navigator.serviceWorker.register(swUrl).catch(function () {});
+        });
+      }
+
+      window.addEventListener('beforeinstallprompt', function (e) {
+        e.preventDefault();
+        deferredPrompt = e;
+        showBanner('android-prompt');
+      });
+
+      window.addEventListener('appinstalled', function () {
+        deferredPrompt = null;
+        dismissBanner();
+      });
+
+      document.addEventListener('DOMContentLoaded', function () {
+        const btn = document.getElementById('pwa-install-btn');
+        const dismiss = document.getElementById('pwa-install-dismiss');
+        if (dismiss) dismiss.addEventListener('click', dismissBanner);
+        if (btn) {
+          btn.addEventListener('click', function () {
+            if (deferredPrompt) {
+              deferredPrompt.prompt();
+              deferredPrompt.userChoice.finally(function () {
+                deferredPrompt = null;
+                dismissBanner();
+              });
+              return;
+            }
+            if (isIos()) {
+              if (typeof Swal !== 'undefined') {
+                Swal.fire({
+                  title: 'ติดตั้งบน iPhone / iPad',
+                  html: '<ol style="text-align:left;padding-left:1.2rem;line-height:1.6;font-size:0.95rem">' +
+                    '<li>เปิดเว็บนี้ใน <b>Safari</b></li>' +
+                    '<li>แตะปุ่ม <b>แชร์</b> (□↑)</li>' +
+                    '<li>เลือก <b>เพิ่มไปยังหน้าโฮมสกรีน</b></li>' +
+                    '<li>กด <b>เพิ่ม</b></li></ol>',
+                  confirmButtonText: 'เข้าใจแล้ว',
+                  confirmButtonColor: '#2563eb'
+                });
+              } else {
+                alert('บน iPhone/iPad: Safari → แชร์ → เพิ่มไปยังหน้าโฮมสกรีน');
+              }
+              return;
+            }
+            alert('เปิดเมนูเบราว์เซอร์แล้วเลือก “ติดตั้งแอป” หรือ “Add to Home screen”');
+          });
+        }
+        setTimeout(function () {
+          if (isStandalone() || wasDismissed()) return;
+          if (deferredPrompt) showBanner('android-prompt');
+          else if (isIos()) showBanner('ios');
+          else if (isAndroid()) showBanner('android-prompt');
+        }, 2500);
+      });
+
+      registerServiceWorker();
+    })();
   </script>
 </body>
 </html>

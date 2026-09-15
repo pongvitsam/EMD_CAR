@@ -27,7 +27,8 @@ jobs:
           mkdir site
           cp index.html config.js .nojekyll site/
           cp favicon.svg favicon.ico site/
-          cp -r js css site/
+          cp manifest.webmanifest sw.js site/
+          cp -r js css icons site/
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
