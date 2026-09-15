@@ -169,7 +169,7 @@
         padding-left: 0.5rem;
         padding-right: 0.5rem;
       }
-      #btn-book, #btn-session-logout, #btn-login, #btn-logout, #btn-settings, #btn-add-car {
+      #btn-book, #btn-session-logout, #btn-logout, #btn-settings, #btn-add-car {
         min-height: 44px;
       }
       #booking-modal > div,
@@ -529,6 +529,11 @@
         </label>
         <button type="submit" class="w-full bg-purple-500 hover:bg-purple-600 text-white py-3 rounded-xl transition font-medium">เข้าสู่ระบบ</button>
       </form>
+      <div class="mt-5 pt-4 border-t border-slate-200 dark:border-slate-600 text-center">
+        <button type="button" id="btn-gate-admin" onclick="window.promptLogin()" class="text-sm text-slate-500 hover:text-blue-500 dark:text-slate-400 dark:hover:text-blue-400 underline-offset-2 hover:underline transition">
+          🔐 เข้าสู่ระบบ Admin
+        </button>
+      </div>
       <p id="login-gate-error" class="text-red-500 text-sm text-center mt-4 hidden"></p>
     </div>
   </div>
@@ -555,7 +560,6 @@
         <span id="role-display" class="hidden md:inline text-sm emd-glass-chip px-3 py-1 rounded-full mr-2"></span>
         <span id="current-user-display" class="hidden md:inline text-sm emd-glass-chip px-3 py-1 rounded-full mr-2"></span>
         <button id="btn-session-logout" onclick="window.logoutSession()" class="hidden bg-amber-500 hover:bg-amber-600 px-4 py-2 rounded-full text-sm font-medium transition shadow">🚪 ออกจากระบบ</button>
-        <button id="btn-login" onclick="window.promptLogin()" class="hidden bg-slate-600/80 hover:bg-slate-600 px-4 py-2 rounded-full text-sm font-medium transition shadow backdrop-blur-sm border border-white/10">🔐 Admin</button>
         <button id="btn-settings" onclick="window.openAdminSettings()" class="hidden bg-blue-500 hover:bg-blue-600 px-4 py-2 rounded-full text-sm font-medium transition shadow">⚙️ ตั้งค่าระบบ</button>
         <button id="btn-logout" onclick="window.logoutAdmin()" class="hidden bg-red-500 hover:bg-red-600 px-4 py-2 rounded-full text-sm font-medium transition shadow">🚪 ออกจากระบบ</button>
         <button id="btn-add-car" onclick="window.openVehicleModal()" class="hidden bg-white/15 hover:bg-white/25 px-4 py-2 rounded-full text-sm font-medium transition border border-white/20 backdrop-blur-sm">+ เพิ่มรถใหม่</button>
@@ -1778,7 +1782,6 @@
       const isCompany = userRole === 'COMPANY';
       isReadOnly = isCompany;
       document.getElementById('btn-book').classList.toggle('hidden', isCompany || isReadOnly);
-      document.getElementById('btn-login').classList.toggle('hidden', isCompany);
       document.getElementById('btn-session-logout').classList.toggle('hidden', !userRole);
       document.getElementById('company-delivery-panel').classList.toggle('hidden', !isCompany);
       const deptStatEl = document.getElementById('dashboard-stat-dept');
@@ -2966,7 +2969,6 @@
     }
 
     function setAdminUiState(enabled) {
-      document.getElementById('btn-login').classList.toggle('hidden', enabled);
       document.getElementById('btn-logout').classList.toggle('hidden', !enabled);
       document.getElementById('btn-settings').classList.toggle('hidden', !enabled);
       document.getElementById('btn-add-car').classList.toggle('hidden', !enabled);
@@ -3029,6 +3031,9 @@
     }
 
     window.promptLogin = async function() {
+      const gate = document.getElementById('login-gate');
+      const gateVisible = gate && !gate.classList.contains('hidden');
+      if (!gateVisible) return;
       await ensureSweetAlert();
       const { value: formValues } = await Swal.fire({
         title: 'ผู้ดูแลระบบ (Admin)',
@@ -3055,6 +3060,7 @@
 
     window.logoutAdmin = function() {
       deactivateAdminSession(true);
+      if (!userRole && !sessionToken) showLoginGate();
     }
 
     function renderMileageExemptCheckboxes() {
