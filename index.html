@@ -1773,7 +1773,7 @@
       const remember = !rememberEl || rememberEl.checked;
       performGateLogin(code, { remember: remember }).then(function (result) {
         if (result.success) {
-          loadData({ full: result.loadFull });
+          loadData();
         } else {
           showLoginGate(result.msg);
         }
@@ -2051,34 +2051,11 @@
       ensureChartJs();
       resolveClientIpOnce();
       initBookingComboboxes();
+      flatReady.then(initBookingDatePickers).catch(function () {});
 
       const hasLocal = applyOptimisticLocalSession();
       if (hasLocal) {
-        const dataPromise = loadData({ full: isAdmin });
-        const sessionPromise = Promise.all([restoreAdminSession(), restoreUserSession()]);
-        const sessionResults = await sessionPromise;
-        const adminOk = sessionResults[0];
-        const userOk = sessionResults[1];
-        if (!adminOk && !userOk && !isAdmin && !userRole) {
-          const gate = document.getElementById('login-gate');
-          const gateVisible = gate && !gate.classList.contains('hidden');
-          if (!gateVisible) {
-            const savedCode = readGateAccessCode();
-            if (savedCode) {
-              try {
-                const autoResult = await performGateLogin(savedCode, { remember: true });
-                if (autoResult.success) {
-                  loadData({ full: autoResult.loadFull });
-                  flatReady.then(initBookingDatePickers).catch(function () {});
-                  return;
-                }
-              } catch (e) {}
-            }
-            showLoginGate();
-          }
-        }
-        flatReady.then(initBookingDatePickers).catch(function () {});
-        return dataPromise;
+        return loadData().catch(function () {});
       }
 
       const savedCode = readGateAccessCode();
@@ -2086,14 +2063,11 @@
         try {
           const autoResult = await performGateLogin(savedCode, { remember: true });
           if (autoResult.success) {
-            loadData({ full: autoResult.loadFull });
-            flatReady.then(initBookingDatePickers).catch(function () {});
-            return;
+            return loadData().catch(function () {});
           }
         } catch (e) {}
       }
       showLoginGate();
-      flatReady.then(initBookingDatePickers).catch(function () {});
     }
 
     if (document.readyState === 'loading') {
@@ -2732,12 +2706,51 @@
       });
     }
 
+    function pickLoadDataToken() {
+      if (typeof window.getEmdApiToken === 'function') {
+        const t = window.getEmdApiToken('getAppData') || '';
+        if (t) return t;
+      }
+      return adminToken || sessionToken || '';
+    }
+
+    function fetchAppData(token) {
+      return apiCall('getAppData', [false, token], token);
+    }
+
+    function reloginFromSavedGateCode() {
+      const savedCode = readGateAccessCode();
+      if (!savedCode) return Promise.resolve(null);
+      return performGateLogin(savedCode, { remember: true }).then(function (loginRes) {
+        if (!loginRes || !loginRes.success) return null;
+        return fetchAppData(sessionToken || '');
+      }).catch(function () { return null; });
+    }
+
+    function fetchAppDataWithFallback() {
+      const primary = pickLoadDataToken();
+      return fetchAppData(primary).then(function (data) {
+        if (!data || !data.requiresAuth) return data;
+        const usedAdmin = !!(primary && adminToken && primary === adminToken);
+        if (usedAdmin) deactivateAdminSession(false);
+        const alt = sessionToken || '';
+        const retry = (alt && alt !== primary) ? fetchAppData(alt) : Promise.resolve(data);
+        return retry.then(function (next) {
+          if (next && !next.requiresAuth) return next;
+          return reloginFromSavedGateCode().then(function (again) {
+            if (again && !again.requiresAuth) return again;
+            logoutSession();
+            throw new Error((next && next.msg) || (data && data.msg) || 'กรุณาเข้าสู่ระบบ');
+          });
+        });
+      });
+    }
+
     function loadData(options) {
       options = options || {};
-      const includeLogs = options.full === true;
       const silent = options.silent === true;
       const stale = readCache(true);
-      const requestKey = includeLogs ? 'full' : 'core';
+      const requestKey = 'core';
 
       if (stale) {
         initApp(stale, true);
@@ -2751,9 +2764,7 @@
       }
 
       const seq = ++loadDataSeq;
-      const authToken = (typeof window.getEmdApiToken === 'function' ? window.getEmdApiToken('getAppData') : '') || adminToken || sessionToken || '';
-      const fetchPromise = apiCall('getAppData', [includeLogs, authToken], authToken);
-      const tracked = fetchPromise.then(function (data) {
+      const tracked = fetchAppDataWithFallback().then(function (data) {
         if (seq !== loadDataSeq) return data;
         if (data && data.requiresAuth) {
           logoutSession();
@@ -2762,9 +2773,19 @@
         if (!data || !Array.isArray(data.vehicles)) {
           throw new Error('ข้อมูลจากเซิร์ฟเวอร์ไม่สมบูรณ์');
         }
-        if (data.role) userRole = data.role === 'ADMIN' ? (userRole || 'EMD') : data.role;
+        if (data.role === 'ADMIN') {
+          if (!isAdmin && adminToken) activateAdminSession(adminToken, { renderCharts: false });
+        } else if (data.role) {
+          userRole = data.role;
+        }
         if (data.readOnly) isReadOnly = true;
+        const prevLogs = (appData && appData.logs) || [];
         initApp(data, false);
+        if (prevLogs.length && !(appData.logs && appData.logs.length)) {
+          appData.logs = prevLogs;
+          renderLogs(prevLogs);
+        }
+        if (isAdmin) loadLogsIfNeeded();
         return data;
       }).catch(function (err) {
         if (!stale) {
@@ -2785,7 +2806,7 @@
     }
 
     function reloadAfterMutation() {
-      loadData({ full: isAdmin, silent: true });
+      loadData({ silent: true });
     }
 
     function initApp(data, fromCache) {
@@ -2929,7 +2950,7 @@
       if (formValues && formValues.success) {
         activateAdminSession(formValues.token || '');
         hideLoginGate();
-        loadData({ full: true, silent: true });
+        loadData({ silent: true });
         Swal.fire({ icon: 'success', title: 'สำเร็จ', text: 'เข้าสู่ระบบ Admin แล้ว', timer: 1500, showConfirmButton: false });
       } else if (formValues && !formValues.success) {
         Swal.fire({ icon: 'error', title: 'ข้อผิดพลาด', text: formValues.msg || 'ข้อมูลไม่ถูกต้อง', confirmButtonColor: '#3b82f6' });

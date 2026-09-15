@@ -1,12 +1,14 @@
 const SHEET_ID = '1W5XJ6_JIFr4UHSLWsjb_YfpbF6He7Crz7Vrcdbbqaw8';
 const DRIVE_FOLDER_ID = '1R7JySsplPoCZI_Kjq51GAukOKUAzJhKz'; 
 const ADMIN_EMAIL = 'admin@yourdomain.com';
-const APP_DATA_CACHE_KEY = 'APP_DATA_V3';
-const APP_DATA_CORE_CACHE_KEY = 'APP_DATA_CORE_V3';
+const APP_DATA_CACHE_KEY = 'APP_DATA_V4';
+const APP_DATA_CORE_CACHE_KEY = 'APP_DATA_CORE_V4';
 const APP_LOGS_CACHE_KEY = 'APP_LOGS_V1';
 const LEGACY_APP_DATA_CACHE_KEY = 'APP_DATA_V1';
+const SCHEMA_READY_CACHE_KEY = 'SCHEMA_READY_V4';
 const CACHE_TTL_SEC = 600;
 const LOGS_CACHE_TTL_SEC = 180;
+const CACHE_ITEM_MAX = 90000;
 const ADMIN_SESSION_CACHE_PREFIX = 'ADMIN_SESSION_';
 const EMD_SESSION_CACHE_PREFIX = 'EMD_SESSION_';
 const COMPANY_SESSION_CACHE_PREFIX = 'COMPANY_SESSION_';
@@ -154,10 +156,28 @@ function validateBookingMileage_(form, bData, newStart, newEnd) {
   };
 }
 
+function cacheChunkKeys_(key, n) {
+  const keys = [key];
+  const count = n || 20;
+  for (let i = 0; i < count; i++) keys.push(key + '_' + i);
+  return keys;
+}
+
+function removeCachedText_(cache, key) {
+  try {
+    const meta = cache.get(key);
+    let n = 20;
+    if (meta && meta.indexOf('C:') === 0) n = parseInt(meta.substring(2), 10) || 20;
+    cache.removeAll(cacheChunkKeys_(key, n));
+  } catch (err) {
+    try { cache.remove(key); } catch (e2) {}
+  }
+}
+
 function clearAppCache_() {
   const cache = CacheService.getScriptCache();
-  cache.remove(APP_DATA_CACHE_KEY);
-  cache.remove(APP_DATA_CORE_CACHE_KEY);
+  removeCachedText_(cache, APP_DATA_CACHE_KEY);
+  removeCachedText_(cache, APP_DATA_CORE_CACHE_KEY);
   cache.remove(APP_LOGS_CACHE_KEY);
   cache.remove(LEGACY_APP_DATA_CACHE_KEY);
 }
@@ -165,12 +185,95 @@ function clearAppCache_() {
 function putCacheSafe_(cache, key, value, ttlSec) {
   try {
     const text = String(value || '');
-    if (text.length > 90000) return false;
+    if (text.length > CACHE_ITEM_MAX) return false;
     cache.put(key, text, ttlSec);
     return true;
   } catch (err) {
     return false;
   }
+}
+
+function putCachedText_(cache, key, text, ttlSec) {
+  const value = String(text || '');
+  if (value.length <= CACHE_ITEM_MAX) return putCacheSafe_(cache, key, value, ttlSec);
+  const n = Math.ceil(value.length / CACHE_ITEM_MAX);
+  const map = {};
+  map[key] = 'C:' + n;
+  for (let i = 0; i < n; i++) {
+    map[key + '_' + i] = value.substring(i * CACHE_ITEM_MAX, (i + 1) * CACHE_ITEM_MAX);
+  }
+  try {
+    cache.putAll(map, ttlSec);
+    return true;
+  } catch (err) {
+    return false;
+  }
+}
+
+function getCachedText_(cache, key) {
+  try {
+    const meta = cache.get(key);
+    if (meta == null) return null;
+    if (meta.indexOf('C:') !== 0) return meta;
+    const n = parseInt(meta.substring(2), 10);
+    if (!n || n < 2) return null;
+    const keys = [];
+    for (let i = 0; i < n; i++) keys.push(key + '_' + i);
+    const parts = cache.getAll(keys);
+    let out = '';
+    for (let i = 0; i < n; i++) {
+      if (parts[keys[i]] == null) return null;
+      out += parts[keys[i]];
+    }
+    return out;
+  } catch (err) {
+    return null;
+  }
+}
+
+function compressJsonForCache_(jsonText) {
+  try {
+    const gzB64 = Utilities.base64Encode(Utilities.gzip(Utilities.newBlob(jsonText, 'application/json')).getBytes());
+    if (gzB64 && gzB64.length < jsonText.length) return 'Z:' + gzB64;
+  } catch (err) {}
+  return 'J:' + jsonText;
+}
+
+function parseCachedJson_(raw) {
+  if (!raw) return null;
+  try {
+    if (raw.indexOf('Z:') === 0) {
+      const bytes = Utilities.base64Decode(raw.substring(2));
+      const jsonText = Utilities.ungzip(Utilities.newBlob(bytes, 'application/x-gzip')).getDataAsString();
+      return JSON.parse(jsonText);
+    }
+    if (raw.indexOf('J:') === 0) return JSON.parse(raw.substring(2));
+    return JSON.parse(raw);
+  } catch (err) {
+    return null;
+  }
+}
+
+function writeAppDataCache_(cache, key, jsonText, ttlSec) {
+  return putCachedText_(cache, key, compressJsonForCache_(jsonText), ttlSec);
+}
+
+function readAppDataCache_(cache, key) {
+  return parseCachedJson_(getCachedText_(cache, key));
+}
+
+function isSchemaReady_() {
+  try {
+    return CacheService.getScriptCache().get(SCHEMA_READY_CACHE_KEY) === '1';
+  } catch (err) {
+    return false;
+  }
+}
+
+function markSchemaReady_() {
+  try {
+    CacheService.getScriptCache().put(SCHEMA_READY_CACHE_KEY, '1', 21600);
+  } catch (err) {}
 }
 
 function sessionCachePrefix_(role) {
@@ -252,9 +355,13 @@ function resolveSessionRole_(token) {
   if (!token) return null;
   try {
     const cache = CacheService.getScriptCache();
-    if (cache.get(ADMIN_SESSION_CACHE_PREFIX + token) === '1') return 'ADMIN';
-    if (cache.get(EMD_SESSION_CACHE_PREFIX + token) === '1') return 'EMD';
-    if (cache.get(COMPANY_SESSION_CACHE_PREFIX + token) === '1') return 'COMPANY';
+    const adminKey = ADMIN_SESSION_CACHE_PREFIX + token;
+    const emdKey = EMD_SESSION_CACHE_PREFIX + token;
+    const companyKey = COMPANY_SESSION_CACHE_PREFIX + token;
+    const hits = cache.getAll([adminKey, emdKey, companyKey]);
+    if (hits[adminKey] === '1') return 'ADMIN';
+    if (hits[emdKey] === '1') return 'EMD';
+    if (hits[companyKey] === '1') return 'COMPANY';
   } catch (err) {}
   const role = readSessionFromProperties_(token);
   if (role) {
@@ -374,8 +481,7 @@ function filterPayloadForCompany_(payload) {
 }
 
 function getNameRows_() {
-  const ss = getSpreadsheet_();
-  setupDatabase();
+  const ss = setupDatabase();
   const sheet = getSheetOrThrow_(ss, 'Name');
   const data = sheet.getDataRange().getValues();
   return data.slice(1).map((r, idx) => ({
@@ -397,6 +503,21 @@ function attachCurrentUser_(payload) {
   return data;
 }
 
+function ensureHeaderRow_(sheet, expectedHeaders, forceIndexes) {
+  const force = forceIndexes || {};
+  const current = sheet.getRange(1, 1, 1, expectedHeaders.length).getValues()[0];
+  let changed = false;
+  const next = expectedHeaders.map(function (h, idx) {
+    const cur = String(current[idx] || '').trim();
+    if (!cur || force[idx] && cur !== h) {
+      changed = true;
+      return h;
+    }
+    return current[idx];
+  });
+  if (changed) sheet.getRange(1, 1, 1, expectedHeaders.length).setValues([next]);
+}
+
 function ensureVehiclesSheet_(ss) {
   let sheet = ss.getSheetByName('Vehicles');
   if (!sheet) {
@@ -404,23 +525,7 @@ function ensureVehiclesSheet_(ss) {
     sheet.appendRow(VEHICLE_HEADERS);
     return sheet;
   }
-
-  const leaseHeaderCell = sheet.getRange(1, 13);
-  if (!leaseHeaderCell.getValue()) {
-    leaseHeaderCell.setValue(VEHICLE_HEADERS[12]);
-  }
-  for (let c = 14; c <= VEHICLE_HEADERS.length; c++) {
-    const cell = sheet.getRange(1, c);
-    if (!cell.getValue()) cell.setValue(VEHICLE_HEADERS[c - 1]);
-  }
-  const managedHeader = sheet.getRange(1, 21).getValue();
-  if (String(managedHeader || '').trim() !== 'ManagedBy') {
-    sheet.getRange(1, 21).setValue('ManagedBy');
-  }
-  const groupHeader = sheet.getRange(1, 22).getValue();
-  if (String(groupHeader || '').trim() !== 'VehicleGroup') {
-    sheet.getRange(1, 22).setValue('VehicleGroup');
-  }
+  ensureHeaderRow_(sheet, VEHICLE_HEADERS, { 20: true, 21: true });
   return sheet;
 }
 
@@ -453,10 +558,7 @@ function ensureVehicleGroupsSheet_(ss) {
     ensureDefaultVehicleGroups_(sheet);
     return sheet;
   }
-  const headers = sheet.getRange(1, 1, 1, VEHICLE_GROUP_HEADERS.length).getValues()[0];
-  VEHICLE_GROUP_HEADERS.forEach(function (h, idx) {
-    if (!headers[idx]) sheet.getRange(1, idx + 1).setValue(h);
-  });
+  ensureHeaderRow_(sheet, VEHICLE_GROUP_HEADERS);
   ensureDefaultVehicleGroups_(sheet);
   return sheet;
 }
@@ -480,10 +582,12 @@ function normalizeVehicleGroupId_(value) {
   return id || DEFAULT_VEHICLE_GROUP_ALL;
 }
 
-function getVehicleGroups_() {
-  const ss = getSpreadsheet_();
-  setupDatabase();
-  const sheet = getSheetOrThrow_(ss, 'VehicleGroups');
+function getVehicleGroups_(ss) {
+  ss = ss || getSpreadsheet_();
+  let sheet = ss.getSheetByName('VehicleGroups');
+  if (!sheet) {
+    sheet = ensureVehicleGroupsSheet_(ss);
+  }
   const data = sheet.getDataRange().getValues();
   return data.slice(1).map(function (r, idx) {
     return {
@@ -521,24 +625,27 @@ function isVehicleBookableForContext_(vehicleGroupId, dept, dest) {
 }
 
 function ensureBookingsPhoneColumn_(ss) {
-  const sheet = ss.getSheetByName('Bookings');
-  if (!sheet) return;
-  const header = sheet.getRange(1, 14).getValue();
-  if (String(header || '').trim() !== 'เบอร์ติดต่อ') {
-    sheet.getRange(1, 14).setValue('เบอร์ติดต่อ');
-  }
+  ensureBookingsExtraColumns_(ss);
 }
 
 function ensureBookingsHandoverColumns_(ss) {
+  ensureBookingsExtraColumns_(ss);
+}
+
+function ensureBookingsExtraColumns_(ss) {
   const sheet = ss.getSheetByName('Bookings');
   if (!sheet) return;
-  const headers = ['จุดจอดส่งมอบ', 'แบตส่งมอบ', 'ผู้รับกุญแจ', 'เวลาส่งมอบ'];
-  headers.forEach(function (h, i) {
-    const col = 15 + i;
-    if (String(sheet.getRange(1, col).getValue() || '').trim() !== h) {
-      sheet.getRange(1, col).setValue(h);
+  const extra = ['เบอร์ติดต่อ', 'จุดจอดส่งมอบ', 'แบตส่งมอบ', 'ผู้รับกุญแจ', 'เวลาส่งมอบ'];
+  const current = sheet.getRange(1, 14, 1, extra.length).getValues()[0];
+  let changed = false;
+  const next = extra.map(function (h, i) {
+    if (String(current[i] || '').trim() !== h) {
+      changed = true;
+      return h;
     }
+    return current[i];
   });
+  if (changed) sheet.getRange(1, 14, 1, extra.length).setValues([next]);
 }
 
 function normalizeContactPhone_(value) {
@@ -547,23 +654,28 @@ function normalizeContactPhone_(value) {
   return digits;
 }
 
-function getVehicleGroupIdByPlate_(plate) {
-  const ss = getSpreadsheet_();
-  const vData = getSheetOrThrow_(ss, 'Vehicles').getDataRange().getValues();
+function getVehicleGroupIdFromRows_(vData, plate) {
+  const want = normalizePlateKey_(plate);
   for (let i = 1; i < vData.length; i++) {
-    if (normalizePlateKey_(vData[i][1]) === normalizePlateKey_(plate)) {
+    if (normalizePlateKey_(vData[i][1]) === want) {
       return normalizeVehicleGroupId_(vData[i][21]);
     }
   }
   return DEFAULT_VEHICLE_GROUP_ALL;
 }
 
-function requiresBookingPhone_(plate) {
-  return getVehicleGroupIdByPlate_(plate) !== DEFAULT_VEHICLE_GROUP_ALL;
+function getVehicleGroupIdByPlate_(plate, vData) {
+  if (vData) return getVehicleGroupIdFromRows_(vData, plate);
+  const ss = getSpreadsheet_();
+  return getVehicleGroupIdFromRows_(getSheetOrThrow_(ss, 'Vehicles').getDataRange().getValues(), plate);
 }
 
-function validateBookingPhone_(plate, phone) {
-  if (!requiresBookingPhone_(plate)) {
+function requiresBookingPhone_(plate, vData) {
+  return getVehicleGroupIdByPlate_(plate, vData) !== DEFAULT_VEHICLE_GROUP_ALL;
+}
+
+function validateBookingPhone_(plate, phone, vData) {
+  if (!requiresBookingPhone_(plate, vData)) {
     return { success: true, phone: normalizeContactPhone_(phone) };
   }
   const normalized = normalizeContactPhone_(phone);
@@ -748,10 +860,8 @@ function resolveClientIp_(clientIp, payload) {
 function ensureLogsIpColumn_(ss) {
   const sheet = ss.getSheetByName('Logs');
   if (!sheet) return;
-  const header = sheet.getRange(1, 7).getValue();
-  if (String(header || '').trim() !== 'IP') {
-    sheet.getRange(1, 7).setValue('IP');
-  }
+  const header = String(sheet.getRange(1, 7).getValue() || '').trim();
+  if (header !== 'IP') sheet.getRange(1, 7).setValue('IP');
 }
 
 function appendLogRow_(logSheet, email, action, target, detail, reason, clientIp) {
@@ -800,14 +910,14 @@ function dispatchApi_(action, args, token, clientIp) {
   }
 }
 
-function setupDatabase() {
-  const ss = SpreadsheetApp.openById(SHEET_ID);
+function setupDatabase(ss) {
+  if (isSchemaReady_()) return ss || getSpreadsheet_();
+  ss = ss || SpreadsheetApp.openById(SHEET_ID);
   if (!ss.getSheetByName('Name')) ss.insertSheet('Name').appendRow(['ชื่อ', 'นามสกุล', 'แผนก']);
   ensureVehiclesSheet_(ss);
   ensureVehicleGroupsSheet_(ss);
   if (!ss.getSheetByName('Bookings')) ss.insertSheet('Bookings').appendRow(['Booking_ID', 'ทะเบียนรถ', 'ชื่อ', 'นามสกุล', 'แผนก', 'เริ่ม', 'สิ้นสุด', 'จุดหมาย', 'ผู้ขับขี่', 'อีเมลผู้บันทึก', 'ไมล์ก่อนใช้', 'ไมล์หลังใช้', 'จุดจอดหลังใช้งาน', 'เบอร์ติดต่อ']);
-  ensureBookingsPhoneColumn_(ss);
-  ensureBookingsHandoverColumns_(ss);
+  ensureBookingsExtraColumns_(ss);
   if (!ss.getSheetByName('Logs')) ss.insertSheet('Logs').appendRow(['Timestamp', 'อีเมลผู้ทำรายการ', 'Action', 'Target', 'รายละเอียด', 'เหตุผลการแก้ไข', 'IP']);
   ensureLogsIpColumn_(ss);
   
@@ -823,6 +933,8 @@ function setupDatabase() {
     sSheet.appendRow(['LineGroupId', '', 'LINE Group ID สำหรับแจ้งเตือน']);
     sSheet.appendRow(['LineReminderMinutes', '180', 'เตือนก่อนเวลาส่งรถ (นาที)']);
   }
+  markSchemaReady_();
+  return ss;
 }
 
 function buildAppPayload_(ss, includeLogs) {
@@ -844,7 +956,7 @@ function buildAppPayload_(ss, includeLogs) {
     vehicleGroup: normalizeVehicleGroupId_(r[21])
   }));
 
-  const vehicleGroups = getVehicleGroups_();
+  const vehicleGroups = getVehicleGroups_(ss);
 
   const bDataVal = getSheetOrThrow_(ss, 'Bookings').getDataRange().getValues();
   const bookings = bDataVal.slice(1).map(r => ({
@@ -898,6 +1010,52 @@ function readLogsFromSheet_(ss) {
   })).reverse();
 }
 
+function stripSensitiveFields_(payload, role) {
+  if (role === 'ADMIN') return payload;
+  const settings = Object.assign({}, payload.settings || {});
+  settings.lineChannelAccessToken = '';
+  settings.lineGroupId = '';
+  const vehicles = (payload.vehicles || []).map(function (v) {
+    const copy = Object.assign({}, v);
+    copy.email = '';
+    copy.pass = '';
+    return copy;
+  });
+  return Object.assign({}, payload, { settings: settings, vehicles: vehicles, logs: [] });
+}
+
+function loadAppPayload_(wantLogs) {
+  const cache = CacheService.getScriptCache();
+  const cacheKey = wantLogs ? APP_DATA_CACHE_KEY : APP_DATA_CORE_CACHE_KEY;
+  let normalized = readAppDataCache_(cache, cacheKey);
+  if (normalized) return normalized;
+
+  const lock = LockService.getScriptLock();
+  try { lock.waitLock(15000); } catch (err) {}
+  try {
+    normalized = readAppDataCache_(cache, cacheKey);
+    if (normalized) return normalized;
+
+    const ss = getSpreadsheet_();
+    let payload;
+    try {
+      payload = buildAppPayload_(ss, wantLogs);
+    } catch (err) {
+      payload = buildAppPayload_(setupDatabase(ss), wantLogs);
+    }
+    const text = JSON.stringify(payload);
+    normalized = JSON.parse(text);
+    writeAppDataCache_(cache, cacheKey, text, CACHE_TTL_SEC);
+    if (wantLogs) {
+      const coreObj = Object.assign({}, normalized, { logs: [] });
+      writeAppDataCache_(cache, APP_DATA_CORE_CACHE_KEY, JSON.stringify(coreObj), CACHE_TTL_SEC);
+    }
+    return normalized;
+  } finally {
+    try { lock.releaseLock(); } catch (err) {}
+  }
+}
+
 function getAppData(includeLogs, token) {
   const role = resolveSessionRole_(token);
   if (!role) {
@@ -906,22 +1064,7 @@ function getAppData(includeLogs, token) {
   refreshSession_(token, role);
 
   const wantLogs = (includeLogs !== false) && role === 'ADMIN';
-  const cache = CacheService.getScriptCache();
-  const cacheKey = wantLogs ? APP_DATA_CACHE_KEY : APP_DATA_CORE_CACHE_KEY;
-  let normalized;
-  const cachedPayload = cache.get(cacheKey);
-  if (cachedPayload) {
-    normalized = JSON.parse(cachedPayload);
-  } else {
-    const ss = getSpreadsheet_();
-    setupDatabase();
-    normalized = JSON.parse(JSON.stringify(buildAppPayload_(ss, wantLogs)));
-    putCacheSafe_(cache, cacheKey, JSON.stringify(normalized), CACHE_TTL_SEC);
-    if (wantLogs) {
-      const coreOnly = Object.assign({}, normalized, { logs: [] });
-      putCacheSafe_(cache, APP_DATA_CORE_CACHE_KEY, JSON.stringify(coreOnly), CACHE_TTL_SEC);
-    }
-  }
+  const normalized = loadAppPayload_(wantLogs);
 
   let payload = attachCurrentUser_(normalized);
   payload.role = role;
@@ -934,10 +1077,11 @@ function getAppData(includeLogs, token) {
     payload.readOnly = true;
     payload.logs = [];
   } else if (role === 'EMD') {
-    payload = attachCurrentUser_(filterHiddenVehiclesFromPayload_(payload));
+    payload = attachCurrentUser_(stripSensitiveFields_(filterHiddenVehiclesFromPayload_(payload), 'EMD'));
     payload.role = 'EMD';
     payload.logs = [];
   } else if (role !== 'ADMIN') {
+    payload = stripSensitiveFields_(payload, role);
     payload.logs = [];
   }
 
@@ -955,9 +1099,8 @@ function getAppLogs_(token) {
   if (cached) return { success: true, logs: JSON.parse(cached) };
 
   const ss = getSpreadsheet_();
-  setupDatabase();
   const logs = readLogsFromSheet_(ss);
-  cache.put(APP_LOGS_CACHE_KEY, JSON.stringify(logs), LOGS_CACHE_TTL_SEC);
+  putCacheSafe_(cache, APP_LOGS_CACHE_KEY, JSON.stringify(logs), LOGS_CACHE_TTL_SEC);
   return { success: true, logs: logs };
 }
 
@@ -1053,8 +1196,7 @@ function saveManagedName(token, form) {
     if (!fullName) return { success: false, msg: 'กรุณาระบุชื่อ-นามสกุล' };
     if (!dept) return { success: false, msg: 'กรุณาระบุแผนก' };
 
-    const ss = getSpreadsheet_();
-    setupDatabase();
+    const ss = setupDatabase();
     const sheet = getSheetOrThrow_(ss, 'Name');
     const rows = getNameRows_();
     const isDuplicate = rows.some(r => Number(r.row) !== Number(row) && r.fullName === fullName && String(r.dept).trim() === dept);
@@ -1077,8 +1219,7 @@ function saveManagedName(token, form) {
 function deleteManagedName(token, row) {
   try {
     requireAdminSession_(token);
-    const ss = getSpreadsheet_();
-    setupDatabase();
+    const ss = setupDatabase();
     const sheet = getSheetOrThrow_(ss, 'Name');
     const rowNumber = Number(row) || 0;
     if (rowNumber < 2 || rowNumber > sheet.getLastRow()) return { success: false, msg: 'ไม่พบรายชื่อที่ต้องการลบ' };
@@ -1088,15 +1229,26 @@ function deleteManagedName(token, row) {
   } catch (error) { return { success: false, msg: error.message }; }
 }
 
-function countVehiclesInGroup_(groupId) {
+function countVehiclesByGroup_() {
   const ss = getSpreadsheet_();
-  const want = normalizeVehicleGroupId_(groupId);
   const vData = getSheetOrThrow_(ss, 'Vehicles').getDataRange().getValues();
-  let count = 0;
+  const counts = {};
   for (let i = 1; i < vData.length; i++) {
-    if (normalizeVehicleGroupId_(vData[i][21]) === want) count++;
+    const id = normalizeVehicleGroupId_(vData[i][21]);
+    counts[id] = (counts[id] || 0) + 1;
   }
-  return count;
+  return counts;
+}
+
+function attachVehicleCounts_(groups) {
+  const counts = countVehiclesByGroup_();
+  return groups.map(function (g) {
+    return Object.assign({}, g, { vehicleCount: counts[g.id] || 0 });
+  });
+}
+
+function countVehiclesInGroup_(groupId) {
+  return countVehiclesByGroup_()[normalizeVehicleGroupId_(groupId)] || 0;
 }
 
 function reassignVehiclesGroup_(fromGroupId, toGroupId) {
@@ -1109,12 +1261,13 @@ function reassignVehiclesGroup_(fromGroupId, toGroupId) {
   let moved = 0;
   for (let i = 1; i < vData.length; i++) {
     if (normalizeVehicleGroupId_(vData[i][21]) !== fromId) continue;
-    vSheet.getRange(i + 1, 22).setValue(toId);
-    // TC LINE visibility only applies to waterworks group
-    if (toId !== COMPANY_VISIBLE_VEHICLE_GROUP) {
-      vSheet.getRange(i + 1, 21).setValue('EMD');
-    }
+    vData[i][21] = toId;
+    if (toId !== COMPANY_VISIBLE_VEHICLE_GROUP) vData[i][20] = 'EMD';
     moved++;
+  }
+  if (moved) {
+    const rows = vData.slice(1).map(function (r) { return [r[20], r[21]]; });
+    vSheet.getRange(2, 21, rows.length, 2).setValues(rows);
   }
   return moved;
 }
@@ -1122,9 +1275,7 @@ function reassignVehiclesGroup_(fromGroupId, toGroupId) {
 function getVehicleGroupManagementData(token) {
   try {
     requireAdminSession_(token);
-    const groups = getVehicleGroups_().map(function (g) {
-      return Object.assign({}, g, { vehicleCount: countVehiclesInGroup_(g.id) });
-    });
+    const groups = attachVehicleCounts_(getVehicleGroups_());
     return { success: true, groups: groups };
   } catch (error) { return { success: false, msg: error.message }; }
 }
@@ -1132,8 +1283,7 @@ function getVehicleGroupManagementData(token) {
 function saveVehicleGroup(token, form) {
   try {
     requireAdminSession_(token);
-    const ss = getSpreadsheet_();
-    setupDatabase();
+    const ss = setupDatabase();
     const sheet = getSheetOrThrow_(ss, 'VehicleGroups');
     const name = String(form.name || '').trim();
     let id = String(form.id || '').trim();
@@ -1152,9 +1302,7 @@ function saveVehicleGroup(token, form) {
       return {
         success: true,
         msg: 'อัปเดตชื่อกลุ่ม "ทุกงาน" แล้ว',
-        groups: getVehicleGroups_().map(function (g) {
-          return Object.assign({}, g, { vehicleCount: countVehiclesInGroup_(g.id) });
-        })
+        groups: attachVehicleCounts_(getVehicleGroups_())
       };
     }
 
@@ -1195,9 +1343,7 @@ function saveVehicleGroup(token, form) {
     return {
       success: true,
       msg: existing ? 'แก้ไขชื่อกลุ่มเรียบร้อยครับ' : 'สร้างกลุ่มใหม่เรียบร้อยครับ',
-      groups: getVehicleGroups_().map(function (g) {
-        return Object.assign({}, g, { vehicleCount: countVehiclesInGroup_(g.id) });
-      })
+      groups: attachVehicleCounts_(getVehicleGroups_())
     };
   } catch (error) { return { success: false, msg: error.message }; }
 }
@@ -1220,9 +1366,7 @@ function moveVehiclesBetweenGroups(token, fromGroupId, toGroupId) {
       success: true,
       msg: 'ย้ายรถ ' + moved + ' คันเรียบร้อยครับ',
       moved: moved,
-      groups: getVehicleGroups_().map(function (g) {
-        return Object.assign({}, g, { vehicleCount: countVehiclesInGroup_(g.id) });
-      })
+      groups: attachVehicleCounts_(getVehicleGroups_())
     };
   } catch (error) { return { success: false, msg: error.message }; }
 }
@@ -1263,9 +1407,7 @@ function moveVehiclesToGroup(token, vehicleIds, toGroupId) {
       success: true,
       msg: 'ย้ายรถ ' + moved + ' คันเรียบร้อยครับ',
       moved: moved,
-      groups: getVehicleGroups_().map(function (g) {
-        return Object.assign({}, g, { vehicleCount: countVehiclesInGroup_(g.id) });
-      })
+      groups: attachVehicleCounts_(getVehicleGroups_())
     };
   } catch (error) { return { success: false, msg: error.message }; }
 }
@@ -1273,8 +1415,7 @@ function moveVehiclesToGroup(token, vehicleIds, toGroupId) {
 function deleteVehicleGroup(token, rowOrId, moveToGroupId) {
   try {
     requireAdminSession_(token);
-    const ss = getSpreadsheet_();
-    setupDatabase();
+    const ss = setupDatabase();
     const sheet = getSheetOrThrow_(ss, 'VehicleGroups');
     let targetRow = Number(rowOrId) || 0;
     let groupId = '';
@@ -1307,9 +1448,7 @@ function deleteVehicleGroup(token, rowOrId, moveToGroupId) {
       success: true,
       msg: 'ลบกลุ่มแล้ว และย้ายรถ ' + moved + ' คันไป "' + destName + '"',
       moved: moved,
-      groups: getVehicleGroups_().map(function (g) {
-        return Object.assign({}, g, { vehicleCount: countVehiclesInGroup_(g.id) });
-      })
+      groups: attachVehicleCounts_(getVehicleGroups_())
     };
   } catch (error) { return { success: false, msg: error.message }; }
 }
@@ -1414,8 +1553,7 @@ function saveVehicleManagement(token, form, clientIp) {
 function saveVehicle(form, clientIp, token) {
   try {
     requireAdminSession_(token);
-    const ss = getSpreadsheet_();
-    setupDatabase();
+    const ss = setupDatabase();
     const sheet = getSheetOrThrow_(ss, 'Vehicles');
     const logSheet = getSheetOrThrow_(ss, 'Logs');
     const actionEmail = Session.getActiveUser().getEmail() || 'Unknown User';
@@ -1528,8 +1666,7 @@ function saveVehicle(form, clientIp, token) {
 function setVehicleTcLineNotify(token, vehicleId, enabled) {
   try {
     requireAdminSession_(token);
-    const ss = getSpreadsheet_();
-    setupDatabase();
+    const ss = setupDatabase();
     const sheet = getSheetOrThrow_(ss, 'Vehicles');
     const data = sheet.getDataRange().getValues();
     const logSheet = getSheetOrThrow_(ss, 'Logs');
@@ -1614,10 +1751,13 @@ function saveBooking(form, clientIp, token) {
       return {success: false, msg: 'ช่วงเวลาเริ่ม/สิ้นสุดไม่ถูกต้อง'};
     }
 
+    const vSheet = getSheetOrThrow_(ss, 'Vehicles');
+    const vData = vSheet.getDataRange().getValues();
+
     const groupValidation = validateVehicleGroupBooking_(form.plate, form.dept, form.dest);
     if (!groupValidation.success) return groupValidation;
 
-    const phoneValidation = validateBookingPhone_(form.plate, form.contactPhone);
+    const phoneValidation = validateBookingPhone_(form.plate, form.contactPhone, vData);
     if (!phoneValidation.success) return phoneValidation;
     const contactPhone = phoneValidation.phone || '';
 
@@ -1637,7 +1777,6 @@ function saveBooking(form, clientIp, token) {
     }
 
     const logSheet = getSheetOrThrow_(ss, 'Logs');
-    const vSheet = getSheetOrThrow_(ss, 'Vehicles');
     const nSheet = getSheetOrThrow_(ss, 'Name');
     const actionEmail = Session.getActiveUser().getEmail() || 'Unknown User';
     
@@ -1658,7 +1797,6 @@ function saveBooking(form, clientIp, token) {
     const hasPostTripMile = endMileValue !== '' && endMileValue > 0;
     const bookingParking = hasPostTripMile ? (form.parkingSpot || '').trim() : '';
 
-    const vData = vSheet.getDataRange().getValues();
     for (let i = 1; i < vData.length; i++) {
       if (String(vData[i][1]).trim() === String(form.plate).trim()) {
         if (hasPostTripMile) {
@@ -1675,7 +1813,7 @@ function saveBooking(form, clientIp, token) {
           bSheet.getRange(i + 1, 2, 1, 13).setValues([[form.plate, fname, lname, form.dept, "'" + form.start, "'" + form.end, form.dest, form.driver, form.originalEmail, startMileValue, endMileValue, bookingParking, contactPhone]]);
           clearAppCache_();
           appendLogRow_(logSheet, actionEmail, 'UPDATE_BOOKING', form.plate, `แก้ไข/คืนรถ (จุดจอด: ${bookingParking || '-'}, ไมล์: ${startMileValue || '-'} -> ${endMileValue || '-'}, โทร: ${contactPhone || '-'})`, form.editReason || '-', ip);
-          const lineNotify = notifyCompanyBookingLine_(ss, 'UPDATE', buildBookingNotifyObject_(form, fname, lname, form.id, contactPhone), { skip: form.skipLineNotify });
+          const lineNotify = notifyCompanyBookingLine_(ss, 'UPDATE', buildBookingNotifyObject_(form, fname, lname, form.id, contactPhone), { skip: form.skipLineNotify, vData: vData });
           return { success: true, msg: 'อัปเดตการจองและจุดจอดเรียบร้อยครับ', lineNotify: lineNotify };
         }
       }
@@ -1684,7 +1822,7 @@ function saveBooking(form, clientIp, token) {
       bSheet.appendRow([newBookingId, form.plate, fname, lname, form.dept, "'" + form.start, "'" + form.end, form.dest, form.driver, actionEmail, startMileValue, endMileValue, bookingParking, contactPhone]);
       clearAppCache_();
       appendLogRow_(logSheet, actionEmail, 'CREATE_BOOKING', form.plate, `จองไป ${form.dest} (โทร: ${contactPhone || '-'})`, '-', ip);
-      const lineNotify = notifyCompanyBookingLine_(ss, 'NEW', buildBookingNotifyObject_(form, fname, lname, newBookingId, contactPhone));
+      const lineNotify = notifyCompanyBookingLine_(ss, 'NEW', buildBookingNotifyObject_(form, fname, lname, newBookingId, contactPhone), { vData: vData });
       return { success: true, msg: 'บันทึกการจองสำเร็จครับ', lineNotify: lineNotify };
     }
   } catch (error) { return {success: false, msg: error.message}; }
@@ -1703,8 +1841,7 @@ function recordVehicleHandover(form, clientIp, token) {
     if (!battery) return { success: false, msg: 'กรุณาระบุแบตเตอรี่คงเหลือ' };
     if (!recipient) return { success: false, msg: 'กรุณาระบุผู้ใช้รถที่รับกุญแจ' };
 
-    const ss = getSpreadsheet_();
-    setupDatabase();
+    const ss = setupDatabase();
     ensureBookingsHandoverColumns_(ss);
     const bSheet = getSheetOrThrow_(ss, 'Bookings');
     const bData = bSheet.getDataRange().getValues();
@@ -1852,8 +1989,7 @@ function getLineConfig_() {
   let groupId = String(props.getProperty('LineGroupId') || '').trim();
   let reminderMin = parseInt(props.getProperty('LineReminderMinutes') || '180', 10) || 180;
   if (!token || !groupId) {
-    const ss = getSpreadsheet_();
-    setupDatabase();
+    const ss = setupDatabase();
     const sData = getSheetOrThrow_(ss, 'Settings').getDataRange().getValues();
     for (let i = 1; i < sData.length; i++) {
       if (sData[i][0] === 'LineChannelAccessToken' && !token) token = String(sData[i][1] || '').trim();
@@ -1922,11 +2058,11 @@ function buildBookingNotifyObject_(form, fname, lname, bookingId, contactPhone) 
   };
 }
 
-function isCompanyManagedPlate_(ss, plate) {
-  const vData = getSheetOrThrow_(ss, 'Vehicles').getDataRange().getValues();
-  for (let i = 1; i < vData.length; i++) {
-    if (normalizePlateKey_(vData[i][1]) === normalizePlateKey_(plate)) {
-      return isTcLineVisibleVehicleRow_(vData[i]);
+function isCompanyManagedPlate_(ss, plate, vData) {
+  const rows = vData || getSheetOrThrow_(ss, 'Vehicles').getDataRange().getValues();
+  for (let i = 1; i < rows.length; i++) {
+    if (normalizePlateKey_(rows[i][1]) === normalizePlateKey_(plate)) {
+      return isTcLineVisibleVehicleRow_(rows[i]);
     }
   }
   return false;
@@ -2004,7 +2140,7 @@ function tryNotifyCompanyBookingLine_(ss, eventType, booking, options) {
   options = options || {};
   if (options.skip) return { status: 'skipped', reason: 'skip_flag' };
   if (!booking || !booking.plate) return { status: 'skipped', reason: 'no_booking' };
-  if (!isCompanyManagedPlate_(ss, booking.plate)) {
+  if (!isCompanyManagedPlate_(ss, booking.plate, options.vData)) {
     return {
       status: 'skipped',
       reason: 'not_company_car',
@@ -2039,8 +2175,7 @@ function getCompanyManagedPlates_(ss) {
 }
 
 function deliveryReminderCheck() {
-  const ss = getSpreadsheet_();
-  setupDatabase();
+  const ss = setupDatabase();
   const cfg = getLineConfig_();
   if (!cfg.token || !cfg.groupId) return;
   const companyPlates = getCompanyManagedPlates_(ss);
@@ -2098,8 +2233,7 @@ function wasReminderAlreadySent_(bookingId, cache) {
 }
 
 function dailyDeliverySummary() {
-  const ss = getSpreadsheet_();
-  setupDatabase();
+  const ss = setupDatabase();
   const cfg = getLineConfig_();
   if (!cfg.token || !cfg.groupId) return;
   const companyPlates = getCompanyManagedPlates_(ss);
@@ -2188,8 +2322,7 @@ function buildUpcomingCompanyBookingsSummaryText_(items, cfg, options) {
 function testLineUpcomingSummary(token, form) {
   try {
     requireAdminSession_(token);
-    const ss = getSpreadsheet_();
-    setupDatabase();
+    const ss = setupDatabase();
     const cfg = getLineConfig_();
     const cfgOverride = {};
     if (form && form.lineChannelAccessToken) cfgOverride.token = String(form.lineChannelAccessToken || '').trim();
