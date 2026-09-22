@@ -2181,14 +2181,16 @@ function saveBooking(form, clientIp, token) {
     }
 
     for (let i = 1; i < bData.length; i++) {
-      if (String(bData[i][1]).trim() === String(form.plate).trim() && String(bData[i][0]).trim() !== String(form.id).trim()) {
-        const exEndMile = parseMileageNumberStrict_(bData[i][11]);
-        if (exEndMile !== null && exEndMile > 0) continue;
-        const exStart = parseTimeSafe_(bData[i][5]);
-        const exEnd = parseTimeSafe_(bData[i][6]);
-        if (newStart < exEnd && newEnd > exStart) {
-          return {success: false, msg: 'มีการจองซ้ำซ้อน รถคันนี้ถูกจองในช่วงเวลานี้แล้วครับ'};
-        }
+      if (String(bData[i][1]).trim() !== String(form.plate).trim()) continue;
+      if (String(bData[i][0]).trim() === String(form.id).trim()) continue;
+      // DEMO CAR ไม่บล็อกการจองจริง และจองจริงไม่บล็อก DEMO CAR
+      if (wantDemoCar || isDemoCarBooking_(bData[i])) continue;
+      const exEndMile = parseMileageNumberStrict_(bData[i][11]);
+      if (exEndMile !== null && exEndMile > 0) continue;
+      const exStart = parseTimeSafe_(bData[i][5]);
+      const exEnd = parseTimeSafe_(bData[i][6]);
+      if (newStart < exEnd && newEnd > exStart) {
+        return {success: false, msg: 'มีการจองซ้ำซ้อน รถคันนี้ถูกจองในช่วงเวลานี้แล้วครับ'};
       }
     }
 

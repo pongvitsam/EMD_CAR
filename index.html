@@ -852,7 +852,7 @@
         <div id="bk-demo-car-wrap" class="hidden bg-slate-100 dark:bg-slate-700/50 p-4 rounded-xl border border-slate-300 dark:border-slate-600">
           <label class="flex items-start gap-2 cursor-pointer">
             <input type="checkbox" id="bk-demo-car" class="rounded text-slate-500 mt-1">
-            <span class="text-sm font-medium text-slate-700 dark:text-slate-200">DEMO CAR — แสดงให้บริษัทเห็นเท่านั้น<br><span class="text-xs font-normal text-slate-500">กองไม่เห็น · บริษัทเห็นแค่รถและเวลา · ผู้จองขึ้นว่า «พนักงานการไฟฟ้า» · Admin เห็นสีเทา · ไม่แจ้ง LINE</span></span>
+            <span class="text-sm font-medium text-slate-700 dark:text-slate-200">DEMO CAR — แสดงให้บริษัทเห็นว่าใช้งาน<br><span class="text-xs font-normal text-slate-500">กองไม่เห็น · บริษัทเห็นว่ามีคนใช้รถ · คนอื่นจองช่วงเดียวกันได้ตามปกติ · Admin เห็นสีเทา · ไม่แจ้ง LINE</span></span>
           </label>
         </div>
         <div id="bk-phone-wrap" class="hidden bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl border border-blue-200 dark:border-blue-800/40">
@@ -1483,6 +1483,7 @@
       const plateNorm = String(plate || '').trim();
       let lastFreeAt = 0;
       appData.bookings.forEach(b => {
+        if (isDemoBooking(b)) return;
         if (String(b.plate).trim() !== plateNorm) return;
         if (isBookingActiveNow(b, nowTime)) return;
         const end = parseTimeSafe(b.end);
@@ -1496,6 +1497,7 @@
       let best = null;
       let bestEnd = 0;
       appData.bookings.forEach(b => {
+        if (isDemoBooking(b)) return;
         if (String(b.plate).trim() !== plateNorm) return;
         if (isBookingActiveNow(b, nowTime)) return;
         const end = parseTimeSafe(b.end);
@@ -1540,9 +1542,15 @@
       if (!start || !end) return false;
       return start < rangeEndMs && end > rangeStartMs;
     }
+    function isDemoBooking(b) {
+      return !!(b && (b.demoCar || b.fakeTc));
+    }
     function getBookingsForPlateInRange(plate, rangeStartMs, rangeEndMs) {
       const plateNorm = String(plate || '').trim();
-      return appData.bookings.filter(b => String(b.plate).trim() === plateNorm && bookingOverlapsRange(b, rangeStartMs, rangeEndMs));
+      return appData.bookings.filter(function (b) {
+        if (isDemoBooking(b)) return false;
+        return String(b.plate).trim() === plateNorm && bookingOverlapsRange(b, rangeStartMs, rangeEndMs);
+      });
     }
     function countInclusiveDays(rangeStartMs, rangeEndMs) {
       if (!rangeStartMs || !rangeEndMs || rangeEndMs < rangeStartMs) return 0;
@@ -1675,7 +1683,10 @@
       const plates = [];
       appData.vehicles.forEach(car => {
         if (car.status !== 'ACTIVE') return;
-        const isBookedNow = appData.bookings.some(b => b.plate === car.plate && isBookingActiveNow(b, nowTime));
+        const isBookedNow = appData.bookings.some(function (b) {
+          if (isDemoBooking(b)) return false;
+          return b.plate === car.plate && isBookingActiveNow(b, nowTime);
+        });
         if (!isBookedNow) plates.push({ plate: car.plate, idleLabel: getCarIdleLabel(car.plate, nowTime) });
       });
       return plates;
@@ -3458,7 +3469,10 @@
 
       appData.vehicles.forEach(car => {
         if(car.status !== 'ACTIVE') return; 
-        const isBookedNow = appData.bookings.some(b => b.plate === car.plate && isBookingActiveNow(b, nowTime));
+        const isBookedNow = appData.bookings.some(function (b) {
+          if (userRole !== 'COMPANY' && isDemoBooking(b)) return false;
+          return b.plate === car.plate && isBookingActiveNow(b, nowTime);
+        });
         if (isBookedNow) activeCarsCount++;
       });
       document.getElementById('dashboard-stat-active').innerHTML =
@@ -3819,9 +3833,14 @@
       const nowTime = now.getTime();
       if (car.status === 'HIDDEN' && !isAdmin) return '';
 
-      const currentBooking = appData.bookings.find(function (b) { return b.plate === car.plate && isBookingActiveNow(b, nowTime); });
-      const upcomingBookings = appData.bookings.filter(function (b) {
-        return b.plate === car.plate && parseTimeSafe(b.start) > nowTime && !bookingHasPostTripData(b);
+      const plateBookings = appData.bookings.filter(function (b) { return b.plate === car.plate; });
+      const activeMatches = plateBookings.filter(function (b) { return isBookingActiveNow(b, nowTime); });
+      const currentBooking = (userRole === 'COMPANY')
+        ? (activeMatches[0] || null)
+        : (activeMatches.find(function (b) { return !isDemoBooking(b); }) || (isAdmin ? activeMatches[0] : null) || null);
+      const upcomingBookings = plateBookings.filter(function (b) {
+        if (userRole !== 'COMPANY' && isDemoBooking(b)) return false;
+        return parseTimeSafe(b.start) > nowTime && !bookingHasPostTripData(b);
       }).sort(function (a, b) { return parseTimeSafe(a.start) - parseTimeSafe(b.start); });
       const nextBooking = upcomingBookings.length > 0 ? upcomingBookings[0] : null;
 
