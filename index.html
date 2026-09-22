@@ -699,8 +699,8 @@
       </div>
       <div id="tc-line-settings-panel" class="hidden bg-blue-50 dark:bg-slate-800 border border-blue-200 dark:border-slate-600 rounded-2xl p-5">
         <h3 class="text-lg font-semibold text-blue-700 dark:text-blue-300 mb-1">📲 รถงานเฉพาะ — ให้ TC เห็น / แจ้ง LINE</h3>
-        <p class="text-xs text-slate-500 mb-3">แยกได้ว่ารถคันไหนให้บริษัทเห็นในปฏิทิน และคันไหนแจ้ง LINE ด้วย (หรือเห็นอย่างเดียวไม่แจ้ง LINE)</p>
-        <p class="text-xs text-slate-500 dark:text-slate-400 mb-3">ติ๊กแยกได้: ให้ TC เห็นในปฏิทิน และ/หรือแจ้ง LINE</p>
+        <p class="text-xs text-slate-500 mb-3">แยกได้ว่ารถคันไหนให้บริษัทเห็นในปฏิทิน และคันไหนแจ้ง LINE (เปิดแจ้ง LINE = บริษัทเห็นข้อมูลจองจริงย้อนหลังทั้งหมด)</p>
+        <p class="text-xs text-slate-500 dark:text-slate-400 mb-3">ติ๊กแยกได้: ให้ TC เห็นในปฏิทิน และ/หรือแจ้ง LINE + เห็นข้อมูลจริง</p>
         <div id="tc-line-settings-content" class="space-y-2 text-sm"></div>
       </div>
       <div id="vehicle-manager-list" class="space-y-4">
@@ -950,7 +950,7 @@
                </label>
                <label class="flex items-start gap-2 cursor-pointer ml-6">
                <input type="checkbox" id="vh-tc-line-notify" class="rounded text-blue-500 mt-1">
-               <span class="text-sm font-medium text-blue-700 dark:text-blue-300">แจ้ง LINE เมื่อมีการจอง<br><span class="text-xs font-normal text-slate-500">ปิดได้หากต้องการให้เห็นในปฏิทินอย่างเดียว</span></span>
+               <span class="text-sm font-medium text-blue-700 dark:text-blue-300">แจ้ง LINE เมื่อมีการจอง — จะเห็นข้อมูลจริงในการจองย้อนหลังทั้งหมด<br><span class="text-xs font-normal text-slate-500">ปิดได้หากต้องการให้เห็นในปฏิทินอย่างเดียว (ชื่อจริงไม่ครบ / ปลายทางเป็นงาน กปภ.)</span></span>
                </label>
            </div>
         </div>
@@ -3700,7 +3700,7 @@
         html += cars.map(function (car) {
           const visible = isVehicleTcVisible(car);
           const lineOn = isVehicleTcLineEnabled(car);
-          const status = !visible ? 'TC ไม่เห็น' : (lineOn ? 'TC เห็น + LINE' : 'TC เห็นปฏิทินอย่างเดียว');
+          const status = !visible ? 'TC ไม่เห็น' : (lineOn ? 'TC เห็นข้อมูลจริง + LINE' : 'TC เห็นปฏิทินอย่างเดียว');
           return '<div class="py-2 px-3 rounded-xl bg-white/80 dark:bg-slate-700/50 border border-blue-100 dark:border-slate-600 space-y-2">' +
             '<div><span class="font-semibold">' + escapeHtml(car.plate) + '</span>' +
             '<span class="text-xs text-slate-500 ml-2">' + status + '</span></div>' +
@@ -3712,7 +3712,7 @@
             '<label class="inline-flex items-center gap-2 cursor-pointer ' + (visible ? '' : 'opacity-40') + '">' +
             '<input type="checkbox" class="rounded text-blue-500" ' + (lineOn ? 'checked' : '') + (visible ? '' : ' disabled') +
             ' onchange="window.toggleVehicleTcLineNotify(\'' + escapeHtml(car.id) + '\', this.checked)">' +
-            '<span>แจ้ง LINE</span></label></div></div>';
+            '<span>แจ้ง LINE + เห็นข้อมูลจริงย้อนหลัง</span></label></div></div>';
         }).join('');
         html += '</div>';
       });
