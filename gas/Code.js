@@ -610,7 +610,8 @@ function filterPayloadForCompany_(payload) {
     settings: {
       bannerStatus: payload.settings && payload.settings.bannerStatus,
       bannerText: payload.settings && payload.settings.bannerText,
-      mileageReminderExempt: []
+      mileageReminderExempt: [],
+      companyHandoverEnabled: isCompanyHandoverFeatureEnabled_(payload.settings)
     },
     vehicleGroups: vehicleGroups
   };
@@ -1160,6 +1161,7 @@ function setupDatabase(ss) {
     sSheet.appendRow(['LineChannelAccessToken', '', 'LINE Messaging API Channel Access Token']);
     sSheet.appendRow(['LineGroupId', '', 'LINE Group ID สำหรับแจ้งเตือน']);
     sSheet.appendRow(['LineReminderMinutes', '180', 'เตือนก่อนเวลาส่งรถ (นาที)']);
+    sSheet.appendRow(['CompanyHandoverEnabled', 'ON', 'เปิด/ปิดฟังก์ชันส่งมอบกุญแจของบริษัท (TC)']);
   }
   markSchemaReady_();
   return ss;
@@ -1210,7 +1212,7 @@ function buildAppPayload_(ss, includeLogs) {
   if (includeLogs) logs = readLogsFromSheet_(ss);
 
   const sData = readTable_(getSheetOrThrow_(ss, 'Settings'), 3);
-  let settings = { bannerStatus: 'OFF', bannerText: '', mileageReminderExempt: [], lineChannelAccessToken: '', lineGroupId: '', lineReminderMinutes: 180 };
+  let settings = { bannerStatus: 'OFF', bannerText: '', mileageReminderExempt: [], lineChannelAccessToken: '', lineGroupId: '', lineReminderMinutes: 180, companyHandoverEnabled: true };
   for (let i = 1; i < sData.length; i++) {
     if (sData[i][0] === 'BannerStatus') settings.bannerStatus = sData[i][1];
     if (sData[i][0] === 'BannerText') settings.bannerText = sData[i][1];
@@ -1218,6 +1220,7 @@ function buildAppPayload_(ss, includeLogs) {
     if (sData[i][0] === 'LineChannelAccessToken') settings.lineChannelAccessToken = String(sData[i][1] || '');
     if (sData[i][0] === 'LineGroupId') settings.lineGroupId = String(sData[i][1] || '');
     if (sData[i][0] === 'LineReminderMinutes') settings.lineReminderMinutes = parseInt(sData[i][1], 10) || 180;
+    if (sData[i][0] === 'CompanyHandoverEnabled') settings.companyHandoverEnabled = isSettingEnabledFlag_(sData[i][1], true);
   }
 
   return { vehicles, bookings, names, logs, settings, vehicleGroups };
@@ -1234,6 +1237,31 @@ function parseMileageReminderExempt_(value) {
   } catch (err) {
     return [];
   }
+}
+
+function isSettingEnabledFlag_(value, defaultEnabled) {
+  if (value === undefined || value === null || String(value).trim() === '') {
+    return defaultEnabled !== false;
+  }
+  const raw = String(value).trim().toUpperCase();
+  if (raw === 'OFF' || raw === 'NO' || raw === 'FALSE' || raw === '0') return false;
+  if (raw === 'ON' || raw === 'YES' || raw === 'TRUE' || raw === '1') return true;
+  return parseYesNoFlag_(value, defaultEnabled !== false);
+}
+
+function isCompanyHandoverFeatureEnabled_(settingsOrSs) {
+  let settings = settingsOrSs;
+  if (settingsOrSs && typeof settingsOrSs.getSheetByName === 'function') {
+    const sData = readTable_(getSheetOrThrow_(settingsOrSs, 'Settings'), 3);
+    settings = {};
+    for (let i = 1; i < sData.length; i++) {
+      if (sData[i][0] === 'CompanyHandoverEnabled') {
+        return isSettingEnabledFlag_(sData[i][1], true);
+      }
+    }
+    return true;
+  }
+  return isSettingEnabledFlag_(settings && settings.companyHandoverEnabled, true);
 }
 
 function readLogsFromSheet_(ss) {
@@ -1695,8 +1723,12 @@ function saveAdminSettings(form, token) {
     
     let updatedStatus = false, updatedText = false, updatedExempt = false;
     let updatedLineToken = false, updatedLineGroup = false, updatedLineReminder = false;
+    let updatedCompanyHandover = false;
     const exemptJson = form.mileageReminderExempt !== undefined
       ? JSON.stringify(parseMileageReminderExempt_(form.mileageReminderExempt))
+      : null;
+    const companyHandoverValue = form.companyHandoverEnabled !== undefined
+      ? (isSettingEnabledFlag_(form.companyHandoverEnabled, true) ? 'ON' : 'OFF')
       : null;
     for(let i=1; i<data.length; i++) {
       if(data[i][0] === 'BannerStatus') { sheet.getRange(i+1, 2).setValue(form.status); updatedStatus = true; }
@@ -1717,6 +1749,10 @@ function saveAdminSettings(form, token) {
         sheet.getRange(i + 1, 2).setValue(String(form.lineReminderMinutes || '180'));
         updatedLineReminder = true;
       }
+      if (companyHandoverValue !== null && data[i][0] === 'CompanyHandoverEnabled') {
+        sheet.getRange(i + 1, 2).setValue(companyHandoverValue);
+        updatedCompanyHandover = true;
+      }
     }
     
     if(!updatedStatus) sheet.appendRow(['BannerStatus', form.status]);
@@ -1730,6 +1766,9 @@ function saveAdminSettings(form, token) {
     }
     if (form.lineReminderMinutes !== undefined && !updatedLineReminder) {
       sheet.appendRow(['LineReminderMinutes', String(form.lineReminderMinutes || '180')]);
+    }
+    if (companyHandoverValue !== null && !updatedCompanyHandover) {
+      sheet.appendRow(['CompanyHandoverEnabled', companyHandoverValue, 'เปิด/ปิดฟังก์ชันส่งมอบกุญแจของบริษัท (TC)']);
     }
     clearAppCache_();
     
@@ -2259,6 +2298,10 @@ function saveBooking(form, clientIp, token) {
 function recordVehicleHandover(form, clientIp, token) {
   try {
     requireCompanyHandoverAccess_(token);
+    const ss = setupDatabase();
+    if (!isCompanyHandoverFeatureEnabled_(ss)) {
+      return { success: false, msg: 'Admin ปิดฟังก์ชันส่งมอบกุญแจชั่วคราว' };
+    }
     const bookingId = String((form && form.bookingId) || '').trim();
     const parking = String((form && form.handoverParking) || '').trim();
     const battery = String((form && form.handoverBattery) || '').trim();
@@ -2269,7 +2312,6 @@ function recordVehicleHandover(form, clientIp, token) {
     if (!battery) return { success: false, msg: 'กรุณาระบุแบตเตอรี่คงเหลือ' };
     if (!recipient) return { success: false, msg: 'กรุณาระบุผู้ใช้รถที่รับกุญแจ' };
 
-    const ss = setupDatabase();
     ensureBookingsHandoverColumns_(ss);
     const bSheet = getSheetOrThrow_(ss, 'Bookings');
     const bData = bSheet.getDataRange().getValues();

@@ -1002,6 +1002,14 @@
           <p class="text-xs text-slate-400 mt-1">ทดสอบส่งเข้ากลุ่มได้ทันที — การจองจริงใช้ค่าที่ <strong>บันทึกแล้ว</strong> ในชีต Settings</p>
         </div>
         <div class="border-t border-slate-200 dark:border-slate-600 pt-4 mt-2">
+          <label class="block text-sm font-medium mb-1 text-blue-700 dark:text-blue-300">🔑 ส่งมอบกุญแจ (บริษัท / TC)</label>
+          <p class="text-xs text-slate-500 mb-2">เปิด/ปิดทั้งแผงส่งมอบกุญแจและปุ่มบันทึกของบริษัท — ปิดแล้วบริษัทจะไม่เห็นและบันทึกไม่ได้</p>
+          <select id="st-company-handover" class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600">
+            <option value="ON">เปิดใช้งาน (ON)</option>
+            <option value="OFF">ปิด (OFF)</option>
+          </select>
+        </div>
+        <div class="border-t border-slate-200 dark:border-slate-600 pt-4 mt-2">
           <label class="block text-sm font-medium mb-1 text-orange-700 dark:text-orange-300">ยกเว้นแจ้งเตือนไมล์ (ไม่เด้งเตือนคนเหล่านี้)</label>
           <p class="text-xs text-slate-500 mb-2">เลือกจากรายชื่อในระบบ — ใช้กับการแจ้งเตือนคิวที่ยังไม่บันทึกไมล์ภายใน 1 เดือน</p>
           <div id="st-mileage-exempt-list" class="max-h-52 overflow-y-auto space-y-1 text-sm border border-slate-200 dark:border-slate-600 rounded-xl p-3 bg-slate-50 dark:bg-slate-700/50"></div>
@@ -1820,7 +1828,7 @@
       isReadOnly = isCompany;
       document.getElementById('btn-book').classList.toggle('hidden', isCompany || isReadOnly);
       document.getElementById('btn-session-logout').classList.toggle('hidden', !userRole);
-      document.getElementById('company-delivery-panel').classList.toggle('hidden', !isCompany);
+      document.getElementById('company-delivery-panel').classList.toggle('hidden', !(isCompany && isCompanyHandoverFeatureEnabled()));
       const deptStatEl = document.getElementById('dashboard-stat-dept');
       if (deptStatEl) deptStatEl.classList.toggle('hidden', isCompany);
       const availWrap = document.getElementById('dashboard-availability-wrap');
@@ -1956,6 +1964,13 @@
       return !!(b && (String(b.handoverAt || '').trim() || String(b.handoverRecipient || '').trim()));
     }
 
+    function isCompanyHandoverFeatureEnabled() {
+      const s = (appData && appData.settings) || {};
+      if (s.companyHandoverEnabled === false || s.companyHandoverEnabled === 'OFF' || s.companyHandoverEnabled === 'NO') return false;
+      if (s.companyHandoverEnabled === true || s.companyHandoverEnabled === 'ON' || s.companyHandoverEnabled === 'YES') return true;
+      return true;
+    }
+
     function isBookingTcLineEnabled(b) {
       if (!b) return false;
       const car = (appData.vehicles || []).find(function (v) {
@@ -2000,6 +2015,7 @@
 
     function canCompanyHandoverBooking(b) {
       if (!b || bookingHasHandover(b) || userRole !== 'COMPANY') return false;
+      if (!isCompanyHandoverFeatureEnabled()) return false;
       if (!isBookingTcLineEnabled(b)) return false;
       const end = parseTimeSafe(b.end);
       if (!end || Date.now() > end) return false;
@@ -2008,6 +2024,7 @@
 
     function canCompanyEditHandoverBooking(b) {
       if (!b || !bookingHasHandover(b) || userRole !== 'COMPANY') return false;
+      if (!isCompanyHandoverFeatureEnabled()) return false;
       if (!isBookingTcLineEnabled(b)) return false;
       const end = parseTimeSafe(b.end);
       if (!end || Date.now() > end) return false;
@@ -2016,6 +2033,7 @@
 
     function buildHandoverDetailHtml(b) {
       if (!bookingHasHandover(b)) return '';
+      if (userRole === 'COMPANY' && !isCompanyHandoverFeatureEnabled()) return '';
       let html = '<div class="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-xl mt-2 space-y-1 border border-blue-100 dark:border-blue-800/40 text-sm">' +
         '<p><strong>🔑 ส่งมอบกุญแจแล้ว</strong></p>' +
         '<p><strong>จุดจอด:</strong> ' + escapeHtml(b.handoverParking || '-') + '</p>' +
@@ -2044,6 +2062,10 @@
     function renderCompanyDeliveryPanel() {
       const wrap = document.getElementById('company-delivery-content');
       if (!wrap || userRole !== 'COMPANY') return;
+      if (!isCompanyHandoverFeatureEnabled()) {
+        wrap.innerHTML = '';
+        return;
+      }
       const now = Date.now();
       const allowedPlates = buildVehiclePlateKeySet(appData.vehicles);
       const upcoming = filterCompanyBookings(appData.bookings).filter(function (b) {
@@ -2112,6 +2134,10 @@
 
     window.openHandoverModal = function (bookingId, isEdit) {
       if (userRole !== 'COMPANY') return;
+      if (!isCompanyHandoverFeatureEnabled()) {
+        Swal.fire('ปิดใช้งาน', 'Admin ปิดฟังก์ชันส่งมอบกุญแจชั่วคราว', 'info');
+        return;
+      }
       isEdit = !!isEdit;
       const bk = (appData.bookings || []).find(function (b) { return String(b.id) === String(bookingId); });
       if (!bk) {
@@ -3311,6 +3337,8 @@
       document.getElementById('st-line-token').value = appData.settings.lineChannelAccessToken || '';
       document.getElementById('st-line-group').value = appData.settings.lineGroupId || '';
       document.getElementById('st-line-reminder').value = appData.settings.lineReminderMinutes || 180;
+      const handoverEl = document.getElementById('st-company-handover');
+      if (handoverEl) handoverEl.value = isCompanyHandoverFeatureEnabled() ? 'ON' : 'OFF';
       renderMileageExemptCheckboxes();
       document.getElementById('settings-modal').style.display = 'flex';
     };
@@ -3324,7 +3352,8 @@
         mileageReminderExempt: collectMileageExemptFromForm(),
         lineChannelAccessToken: document.getElementById('st-line-token').value,
         lineGroupId: document.getElementById('st-line-group').value,
-        lineReminderMinutes: document.getElementById('st-line-reminder').value || 180
+        lineReminderMinutes: document.getElementById('st-line-reminder').value || 180,
+        companyHandoverEnabled: document.getElementById('st-company-handover').value
       };
       apiCall('saveAdminSettings', [obj], adminToken).then(res => {
         showToast(res.msg, res.success); window.closeModal('settings-modal');

@@ -1,5 +1,5 @@
 /* EMD CAR — lightweight service worker for installable PWA (iOS/Android) */
-const CACHE_NAME = 'emd-car-shell-v5';
+const CACHE_NAME = 'emd-car-shell-v6';
 const SHELL_URLS = [
   './',
   './index.html',
