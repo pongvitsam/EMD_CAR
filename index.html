@@ -698,8 +698,9 @@
         <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">ดูเหลือกี่กม.ถึงรอบ · บันทึกเข้าศูนย์ · ตั้งแผนรอบ · ประวัติย้อนหลัง (ไมล์ล่าสุดจากระบบจอง)</p>
       </div>
       <div id="tc-line-settings-panel" class="hidden bg-blue-50 dark:bg-slate-800 border border-blue-200 dark:border-slate-600 rounded-2xl p-5">
-        <h3 class="text-lg font-semibold text-blue-700 dark:text-blue-300 mb-1">📲 รถงานเฉพาะ — แจ้ง LINE / ให้ TC เห็น</h3>
-        <p class="text-xs text-slate-500 dark:text-slate-400 mb-3">เปิดเฉพาะคันที่ต้องการให้บริษัท (TC) เห็นในแอปและปฏิทิน พร้อมแจ้งเตือน LINE เมื่อมีการจอง</p>
+        <h3 class="text-lg font-semibold text-blue-700 dark:text-blue-300 mb-1">📲 รถงานเฉพาะ — ให้ TC เห็น / แจ้ง LINE</h3>
+        <p class="text-xs text-slate-500 mb-3">แยกได้ว่ารถคันไหนให้บริษัทเห็นในปฏิทิน และคันไหนแจ้ง LINE ด้วย (หรือเห็นอย่างเดียวไม่แจ้ง LINE)</p>
+        <p class="text-xs text-slate-500 dark:text-slate-400 mb-3">ติ๊กแยกได้: ให้ TC เห็นในปฏิทิน และ/หรือแจ้ง LINE</p>
         <div id="tc-line-settings-content" class="space-y-2 text-sm"></div>
       </div>
       <div id="vehicle-manager-list" class="space-y-4">
@@ -824,6 +825,12 @@
           </div>
         </div>
 
+        <div id="bk-fake-tc-wrap" class="hidden bg-slate-100 dark:bg-slate-700/50 p-4 rounded-xl border border-slate-300 dark:border-slate-600">
+          <label class="flex items-start gap-2 cursor-pointer">
+            <input type="checkbox" id="bk-fake-tc" class="rounded text-slate-500 mt-1">
+            <span class="text-sm font-medium text-slate-700 dark:text-slate-200">FAKE TC — แสดงให้บริษัทเห็นเท่านั้น<br><span class="text-xs font-normal text-slate-500">กองไม่เห็น · บริษัทเห็นแค่รถและเวลา · ผู้จองขึ้นว่า «พนักงานการไฟฟ้า» · Admin เห็นสีเทา · ไม่แจ้ง LINE</span></span>
+          </label>
+        </div>
         <div id="bk-phone-wrap" class="hidden bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl border border-blue-200 dark:border-blue-800/40">
           <label class="block text-sm font-medium mb-1 text-blue-700 dark:text-blue-300">📞 เบอร์โทรติดต่อ <span class="text-red-500">*</span></label>
           <input type="tel" id="bk-phone" inputmode="tel" autocomplete="tel" placeholder="08x-xxx-xxxx" class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600">
@@ -936,11 +943,15 @@
              </div>
              <p class="text-xs text-slate-400 mt-1">เลือก "ทุกงาน" / การประปา / อื่นๆ หรือกดสร้างกลุ่มใหม่ได้เอง</p>
            </div>
-           <div id="vh-managed-company-wrap" class="md:col-span-2 hidden">
-             <label class="flex items-start gap-2 cursor-pointer">
-               <input type="checkbox" id="vh-managed-company" class="rounded text-blue-500 mt-1">
-               <span class="text-sm font-medium text-blue-700 dark:text-blue-300">แจ้ง LINE + ให้ TC เห็นรถคันนี้<br><span class="text-xs font-normal text-slate-500">เมื่อเปิด: บริษัทเห็นรถ/ปฏิทิน และได้รับแจ้ง LINE · ใช้ได้เฉพาะรถงานการประปา</span></span>
-             </label>
+           <div id="vh-managed-company-wrap" class="md:col-span-2 hidden space-y-2">
+               <label class="flex items-start gap-2 cursor-pointer">
+               <input type="checkbox" id="vh-managed-company" class="rounded text-blue-500 mt-1" onchange="window.syncVehicleTcLineCheckbox()">
+               <span class="text-sm font-medium text-blue-700 dark:text-blue-300">ให้ TC เห็นรถคันนี้ในปฏิทิน<br><span class="text-xs font-normal text-slate-500">ใช้ได้เฉพาะรถงานการประปา</span></span>
+               </label>
+               <label class="flex items-start gap-2 cursor-pointer ml-6">
+               <input type="checkbox" id="vh-tc-line-notify" class="rounded text-blue-500 mt-1">
+               <span class="text-sm font-medium text-blue-700 dark:text-blue-300">แจ้ง LINE เมื่อมีการจอง<br><span class="text-xs font-normal text-slate-500">ปิดได้หากต้องการให้เห็นในปฏิทินอย่างเดียว</span></span>
+               </label>
            </div>
         </div>
 
@@ -1005,10 +1016,10 @@
 
   <datalist id="user-list"></datalist>
   <datalist id="dept-list"></datalist>
-  <script src="js/api-client.js?v=4" defer></script>
+  <script src="js/api-client.js?v=5" defer></script>
   <script>
     const EMD_API_CLIENT_SRC = 'js/api-client.js';
-    const EMD_API_CLIENT_VER = '4';
+    const EMD_API_CLIENT_VER = '5';
     const EMD_CHART_SRC = 'https://cdn.jsdelivr.net/npm/chart.js';
     const EMD_FC_SRC = 'https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js';
     const EMD_FLATPICKR_SRC = 'https://cdn.jsdelivr.net/npm/flatpickr';
@@ -1204,9 +1215,12 @@
       return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:00`;
     };
     function mapBookingToCalendarEvent(b) {
-      const displayName = getBookingDisplayName(b);
-      const color = getColorForUser(b);
-      const dest = (b.dest && String(b.dest).trim()) ? String(b.dest).trim() : '-';
+      const isFake = !!(b && b.fakeTc);
+      const displayName = isFake && isAdmin
+        ? ('FAKE · ' + (getBookingDisplayName(b) || 'พนักงานการไฟฟ้า'))
+        : (isFake ? 'พนักงานการไฟฟ้า' : getBookingDisplayName(b));
+      const color = isFake ? '#9ca3af' : getColorForUser(b);
+      const dest = isFake ? 'FAKE TC' : ((b.dest && String(b.dest).trim()) ? String(b.dest).trim() : '-');
       return {
         id: b.id,
         title: (b._pending ? 'กำลังบันทึก · ' : '') + `${displayName} → ${dest}`,
@@ -1216,7 +1230,7 @@
         borderColor: color,
         textColor: '#ffffff',
         display: 'block',
-        extendedProps: { userColor: color }
+        extendedProps: { userColor: color, fakeTc: isFake }
       };
     }
     function mountCalendarEventStyle(info) {
@@ -2990,6 +3004,7 @@
         endMile: obj.endMile,
         parkingSpot: obj.parkingSpot || '',
         contactPhone: obj.contactPhone || '',
+        fakeTc: !!obj.fakeTc,
         _pending: !obj.id
       };
       if (existing) {
@@ -3046,9 +3061,31 @@
       if (!isAdmin) {
         appData.bookings = getVisibleBookings(appData.bookings, appData.vehicles);
         appData.vehicles = getVisibleVehicles(appData.vehicles);
+        if (userRole !== 'COMPANY') {
+          appData.bookings = (appData.bookings || []).filter(function (b) { return !b.fakeTc; });
+        }
       }
       if (userRole === 'COMPANY') {
-        appData.bookings = filterCompanyBookings(appData.bookings);
+        appData.bookings = filterCompanyBookings(appData.bookings).map(function (b) {
+          if (!b.fakeTc) return b;
+          return Object.assign({}, b, {
+            name: 'พนักงานการไฟฟ้า',
+            surname: '',
+            dept: '',
+            dest: '',
+            driver: 'พนักงานการไฟฟ้า',
+            contactPhone: '',
+            userEmail: '',
+            startMile: '',
+            endMile: '',
+            parkingSpot: '',
+            handoverParking: '',
+            handoverBattery: '',
+            handoverRecipient: '',
+            handoverAt: '',
+            fakeTc: false
+          });
+        });
       }
 
       renderDashboard();
@@ -3464,8 +3501,12 @@
       return car && (car.vehicleGroup || 'ALL') !== 'ALL';
     }
 
-    function isVehicleTcLineEnabled(car) {
+    function isVehicleTcVisible(car) {
       return car && (car.vehicleGroup || 'ALL') === COMPANY_VISIBLE_VEHICLE_GROUP && car.managedBy === 'COMPANY';
+    }
+
+    function isVehicleTcLineEnabled(car) {
+      return isVehicleTcVisible(car) && car.tcLineNotify !== false;
     }
 
     function isBookingMileageSkippable(b) {
@@ -3535,13 +3576,20 @@
       const groupSel = document.getElementById('vh-vehicle-group');
       const wrap = document.getElementById('vh-managed-company-wrap');
       const cb = document.getElementById('vh-managed-company');
+      const lineCb = document.getElementById('vh-tc-line-notify');
       if (!groupSel || !wrap || !cb) return;
       const isProject = (groupSel.value || 'ALL') !== 'ALL';
       const isPwa = (groupSel.value || 'ALL') === COMPANY_VISIBLE_VEHICLE_GROUP;
       wrap.classList.toggle('hidden', !isProject || !isPwa);
       cb.disabled = !isPwa;
-      if (!isPwa) cb.checked = false;
-      if (!isProject) cb.checked = false;
+      if (lineCb) {
+        lineCb.disabled = !isPwa || !cb.checked;
+        if (!cb.checked) lineCb.checked = false;
+      }
+      if (!isPwa || !isProject) {
+        cb.checked = false;
+        if (lineCb) lineCb.checked = false;
+      }
     };
 
     function renderTcLineSettingsPanel() {
@@ -3564,23 +3612,30 @@
         if (!cars.length) return;
         html += '<div class="mb-3"><p class="text-xs font-semibold text-blue-600 dark:text-blue-300 mb-1">' + escapeHtml(group.name) + '</p>';
         html += cars.map(function (car) {
-          const on = isVehicleTcLineEnabled(car);
-          return '<div class="flex items-center justify-between gap-3 py-2 px-3 rounded-xl bg-white/80 dark:bg-slate-700/50 border border-blue-100 dark:border-slate-600">' +
+          const visible = isVehicleTcVisible(car);
+          const lineOn = isVehicleTcLineEnabled(car);
+          const status = !visible ? 'TC ไม่เห็น' : (lineOn ? 'TC เห็น + LINE' : 'TC เห็นปฏิทินอย่างเดียว');
+          return '<div class="py-2 px-3 rounded-xl bg-white/80 dark:bg-slate-700/50 border border-blue-100 dark:border-slate-600 space-y-2">' +
             '<div><span class="font-semibold">' + escapeHtml(car.plate) + '</span>' +
-            '<span class="text-xs text-slate-500 ml-2">' + (on ? 'TC เห็น + LINE' : 'TC ไม่เห็น') + '</span></div>' +
-            '<label class="inline-flex items-center gap-2 cursor-pointer shrink-0">' +
-            '<input type="checkbox" class="rounded text-blue-500" ' + (on ? 'checked' : '') +
+            '<span class="text-xs text-slate-500 ml-2">' + status + '</span></div>' +
+            '<div class="flex flex-wrap gap-4 text-xs">' +
+            '<label class="inline-flex items-center gap-2 cursor-pointer">' +
+            '<input type="checkbox" class="rounded text-blue-500" ' + (visible ? 'checked' : '') +
+            ' onchange="window.toggleVehicleTcVisible(\'' + escapeHtml(car.id) + '\', this.checked)">' +
+            '<span>TC เห็นปฏิทิน</span></label>' +
+            '<label class="inline-flex items-center gap-2 cursor-pointer ' + (visible ? '' : 'opacity-40') + '">' +
+            '<input type="checkbox" class="rounded text-blue-500" ' + (lineOn ? 'checked' : '') + (visible ? '' : ' disabled') +
             ' onchange="window.toggleVehicleTcLineNotify(\'' + escapeHtml(car.id) + '\', this.checked)">' +
-            '<span class="text-xs">แจ้ง LINE</span></label></div>';
+            '<span>แจ้ง LINE</span></label></div></div>';
         }).join('');
         html += '</div>';
       });
       wrap.innerHTML = html || '<p class="text-slate-500">ไม่มีรถงานเฉพาะในกลุ่มที่ตั้งไว้</p>';
     }
 
-    window.toggleVehicleTcLineNotify = function (vehicleId, enabled) {
+    function saveVehicleTcOptions(vehicleId, companyVisible, lineNotify) {
       if (!isAdmin) return;
-      apiCall('setVehicleTcLineNotify', [vehicleId, enabled]).then(function (res) {
+      apiCall('setVehicleTcOptions', [vehicleId, !!companyVisible, !!lineNotify]).then(function (res) {
         showToast((res && res.msg) || '', !!(res && res.success));
         if (res && res.success) reloadAfterMutation();
         else {
@@ -3591,6 +3646,16 @@
         Swal.fire('ผิดพลาด', err.message || 'บันทึกไม่สำเร็จ', 'error');
         renderTcLineSettingsPanel();
       });
+    }
+
+    window.toggleVehicleTcVisible = function (vehicleId, enabled) {
+      const car = (appData.vehicles || []).find(function (v) { return String(v.id) === String(vehicleId); });
+      const lineOn = enabled ? isVehicleTcLineEnabled(car) : false;
+      saveVehicleTcOptions(vehicleId, enabled, lineOn);
+    };
+
+    window.toggleVehicleTcLineNotify = function (vehicleId, enabled) {
+      saveVehicleTcOptions(vehicleId, true, enabled);
     };
 
     function populateVehicleGroupSelects(selectedId) {
@@ -5241,6 +5306,10 @@
       document.getElementById('bk-plate').innerHTML = '<option value="">-- กรุณาระบุเวลาด้านบนเพื่อค้นหารถ --</option>';
       document.getElementById('bk-phone').value = '';
       syncBookingPhoneField();
+      const fakeWrap = document.getElementById('bk-fake-tc-wrap');
+      const fakeCb = document.getElementById('bk-fake-tc');
+      if (fakeWrap) fakeWrap.classList.toggle('hidden', !isAdmin);
+      if (fakeCb) fakeCb.checked = false;
       document.getElementById('bk-submit-btn').disabled = true;
 
       const fpStart = document.getElementById('bk-start')._flatpickr;
@@ -5278,6 +5347,7 @@
           window.filterAvailableCars();
           document.getElementById('bk-plate').value = bk.plate; 
           window.updateCarImage();
+          if (fakeCb) fakeCb.checked = !!bk.fakeTc;
         }
       }
       document.getElementById('booking-modal').style.display = 'flex';
@@ -5369,9 +5439,14 @@
         document.getElementById('vh-vehicle-group-wrap').classList.toggle('hidden', isReadonly);
       }
       const managedCb = document.getElementById('vh-managed-company');
+      const lineCb = document.getElementById('vh-tc-line-notify');
       if (managedCb) {
         managedCb.checked = false;
         managedCb.disabled = isReadonly;
+      }
+      if (lineCb) {
+        lineCb.checked = false;
+        lineCb.disabled = isReadonly;
       }
       window.syncVehicleTcLineCheckbox();
       if (managedCb) {
@@ -5406,9 +5481,15 @@
           document.getElementById('vh-remarks').value = v.remarks || '';
           document.getElementById('vh-existing-img').value = v.img || ''; 
           document.getElementById('vh-is-active').value = v.status || 'ACTIVE';
-          if (managedCb) managedCb.checked = isVehicleTcLineEnabled(v);
+          if (managedCb) managedCb.checked = isVehicleTcVisible(v);
+          if (lineCb) lineCb.checked = isVehicleTcLineEnabled(v);
           if (groupSel) groupSel.value = v.vehicleGroup || 'ALL';
           window.syncVehicleTcLineCheckbox();
+          if (managedCb) managedCb.checked = isVehicleTcVisible(v);
+          if (lineCb) {
+            lineCb.checked = isVehicleTcLineEnabled(v);
+            lineCb.disabled = isReadonly || !managedCb.checked;
+          }
           
           if(v.actExpiry && fpAct) {
             fpAct.setDate(new Date(v.actExpiry));
@@ -5986,8 +6067,9 @@
       obj.endMile = mileageValidation.endMile === null ? '' : mileageValidation.endMile;
       obj.parkingSpot = mileageValidation.endMile !== null ? obj.parkingSpot : '';
       obj.contactPhone = document.getElementById('bk-phone').value || '';
+      obj.fakeTc = !!(isAdmin && document.getElementById('bk-fake-tc') && document.getElementById('bk-fake-tc').checked);
 
-      if (requiresBookingPhoneForPlate(plate)) {
+      if (!obj.fakeTc && requiresBookingPhoneForPlate(plate)) {
         const phoneDigits = String(obj.contactPhone).replace(/\D/g, '');
         if (phoneDigits.length < 9) {
           Swal.fire('กรุณาระบุเบอร์โทร', 'รถงานเฉพาะต้องใส่เบอร์ติดต่อสำหรับบริษัทส่งรถ', 'warning');
@@ -5997,6 +6079,7 @@
         }
         obj.contactPhone = phoneDigits;
       }
+      if (obj.fakeTc) obj.contactPhone = '';
 
       const tempId = currId || ('PENDING_' + Date.now());
       const existing = currId
@@ -6075,6 +6158,7 @@
         status: document.getElementById('vh-is-active').value,
         leaseExpiry: document.getElementById('vh-lease').value,
         managedBy: (vehicleGroup === COMPANY_VISIBLE_VEHICLE_GROUP && document.getElementById('vh-managed-company').checked) ? 'COMPANY' : 'EMD',
+        tcLineNotify: !!(vehicleGroup === COMPANY_VISIBLE_VEHICLE_GROUP && document.getElementById('vh-managed-company').checked && document.getElementById('vh-tc-line-notify') && document.getElementById('vh-tc-line-notify').checked),
         vehicleGroup: vehicleGroup
       };
       if (currentMileNum !== null && isFinite(currentMileNum)) obj.currentMile = currentMileNum;

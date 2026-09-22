@@ -4,7 +4,7 @@
   const MUTATION_ACTIONS = new Set([
     'saveVehicle', 'saveVehicleManagement', 'deleteVehicle', 'saveBooking', 'deleteBooking',
     'quickUpdateMileage', 'saveAdminSettings', 'saveNameOption', 'saveManagedName', 'deleteManagedName',
-    'recordVehicleHandover', 'setVehicleTcLineNotify', 'moveVehiclesToGroup'
+    'recordVehicleHandover', 'setVehicleTcLineNotify', 'setVehicleTcOptions', 'moveVehiclesToGroup'
   ]);
 
   function getApiUrl() {

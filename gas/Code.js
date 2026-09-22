@@ -1,11 +1,13 @@
 const SHEET_ID = '1W5XJ6_JIFr4UHSLWsjb_YfpbF6He7Crz7Vrcdbbqaw8';
 const DRIVE_FOLDER_ID = '1R7JySsplPoCZI_Kjq51GAukOKUAzJhKz'; 
 const ADMIN_EMAIL = 'admin@yourdomain.com';
-const APP_DATA_CACHE_KEY = 'APP_DATA_V4';
-const APP_DATA_CORE_CACHE_KEY = 'APP_DATA_CORE_V4';
+const APP_DATA_CACHE_KEY = 'APP_DATA_V5';
+const APP_DATA_CORE_CACHE_KEY = 'APP_DATA_CORE_V5';
 const APP_LOGS_CACHE_KEY = 'APP_LOGS_V1';
 const LEGACY_APP_DATA_CACHE_KEY = 'APP_DATA_V1';
-const SCHEMA_READY_CACHE_KEY = 'SCHEMA_READY_V4';
+const SCHEMA_READY_CACHE_KEY = 'SCHEMA_READY_V5';
+const FAKE_TC_BOOKER_NAME = 'พนักงานการไฟฟ้า';
+const FAKE_TC_CALENDAR_COLOR = '#9ca3af';
 const CACHE_TTL_SEC = 600;
 const LOGS_CACHE_TTL_SEC = 180;
 const CACHE_ITEM_MAX = 90000;
@@ -20,7 +22,7 @@ const COMPANY_BOOKING_VISIBLE_FROM = '2026-07-29';
 const COMPANY_VISIBLE_VEHICLE_GROUP = 'pwa';
 const SESSION_TTL_SEC = 21600;
 const SESSION_PROP_PREFIX = 'SESS_';
-const VEHICLE_HEADERS = ['Vehicle_ID', 'ทะเบียน', 'รูปรถ(URL)', 'ประเภท', 'Email', 'Password', 'ระยะ Service (km)', 'ไมล์ล่าสุด (km)', 'จุดจอดล่าสุด', 'พรบ.หมดอายุ', 'หมายเหตุ', 'สถานะ', 'วันคืนรถ/หมดสัญญา', 'วันที่เช็คระยะล่าสุด', 'กม.เช็คระยะล่าสุด', 'ผู้นำเข้าเช็คระยะ', 'ระยะกม.ต่อรอบ', 'ประวัติเช็คระยะ(JSON)', 'แผนรอบถัดไป(JSON)', 'หมายเหตุบำรุงรักษา', 'ManagedBy', 'VehicleGroup'];
+const VEHICLE_HEADERS = ['Vehicle_ID', 'ทะเบียน', 'รูปรถ(URL)', 'ประเภท', 'Email', 'Password', 'ระยะ Service (km)', 'ไมล์ล่าสุด (km)', 'จุดจอดล่าสุด', 'พรบ.หมดอายุ', 'หมายเหตุ', 'สถานะ', 'วันคืนรถ/หมดสัญญา', 'วันที่เช็คระยะล่าสุด', 'กม.เช็คระยะล่าสุด', 'ผู้นำเข้าเช็คระยะ', 'ระยะกม.ต่อรอบ', 'ประวัติเช็คระยะ(JSON)', 'แผนรอบถัดไป(JSON)', 'หมายเหตุบำรุงรักษา', 'ManagedBy', 'VehicleGroup', 'TcLineNotify'];
 const DEFAULT_VEHICLE_GROUP_ALL = 'ALL';
 const VEHICLE_GROUP_HEADERS = ['Group_ID', 'ชื่อกลุ่ม', 'คำค้นงาน(JSON)', 'ลำดับ', 'ระบบ'];
 const DEFAULT_SERVICE_INTERVAL_KM = 10000;
@@ -532,6 +534,7 @@ function filterPayloadForCompany_(payload) {
       status: v.status,
       managedBy: v.managedBy,
       vehicleGroup: v.vehicleGroup,
+      tcLineNotify: !!v.tcLineNotify,
       currentMile: parseFloat(v.currentMile) || 0,
       serviceMile: parseFloat(v.serviceMile) || 0,
       actExpiry: v.actExpiry,
@@ -547,6 +550,28 @@ function filterPayloadForCompany_(payload) {
     if (!companyPlates[normalizePlateKey_(b.plate)]) return false;
     const startMs = parseTimeSafe_(b.start);
     return startMs && startMs >= companyVisibleFromMs;
+  }).map(function (b) {
+    if (!isFakeTcBooking_(b)) return b;
+    return {
+      id: b.id,
+      plate: b.plate,
+      name: FAKE_TC_BOOKER_NAME,
+      surname: '',
+      dept: '',
+      start: b.start,
+      end: b.end,
+      dest: '',
+      driver: FAKE_TC_BOOKER_NAME,
+      userEmail: '',
+      startMile: '',
+      endMile: '',
+      parkingSpot: '',
+      contactPhone: '',
+      handoverParking: '',
+      handoverBattery: '',
+      handoverRecipient: '',
+      handoverAt: ''
+    };
   });
   const companyGroupIds = {};
   vehicles.forEach(function (v) {
@@ -568,6 +593,13 @@ function filterPayloadForCompany_(payload) {
     },
     vehicleGroups: vehicleGroups
   };
+}
+
+function filterFakeBookingsFromEmd_(payload) {
+  const bookings = (payload.bookings || []).filter(function (b) {
+    return !isFakeTcBooking_(b);
+  });
+  return Object.assign({}, payload, { bookings: bookings });
 }
 
 function getNameRows_() {
@@ -626,6 +658,25 @@ function ensureHeaderRow_(sheet, expectedHeaders, forceIndexes) {
   if (changed) sheet.getRange(1, 1, 1, expectedHeaders.length).setValues([next]);
 }
 
+function parseYesNoFlag_(value, defaultYes) {
+  const raw = String(value == null ? '' : value).trim().toUpperCase();
+  if (!raw) return defaultYes !== false;
+  return raw === 'YES' || raw === 'Y' || raw === 'TRUE' || raw === '1' || raw === 'ON';
+}
+
+function toYesNo_(enabled) {
+  return enabled ? 'YES' : 'NO';
+}
+
+function isFakeTcBooking_(bookingOrRow) {
+  if (!bookingOrRow) return false;
+  if (Object.prototype.hasOwnProperty.call(bookingOrRow, 'fakeTc')) {
+    return bookingOrRow.fakeTc === true || parseYesNoFlag_(bookingOrRow.fakeTc, false);
+  }
+  if (Array.isArray(bookingOrRow)) return parseYesNoFlag_(bookingOrRow[18], false);
+  return parseYesNoFlag_(bookingOrRow.fakeTc, false);
+}
+
 function ensureVehiclesSheet_(ss) {
   let sheet = ss.getSheetByName('Vehicles');
   if (!sheet) {
@@ -633,8 +684,27 @@ function ensureVehiclesSheet_(ss) {
     sheet.appendRow(VEHICLE_HEADERS);
     return sheet;
   }
-  ensureHeaderRow_(sheet, VEHICLE_HEADERS, { 20: true, 21: true });
+  ensureHeaderRow_(sheet, VEHICLE_HEADERS, { 20: true, 21: true, 22: true });
+  migrateVehicleTcLineNotifyDefaults_(sheet);
   return sheet;
+}
+
+function migrateVehicleTcLineNotifyDefaults_(sheet) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return;
+  const width = Math.max(sheet.getLastColumn(), VEHICLE_HEADERS.length);
+  if (width < 23) sheet.getRange(1, 23).setValue('TcLineNotify');
+  const rows = sheet.getRange(2, 21, lastRow, 23).getValues();
+  let changed = false;
+  for (let i = 0; i < rows.length; i++) {
+    const managedBy = String(rows[i][0] || '').trim().toUpperCase();
+    const lineRaw = String(rows[i][2] || '').trim();
+    if (managedBy === 'COMPANY' && !lineRaw) {
+      rows[i][2] = 'YES';
+      changed = true;
+    }
+  }
+  if (changed) sheet.getRange(2, 21, lastRow, 23).setValues(rows);
 }
 
 function ensureDefaultVehicleGroups_(sheet) {
@@ -743,7 +813,7 @@ function ensureBookingsHandoverColumns_(ss) {
 function ensureBookingsExtraColumns_(ss) {
   const sheet = ss.getSheetByName('Bookings');
   if (!sheet) return;
-  const extra = ['เบอร์ติดต่อ', 'จุดจอดส่งมอบ', 'แบตส่งมอบ', 'ผู้รับกุญแจ', 'เวลาส่งมอบ'];
+  const extra = ['เบอร์ติดต่อ', 'จุดจอดส่งมอบ', 'แบตส่งมอบ', 'ผู้รับกุญแจ', 'เวลาส่งมอบ', 'FakeTc'];
   const current = sheet.getRange(1, 14, 1, extra.length).getValues()[0];
   let changed = false;
   const next = extra.map(function (h, i) {
@@ -867,10 +937,30 @@ function resolveManagedByForVehicle_(managedByInput, vehicleGroupId) {
   return String(managedByInput || '').trim().toUpperCase() === 'COMPANY' ? 'COMPANY' : 'EMD';
 }
 
-function isTcLineVisibleVehicleRow_(row) {
+function isTcVisibleVehicleRow_(row) {
   if (!row) return false;
   if (String(row[20] || '').toUpperCase() !== 'COMPANY') return false;
   return normalizeVehicleGroupId_(row[21]) === COMPANY_VISIBLE_VEHICLE_GROUP;
+}
+
+function isTcLineNotifyVehicleRow_(row) {
+  if (!isTcVisibleVehicleRow_(row)) return false;
+  return parseYesNoFlag_(row[22], true);
+}
+
+function isTcLineVisibleVehicleRow_(row) {
+  return isTcLineNotifyVehicleRow_(row);
+}
+
+function vehicleTcLineNotifyField_(form, row) {
+  if (form && Object.prototype.hasOwnProperty.call(form, 'tcLineNotify')) {
+    return toYesNo_(form.tcLineNotify === true || form.tcLineNotify === 'YES' || form.tcLineNotify === 'true' || form.tcLineNotify === 1 || form.tcLineNotify === '1');
+  }
+  if (row && row[22] !== undefined && row[22] !== null && String(row[22]).trim() !== '') {
+    return toYesNo_(parseYesNoFlag_(row[22], true));
+  }
+  const managedBy = resolveManagedByForVehicle_(vehicleFormField_(form, 'managedBy', row, 20, 'EMD'), vehicleFormField_(form, 'vehicleGroup', row, 21, DEFAULT_VEHICLE_GROUP_ALL));
+  return managedBy === 'COMPANY' ? 'YES' : 'NO';
 }
 
 function buildVehicleRowValues_(form, row, imgUrl, activeStatus) {
@@ -902,7 +992,8 @@ function buildVehicleRowValues_(form, row, imgUrl, activeStatus) {
     roundPlanJson,
     vehicleMaintenanceRemarksField_(form, row),
     managedBy,
-    vehicleGroup
+    vehicleGroup,
+    managedBy === 'COMPANY' ? vehicleTcLineNotifyField_(form, row) : 'NO'
   ];
 }
 
@@ -1013,7 +1104,8 @@ function dispatchApi_(action, args, token, clientIp) {
     case 'moveVehiclesToGroup': return moveVehiclesToGroup(token, args[0], args[1]);
     case 'testLineUpcomingSummary': return testLineUpcomingSummary(token, args[0]);
     case 'recordVehicleHandover': return recordVehicleHandover(args[0], clientIp, token);
-    case 'setVehicleTcLineNotify': return setVehicleTcLineNotify(token, args[0], args[1]);
+    case 'setVehicleTcLineNotify': return setVehicleTcOptions_(token, args[0], args[1], args[2]);
+    case 'setVehicleTcOptions': return setVehicleTcOptions_(token, args[0], args[1], args[2]);
     default: throw new Error('Unknown action: ' + action);
   }
 }
@@ -1046,6 +1138,8 @@ function setupDatabase(ss) {
 }
 
 function buildAppPayload_(ss, includeLogs) {
+  ensureVehiclesSheet_(ss);
+  ensureBookingsExtraColumns_(ss);
   const vData = readTable_(getSheetOrThrow_(ss, 'Vehicles'), VEHICLE_HEADERS.length);
   const vehicles = vData.slice(1).map(r => ({
     id: r[0], plate: r[1], img: r[2], type: r[3], email: r[4], pass: r[5],
@@ -1061,12 +1155,13 @@ function buildAppPayload_(ss, includeLogs) {
     serviceRoundPlan: parseVehicleServiceRoundPlan_(r[18]),
     maintenanceRemarks: r[19] || '',
     managedBy: String(r[20] || 'EMD').trim().toUpperCase() === 'COMPANY' ? 'COMPANY' : 'EMD',
-    vehicleGroup: normalizeVehicleGroupId_(r[21])
+    vehicleGroup: normalizeVehicleGroupId_(r[21]),
+    tcLineNotify: String(r[20] || '').trim().toUpperCase() === 'COMPANY' ? parseYesNoFlag_(r[22], true) : false
   }));
 
   const vehicleGroups = getVehicleGroups_(ss);
 
-  const bDataVal = readTable_(getSheetOrThrow_(ss, 'Bookings'), 18);
+  const bDataVal = readTable_(getSheetOrThrow_(ss, 'Bookings'), 19);
   const bookings = bDataVal.slice(1).map(r => ({
     id: r[0], plate: r[1], name: r[2], surname: r[3],
     dept: r[4], start: r[5], end: r[6], dest: r[7], driver: r[8],
@@ -1075,7 +1170,8 @@ function buildAppPayload_(ss, includeLogs) {
     handoverParking: r[14] || '',
     handoverBattery: r[15] || '',
     handoverRecipient: r[16] || '',
-    handoverAt: r[17] || ''
+    handoverAt: r[17] || '',
+    fakeTc: parseYesNoFlag_(r[18], false)
   }));
 
   const nData = readTable_(getSheetOrThrow_(ss, 'Name'), 3);
@@ -1185,7 +1281,7 @@ function getAppData(includeLogs, token) {
     payload.readOnly = true;
     payload.logs = [];
   } else if (role === 'EMD') {
-    payload = attachCurrentUser_(stripSensitiveFields_(filterHiddenVehiclesFromPayload_(payload), 'EMD'));
+    payload = attachCurrentUser_(stripSensitiveFields_(filterFakeBookingsFromEmd_(filterHiddenVehiclesFromPayload_(payload)), 'EMD'));
     payload.role = 'EMD';
     payload.logs = [];
   } else if (role !== 'ADMIN') {
@@ -1771,38 +1867,63 @@ function saveVehicle(form, clientIp, token) {
   } catch (error) { return {success: false, msg: error.message}; }
 }
 
-function setVehicleTcLineNotify(token, vehicleId, enabled) {
+function setVehicleTcOptions_(token, vehicleId, companyVisibleOrEnabled, lineNotifyMaybe) {
   try {
     requireAdminSession_(token);
     const ss = setupDatabase();
+    ensureVehiclesSheet_(ss);
     const sheet = getSheetOrThrow_(ss, 'Vehicles');
-    const data = sheet.getDataRange().getValues();
+    const data = readTable_(sheet, VEHICLE_HEADERS.length);
     const logSheet = getSheetOrThrow_(ss, 'Logs');
-    const actionEmail = Session.getActiveUser().getEmail() || 'Unknown User';
-    const wantOn = enabled === true || String(enabled).toLowerCase() === 'true' || enabled === 1 || enabled === '1';
+    const actionEmail = getActionEmail_('ADMIN');
+    let companyVisible;
+    let lineNotify;
+    if (typeof companyVisibleOrEnabled === 'object' && companyVisibleOrEnabled) {
+      companyVisible = !!companyVisibleOrEnabled.companyVisible;
+      lineNotify = !!companyVisibleOrEnabled.lineNotify;
+    } else if (arguments.length >= 4 || lineNotifyMaybe !== undefined) {
+      companyVisible = companyVisibleOrEnabled === true || String(companyVisibleOrEnabled).toLowerCase() === 'true' || companyVisibleOrEnabled === 1 || companyVisibleOrEnabled === '1';
+      lineNotify = lineNotifyMaybe === true || String(lineNotifyMaybe).toLowerCase() === 'true' || lineNotifyMaybe === 1 || lineNotifyMaybe === '1';
+    } else {
+      // legacy single toggle: on = TC visible + LINE, off = neither
+      const on = companyVisibleOrEnabled === true || String(companyVisibleOrEnabled).toLowerCase() === 'true' || companyVisibleOrEnabled === 1 || companyVisibleOrEnabled === '1';
+      companyVisible = on;
+      lineNotify = on;
+    }
+    if (!companyVisible) lineNotify = false;
     for (let i = 1; i < data.length; i++) {
       if (String(data[i][0] || '').trim() !== String(vehicleId || '').trim()) continue;
       const groupId = normalizeVehicleGroupId_(data[i][21]);
       if (groupId === DEFAULT_VEHICLE_GROUP_ALL) {
-        return { success: false, msg: 'รถทุกงาน (ALL) ไม่สามารถเปิดแจ้ง LINE / TC ได้' };
+        return { success: false, msg: 'รถทุกงาน (ALL) ไม่สามารถเปิดให้ TC เห็นได้' };
       }
       if (groupId !== COMPANY_VISIBLE_VEHICLE_GROUP) {
-        return { success: false, msg: 'เฉพาะรถงานการประปาเท่านั้นที่เปิดให้ TC เห็นและแจ้ง LINE ได้' };
+        return { success: false, msg: 'เฉพาะรถงานการประปาเท่านั้นที่ตั้งค่า TC / LINE ได้' };
       }
-      const managedBy = wantOn ? 'COMPANY' : 'EMD';
-      sheet.getRange(i + 1, 21).setValue(managedBy);
+      const managedBy = companyVisible ? 'COMPANY' : 'EMD';
+      sheet.getRange(i + 1, 21, 1, 3).setValues([[managedBy, groupId, companyVisible ? toYesNo_(lineNotify) : 'NO']]);
       clearAppCache_();
-      appendLogRow_(logSheet, actionEmail, 'UPDATE_VEHICLE', data[i][1],
-        wantOn ? 'เปิดแจ้ง LINE + ให้ TC เห็น' : 'ปิดแจ้ง LINE / ซ่อนจาก TC', '-', '-');
+      let detail = 'ซ่อนจาก TC / ปิด LINE';
+      if (companyVisible && lineNotify) detail = 'TC เห็น + แจ้ง LINE';
+      else if (companyVisible) detail = 'TC เห็นในปฏิทินอย่างเดียว (ไม่แจ้ง LINE)';
+      appendLogRow_(logSheet, actionEmail, 'UPDATE_VEHICLE', data[i][1], detail, '-', '-');
       return {
         success: true,
-        msg: wantOn ? 'เปิดแจ้ง LINE และให้ TC เห็นรถคันนี้แล้ว' : 'ปิดแจ้ง LINE และซ่อนรถคันนี้จาก TC แล้ว'
+        msg: companyVisible
+          ? (lineNotify ? 'เปิดให้ TC เห็นและแจ้ง LINE แล้ว' : 'เปิดให้ TC เห็นในปฏิทินอย่างเดียว (ไม่แจ้ง LINE)')
+          : 'ซ่อนรถคันนี้จาก TC และปิด LINE แล้ว',
+        companyVisible: companyVisible,
+        lineNotify: lineNotify
       };
     }
     return { success: false, msg: 'ไม่พบรถ' };
   } catch (error) {
     return { success: false, msg: error.message };
   }
+}
+
+function setVehicleTcLineNotify(token, vehicleId, enabled) {
+  return setVehicleTcOptions_(token, vehicleId, enabled);
 }
 
 function deleteVehicle(id, mode, clientIp, token) {
@@ -1846,6 +1967,8 @@ function deleteVehicle(id, mode, clientIp, token) {
 }
 
 function bookingRecordFromForm_(form, fname, lname, bookingId, contactPhone, startMileValue, endMileValue, bookingParking, userEmail, existingRow) {
+  const fakeTc = !!(form && (form.fakeTc === true || form.fakeTc === 'YES' || form.fakeTc === 'true' || form.fakeTc === 1 || form.fakeTc === '1'))
+    || isFakeTcBooking_(existingRow);
   return {
     id: bookingId,
     plate: form.plate,
@@ -1861,10 +1984,11 @@ function bookingRecordFromForm_(form, fname, lname, bookingId, contactPhone, sta
     endMile: endMileValue,
     parkingSpot: bookingParking || '',
     contactPhone: contactPhone || '',
-    handoverParking: existingRow ? (existingRow[14] || '') : '',
-    handoverBattery: existingRow ? (existingRow[15] || '') : '',
-    handoverRecipient: existingRow ? (existingRow[16] || '') : '',
-    handoverAt: existingRow ? (existingRow[17] || '') : ''
+    handoverParking: existingRow ? (existingRow[14] || existingRow.handoverParking || '') : '',
+    handoverBattery: existingRow ? (existingRow[15] || existingRow.handoverBattery || '') : '',
+    handoverRecipient: existingRow ? (existingRow[16] || existingRow.handoverRecipient || '') : '',
+    handoverAt: existingRow ? (existingRow[17] || existingRow.handoverAt || '') : '',
+    fakeTc: fakeTc
   };
 }
 
@@ -1878,7 +2002,8 @@ function bookingToRow_(b) {
   return [
     b.id, b.plate, b.name, b.surname, b.dept, b.start, b.end, b.dest, b.driver,
     b.userEmail, b.startMile, b.endMile, b.parkingSpot, b.contactPhone,
-    b.handoverParking, b.handoverBattery, b.handoverRecipient, b.handoverAt
+    b.handoverParking, b.handoverBattery, b.handoverRecipient, b.handoverAt,
+    isFakeTcBooking_(b) ? 'YES' : 'NO'
   ];
 }
 
@@ -1889,6 +2014,7 @@ function vehicleToRow_(v) {
   row[1] = v.plate;
   row[20] = v.managedBy;
   row[21] = v.vehicleGroup;
+  row[22] = v.tcLineNotify === true || v.tcLineNotify === 'YES' ? 'YES' : (v.managedBy === 'COMPANY' && v.tcLineNotify !== false && v.tcLineNotify !== 'NO' ? 'YES' : 'NO');
   return row;
 }
 
@@ -1950,16 +2076,35 @@ function saveBooking(form, clientIp, token) {
       vData = rows.vData;
     } else {
       ss = getSpreadsheet_();
-      bData = readTable_(getSheetOrThrow_(ss, 'Bookings'), 18);
+      bData = readTable_(getSheetOrThrow_(ss, 'Bookings'), 19);
       vData = readTable_(getSheetOrThrow_(ss, 'Vehicles'), VEHICLE_HEADERS.length);
+    }
+
+    const wantFakeTc = !!(form && (form.fakeTc === true || form.fakeTc === 'YES' || form.fakeTc === 'true' || form.fakeTc === 1 || form.fakeTc === '1'));
+    if (wantFakeTc && role !== 'ADMIN') {
+      return { success: false, msg: 'เฉพาะ Admin เท่านั้นที่จองแบบ FAKE TC ได้' };
+    }
+    const plateIsCompanyVisible = (function () {
+      for (let i = 1; i < vData.length; i++) {
+        if (normalizePlateKey_(vData[i][1]) === normalizePlateKey_(form.plate)) {
+          return isTcVisibleVehicleRow_(vData[i]);
+        }
+      }
+      return false;
+    })();
+    if (wantFakeTc && !plateIsCompanyVisible) {
+      return { success: false, msg: 'FAKE TC ใช้ได้เฉพาะรถที่เปิดให้บริษัท (TC) เห็นในปฏิทิน' };
     }
 
     const groupValidation = validateVehicleGroupBooking_(form.plate, form.dept, form.dest);
     if (!groupValidation.success) return groupValidation;
 
-    const phoneValidation = validateBookingPhone_(form.plate, form.contactPhone, vData);
-    if (!phoneValidation.success) return phoneValidation;
-    const contactPhone = phoneValidation.phone || '';
+    let contactPhone = '';
+    if (!wantFakeTc) {
+      const phoneValidation = validateBookingPhone_(form.plate, form.contactPhone, vData);
+      if (!phoneValidation.success) return phoneValidation;
+      contactPhone = phoneValidation.phone || '';
+    }
 
     for (let i = 1; i < bData.length; i++) {
       if (String(bData[i][1]).trim() === String(form.plate).trim() && String(bData[i][0]).trim() !== String(form.id).trim()) {
@@ -2017,7 +2162,13 @@ function saveBooking(form, clientIp, token) {
         }
       }
       if (!existingRow) return { success: false, msg: 'ไม่พบรหัสการจองนี้ในระบบ' };
+      if (role !== 'ADMIN') {
+        form.fakeTc = isFakeTcBooking_(existingRow);
+      } else if (!Object.prototype.hasOwnProperty.call(form, 'fakeTc')) {
+        form.fakeTc = isFakeTcBooking_(existingRow);
+      }
       const saved = bookingRecordFromForm_(form, fname, lname, form.id, contactPhone, startMileValue, endMileValue, bookingParking, form.originalEmail || existingRow[9], existingRow);
+      ensureBookingsExtraColumns_(spreadsheet_());
       const bSheet = getSheetOrThrow_(spreadsheet_(), 'Bookings');
       const vSheet = getSheetOrThrow_(spreadsheet_(), 'Vehicles');
       withDataLock_(function () {
@@ -2031,16 +2182,19 @@ function saveBooking(form, clientIp, token) {
           }
         }
         bSheet.getRange(sheetRow, 2, 1, 13).setValues([[form.plate, fname, lname, form.dept, "'" + form.start, "'" + form.end, form.dest, form.driver, form.originalEmail, startMileValue, endMileValue, bookingParking, contactPhone]]);
+        bSheet.getRange(sheetRow, 19).setValue(saved.fakeTc ? 'YES' : 'NO');
         if (addedDept) clearAppCache_();
         else upsertBookingCache_(saved, vehiclePatch);
       });
-      appendLogRow_(getSheetOrThrow_(spreadsheet_(), 'Logs'), actionEmail, 'UPDATE_BOOKING', form.plate, 'แก้ไข/คืนรถ (จุดจอด: ' + (bookingParking || '-') + ', ไมล์: ' + (startMileValue || '-') + ' -> ' + (endMileValue || '-') + ', โทร: ' + (contactPhone || '-') + ')', form.editReason || '-', ip);
-      const lineNotify = notifyCompanyBookingLine_(spreadsheet_(), 'UPDATE', buildBookingNotifyObject_(form, fname, lname, form.id, contactPhone), { skip: form.skipLineNotify, vData: vData });
+      appendLogRow_(getSheetOrThrow_(spreadsheet_(), 'Logs'), actionEmail, 'UPDATE_BOOKING', form.plate, (saved.fakeTc ? 'FAKE TC · ' : '') + 'แก้ไข/คืนรถ (จุดจอด: ' + (bookingParking || '-') + ', ไมล์: ' + (startMileValue || '-') + ' -> ' + (endMileValue || '-') + ', โทร: ' + (contactPhone || '-') + ')', form.editReason || '-', ip);
+      const lineNotify = notifyCompanyBookingLine_(spreadsheet_(), 'UPDATE', Object.assign(buildBookingNotifyObject_(form, fname, lname, form.id, contactPhone), { fakeTc: saved.fakeTc }), { skip: form.skipLineNotify || saved.fakeTc, vData: vData });
       return { success: true, msg: 'อัปเดตการจองและจุดจอดเรียบร้อยครับ', booking: saved, lineNotify: lineNotify };
     }
 
     const newBookingId = 'B_' + new Date().getTime();
+    form.fakeTc = wantFakeTc;
     const saved = bookingRecordFromForm_(form, fname, lname, newBookingId, contactPhone, startMileValue, endMileValue, bookingParking, actionEmail, null);
+    ensureBookingsExtraColumns_(spreadsheet_());
     const bSheet = getSheetOrThrow_(spreadsheet_(), 'Bookings');
     const vSheet = getSheetOrThrow_(spreadsheet_(), 'Vehicles');
     withDataLock_(function () {
@@ -2051,13 +2205,13 @@ function saveBooking(form, clientIp, token) {
           if (bookingParking) vSheet.getRange(vRow, 9).setValue(bookingParking);
         }
       }
-      bSheet.appendRow([newBookingId, form.plate, fname, lname, form.dept, "'" + form.start, "'" + form.end, form.dest, form.driver, actionEmail, startMileValue, endMileValue, bookingParking, contactPhone]);
+      bSheet.appendRow([newBookingId, form.plate, fname, lname, form.dept, "'" + form.start, "'" + form.end, form.dest, form.driver, actionEmail, startMileValue, endMileValue, bookingParking, contactPhone, '', '', '', '', saved.fakeTc ? 'YES' : 'NO']);
       if (addedDept) clearAppCache_();
       else upsertBookingCache_(saved, vehiclePatch);
     });
-    appendLogRow_(getSheetOrThrow_(spreadsheet_(), 'Logs'), actionEmail, 'CREATE_BOOKING', form.plate, 'จองไป ' + form.dest + ' (โทร: ' + (contactPhone || '-') + ')', '-', ip);
-    const lineNotify = notifyCompanyBookingLine_(spreadsheet_(), 'NEW', buildBookingNotifyObject_(form, fname, lname, newBookingId, contactPhone), { vData: vData });
-    return { success: true, msg: 'บันทึกการจองสำเร็จครับ', booking: saved, lineNotify: lineNotify };
+    appendLogRow_(getSheetOrThrow_(spreadsheet_(), 'Logs'), actionEmail, 'CREATE_BOOKING', form.plate, (saved.fakeTc ? 'FAKE TC · ' : '') + 'จองไป ' + form.dest + ' (โทร: ' + (contactPhone || '-') + ')', '-', ip);
+    const lineNotify = notifyCompanyBookingLine_(spreadsheet_(), 'NEW', Object.assign(buildBookingNotifyObject_(form, fname, lname, newBookingId, contactPhone), { fakeTc: saved.fakeTc }), { skip: saved.fakeTc, vData: vData });
+    return { success: true, msg: saved.fakeTc ? 'บันทึก FAKE TC สำเร็จครับ' : 'บันทึกการจองสำเร็จครับ', booking: saved, lineNotify: lineNotify };
   } catch (error) { return {success: false, msg: error.message}; }
 }
 
@@ -2322,14 +2476,28 @@ function buildBookingNotifyObject_(form, fname, lname, bookingId, contactPhone) 
   };
 }
 
-function isCompanyManagedPlate_(ss, plate, vData) {
+function isCompanyVisiblePlate_(ss, plate, vData) {
   const rows = vData || getSheetOrThrow_(ss, 'Vehicles').getDataRange().getValues();
   for (let i = 1; i < rows.length; i++) {
     if (normalizePlateKey_(rows[i][1]) === normalizePlateKey_(plate)) {
-      return isTcLineVisibleVehicleRow_(rows[i]);
+      return isTcVisibleVehicleRow_(rows[i]);
     }
   }
   return false;
+}
+
+function isCompanyLineNotifyPlate_(ss, plate, vData) {
+  const rows = vData || getSheetOrThrow_(ss, 'Vehicles').getDataRange().getValues();
+  for (let i = 1; i < rows.length; i++) {
+    if (normalizePlateKey_(rows[i][1]) === normalizePlateKey_(plate)) {
+      return isTcLineNotifyVehicleRow_(rows[i]);
+    }
+  }
+  return false;
+}
+
+function isCompanyManagedPlate_(ss, plate, vData) {
+  return isCompanyVisiblePlate_(ss, plate, vData);
 }
 
 function formatHandoverLineMessage_(booking, isEdit) {
@@ -2357,8 +2525,8 @@ function formatHandoverLineMessage_(booking, isEdit) {
 
 function notifyCompanyHandoverLine_(ss, booking, isEdit) {
   if (!booking || !booking.plate) return { status: 'skipped', reason: 'no_booking' };
-  if (!isCompanyManagedPlate_(ss, booking.plate)) {
-    return { status: 'skipped', reason: 'not_company_car', msg: 'รถคันนี้ไม่ใช่รถ TC' };
+  if (!isCompanyLineNotifyPlate_(ss, booking.plate)) {
+    return { status: 'skipped', reason: 'calendar_only_or_not_tc', msg: 'รถคันนี้ไม่แจ้ง LINE' };
   }
   const cfg = getLineConfig_();
   if (!cfg.token || !cfg.groupId) {
@@ -2404,7 +2572,15 @@ function tryNotifyCompanyBookingLine_(ss, eventType, booking, options) {
   options = options || {};
   if (options.skip) return { status: 'skipped', reason: 'skip_flag' };
   if (!booking || !booking.plate) return { status: 'skipped', reason: 'no_booking' };
-  if (!isCompanyManagedPlate_(ss, booking.plate, options.vData)) {
+  if (isFakeTcBooking_(booking)) return { status: 'skipped', reason: 'fake_tc' };
+  if (!isCompanyLineNotifyPlate_(ss, booking.plate, options.vData)) {
+    if (isCompanyVisiblePlate_(ss, booking.plate, options.vData)) {
+      return {
+        status: 'skipped',
+        reason: 'calendar_only',
+        msg: 'รถคันนี้ให้ TC เห็นในปฏิทินอย่างเดียว — ไม่ส่ง LINE'
+      };
+    }
     return {
       status: 'skipped',
       reason: 'not_company_car',
