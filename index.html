@@ -24,12 +24,29 @@
     (function () {
       try {
         var keys = ['emdcar_admin_token_v1', 'emdcar_emd_token_v1', 'emdcar_company_token_v1'];
+        var token = '';
         for (var i = 0; i < keys.length; i++) {
-          if (localStorage.getItem(keys[i]) || sessionStorage.getItem(keys[i])) {
+          var value = '';
+          try { value = localStorage.getItem(keys[i]) || sessionStorage.getItem(keys[i]) || ''; } catch (e) {}
+          if (value) {
             document.documentElement.classList.add('emd-has-session');
-            break;
+            if (!token) token = value;
           }
         }
+        if (!token || !window.EMD_GAS_API_URL) return;
+        var args = JSON.stringify([false, token]);
+        var url = String(window.EMD_GAS_API_URL).replace(/\/$/, '') +
+          '?action=getAppData&args=' + encodeURIComponent(args) +
+          '&token=' + encodeURIComponent(token) +
+          '&emdToken=' + encodeURIComponent(token);
+        window.__emdPrefetch = {
+          action: 'getAppData',
+          token: token,
+          promise: fetch(url, { method: 'GET', credentials: 'omit', redirect: 'follow', cache: 'no-store' })
+            .then(function (res) {
+              return res.text().then(function (text) { return { ok: res.ok, status: res.status, text: text }; });
+            })
+        };
       } catch (e) {}
     })();
   </script>
@@ -38,7 +55,8 @@
   <link rel="preconnect" href="https://cdn.tailwindcss.com">
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
   <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css" media="print" onload="this.media='all'">
+  <noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css"></noscript>
   <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
   <noscript><link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600&display=swap" rel="stylesheet"></noscript>
   <script>
@@ -987,10 +1005,10 @@
 
   <datalist id="user-list"></datalist>
   <datalist id="dept-list"></datalist>
-  <script src="js/api-client.js?v=3" defer></script>
+  <script src="js/api-client.js?v=4" defer></script>
   <script>
     const EMD_API_CLIENT_SRC = 'js/api-client.js';
-    const EMD_API_CLIENT_VER = '3';
+    const EMD_API_CLIENT_VER = '4';
     const EMD_CHART_SRC = 'https://cdn.jsdelivr.net/npm/chart.js';
     const EMD_FC_SRC = 'https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js';
     const EMD_FLATPICKR_SRC = 'https://cdn.jsdelivr.net/npm/flatpickr';
@@ -1087,6 +1105,7 @@
     const COMPANY_VISIBLE_VEHICLE_GROUP = 'pwa';
     let loadDataInflight = null;
     let loadDataSeq = 0;
+    let appDataEpoch = 0;
     const escapeHtml = (value) => String(value || '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
     const parseLocalDateTimeSafe = (val) => {
       const clean = String(val || '').trim().replace('T', ' ').replace(/-/g, '/');
@@ -1190,7 +1209,7 @@
       const dest = (b.dest && String(b.dest).trim()) ? String(b.dest).trim() : '-';
       return {
         id: b.id,
-        title: `${displayName} → ${dest}`,
+        title: (b._pending ? 'กำลังบันทึก · ' : '') + `${displayName} → ${dest}`,
         start: toCalendarDateTime(b.start),
         end: toCalendarDateTime(b.end),
         backgroundColor: color,
@@ -2136,7 +2155,14 @@
     }
 
     async function bootApp() {
-      showSkeletonState();
+      const hasLocal = applyOptimisticLocalSession();
+      const staleNow = hasLocal ? readCache(true) : null;
+      if (staleNow) {
+        initApp(staleNow, true);
+        hideLoading();
+      } else {
+        showSkeletonState();
+      }
       const sweetReady = ensureSweetAlert();
       const flatReady = ensureFlatpickr();
       try {
@@ -2147,14 +2173,12 @@
         showLoginGate((err && err.message) || 'โหลดระบบเชื่อมต่อไม่สำเร็จ — ลองรีเฟรช (Ctrl+F5)');
         return;
       }
-      ensureChartJs();
       resolveClientIpOnce();
       initBookingComboboxes();
       flatReady.then(initBookingDatePickers).catch(function () {});
 
-      const hasLocal = applyOptimisticLocalSession();
       if (hasLocal) {
-        return loadData().catch(function () {});
+        return loadData({ skipStalePaint: !!staleNow }).catch(function () {});
       }
 
       const savedCode = readGateAccessCode();
@@ -2814,6 +2838,14 @@
     }
 
     function fetchAppData(token) {
+      if (typeof window.emdTakePrefetch === 'function') {
+        const prefetched = window.emdTakePrefetch('getAppData', token || '');
+        if (prefetched) {
+          return prefetched.catch(function () {
+            return apiCall('getAppData', [false, token], token);
+          });
+        }
+      }
       return apiCall('getAppData', [false, token], token);
     }
 
@@ -2851,10 +2883,10 @@
       const stale = readCache(true);
       const requestKey = 'core';
 
-      if (stale) {
+      if (stale && options.keepLocal !== true && options.skipStalePaint !== true) {
         initApp(stale, true);
         hideLoading();
-      } else if (!silent) {
+      } else if (!silent && options.skipStalePaint !== true) {
         showSkeletonState();
       }
 
@@ -2863,8 +2895,9 @@
       }
 
       const seq = ++loadDataSeq;
+      const epoch = appDataEpoch;
       const tracked = fetchAppDataWithFallback().then(function (data) {
-        if (seq !== loadDataSeq) return data;
+        if (seq !== loadDataSeq || epoch !== appDataEpoch) return data;
         if (data && data.requiresAuth) {
           logoutSession();
           throw new Error(data.msg || 'กรุณาเข้าสู่ระบบ');
@@ -2905,7 +2938,90 @@
     }
 
     function reloadAfterMutation() {
-      loadData({ silent: true });
+      loadData({ silent: true, keepLocal: true });
+    }
+
+    function bumpAppDataEpoch() {
+      appDataEpoch++;
+      loadDataSeq++;
+      loadDataInflight = null;
+    }
+
+    function paintBookingSurfaces() {
+      renderDashboard();
+      renderCars(appData.vehicles);
+      if (isCalendarInitialized && calendar) refreshCalendarEvents();
+      renderCompanyDeliveryPanel();
+    }
+
+    function upsertLocalBooking(booking) {
+      const list = appData.bookings || (appData.bookings = []);
+      const id = String(booking && booking.id || '');
+      for (let i = 0; i < list.length; i++) {
+        if (String(list[i].id) === id) {
+          list[i] = Object.assign({}, list[i], booking);
+          return list[i];
+        }
+      }
+      list.push(booking);
+      return booking;
+    }
+
+    function removeLocalBooking(id) {
+      appData.bookings = (appData.bookings || []).filter(function (b) {
+        return String(b.id) !== String(id);
+      });
+    }
+
+    function localBookingFromForm(obj, id, existing) {
+      const parts = String(obj.user || '').trim().replace(/\s+/g, ' ').split(' ');
+      const next = {
+        id: id,
+        plate: obj.plate,
+        name: parts[0] || '',
+        surname: parts.slice(1).join(' '),
+        dept: obj.dept || '',
+        start: obj.start,
+        end: obj.end,
+        dest: obj.dest || '',
+        driver: obj.driver || '',
+        userEmail: obj.originalEmail || (existing && existing.userEmail) || '',
+        startMile: obj.startMile,
+        endMile: obj.endMile,
+        parkingSpot: obj.parkingSpot || '',
+        contactPhone: obj.contactPhone || '',
+        _pending: !obj.id
+      };
+      if (existing) {
+        next.handoverParking = existing.handoverParking || '';
+        next.handoverBattery = existing.handoverBattery || '';
+        next.handoverRecipient = existing.handoverRecipient || '';
+        next.handoverAt = existing.handoverAt || '';
+      }
+      return next;
+    }
+
+    function applyLocalVehicleReturn(plate, endMile, parking) {
+      const mile = parseSearchReportMileNumber(endMile);
+      if (mile === null || mile <= 0) return null;
+      const car = (appData.vehicles || []).find(function (v) {
+        return String(v.plate).trim() === String(plate).trim();
+      });
+      if (!car) return null;
+      const prev = { currentMile: car.currentMile, parkingSpot: car.parkingSpot };
+      car.currentMile = mile;
+      if (parking) car.parkingSpot = parking;
+      return prev;
+    }
+
+    function restoreLocalVehicle(plate, prev) {
+      if (!prev) return;
+      const car = (appData.vehicles || []).find(function (v) {
+        return String(v.plate).trim() === String(plate).trim();
+      });
+      if (!car) return;
+      car.currentMile = prev.currentMile;
+      car.parkingSpot = prev.parkingSpot;
     }
 
     function initApp(data, fromCache) {
@@ -5195,10 +5311,26 @@
         if (!isConfirmed) return;
       }
       const btn = document.getElementById('bk-delete-btn'); btn.innerText = 'กำลังลบ...'; btn.disabled = true;
+      const snapshot = (appData.bookings || []).find(function (b) { return String(b.id) === String(id); });
+      const snapshotCopy = snapshot ? JSON.parse(JSON.stringify(snapshot)) : null;
+      removeLocalBooking(id);
+      bumpAppDataEpoch();
+      try { paintBookingSurfaces(); } catch (paintErr) { console.error(paintErr); }
+      window.closeModal('booking-modal');
+      resetCalendarDetailHint();
+      showToast('กำลังลบการจอง...');
       apiCall('deleteBooking', [id, reason]).then(res => {
-          showToast(res.msg, res.success);
-          if(res.success) { window.closeModal('booking-modal'); reloadAfterMutation(); resetCalendarDetailHint(); }
+          if (res.success) {
+            showToast(res.msg, true);
+            reloadAfterMutation();
+          } else {
+            if (snapshotCopy) upsertLocalBooking(snapshotCopy);
+            try { paintBookingSurfaces(); } catch (paintErr) { console.error(paintErr); }
+            showToast(res.msg, false);
+          }
         }).catch(function (err) {
+          if (snapshotCopy) upsertLocalBooking(snapshotCopy);
+          try { paintBookingSurfaces(); } catch (paintErr) { console.error(paintErr); }
           Swal.fire('ผิดพลาด', err.message || 'ลบการจองไม่สำเร็จ', 'error');
         }).finally(function () {
           btn.innerText = '🗑️ ลบการจองนี้'; btn.disabled = false;
@@ -5633,21 +5765,37 @@
         contactPhone: bk.contactPhone || '',
         skipLineNotify: true
       };
+      const mileageSnapshot = JSON.parse(JSON.stringify(bk));
+      bk.startMile = obj.startMile;
+      bk.endMile = obj.endMile;
+      bk.parkingSpot = obj.parkingSpot;
+      const vehiclePrev = applyLocalVehicleReturn(obj.plate, obj.endMile, obj.parkingSpot);
+      bumpAppDataEpoch();
+      try { paintBookingSurfaces(); } catch (paintErr) { console.error(paintErr); }
+      window.closeModal('mileage-modal');
+      showToast('กำลังบันทึกไมล์...');
       apiCall('saveBooking', [obj]).then(function (res) {
         if (res.success) {
           window._mileageSubmitAckKey = '';
           window._mileageNameAlertKey = '';
+          if (res.booking) upsertLocalBooking(Object.assign({}, res.booking, { _pending: false }));
           const booker = getBookingDisplayName(bk);
           if (!getPendingMileageBookingsForBooker(booker, bk.id).length) {
             clearMileageEscAttempt(booker);
           }
+          try { paintBookingSurfaces(); } catch (paintErr) { console.error(paintErr); }
           showToast(res.msg);
-          window.closeModal('mileage-modal');
           reloadAfterMutation();
         } else {
+          upsertLocalBooking(mileageSnapshot);
+          restoreLocalVehicle(obj.plate, vehiclePrev);
+          try { paintBookingSurfaces(); } catch (paintErr) { console.error(paintErr); }
           Swal.fire('ผิดพลาด', res.msg, 'error');
         }
       }).catch(function (err) {
+        upsertLocalBooking(mileageSnapshot);
+        restoreLocalVehicle(obj.plate, vehiclePrev);
+        try { paintBookingSurfaces(); } catch (paintErr) { console.error(paintErr); }
         Swal.fire('ผิดพลาด', err.message || 'บันทึกไมล์ไม่สำเร็จ', 'error');
       }).finally(function () {
         btn.disabled = false;
@@ -5850,20 +5998,45 @@
         obj.contactPhone = phoneDigits;
       }
 
+      const tempId = currId || ('PENDING_' + Date.now());
+      const existing = currId
+        ? (appData.bookings || []).find(function (b) { return String(b.id) === String(currId); })
+        : null;
+      const snapshot = existing ? JSON.parse(JSON.stringify(existing)) : null;
+      const localBk = localBookingFromForm(obj, tempId, existing);
+      if (!currId) localBk._pending = true;
+      upsertLocalBooking(localBk);
+      const vehiclePrev = applyLocalVehicleReturn(obj.plate, obj.endMile, obj.parkingSpot);
+      bumpAppDataEpoch();
+      try { paintBookingSurfaces(); } catch (paintErr) { console.error(paintErr); }
+      window.closeModal('booking-modal');
+      resetCalendarDetailHint();
+      showToast('กำลังบันทึกการจอง...');
+
       apiCall('saveBooking', [obj]).then(res => {
-        if(res.success) { 
-          showToast(res.msg); 
+        if (res.success) {
+          if (!currId) removeLocalBooking(tempId);
+          if (res.booking) upsertLocalBooking(Object.assign({}, res.booking, { _pending: false }));
+          else upsertLocalBooking(Object.assign({}, localBk, { id: tempId, _pending: false }));
+          try { paintBookingSurfaces(); } catch (paintErr) { console.error(paintErr); }
+          showToast(res.msg);
           showBookingLineNotifyFeedback(res.lineNotify);
-          window.closeModal('booking-modal'); 
-          reloadAfterMutation(); 
-          resetCalendarDetailHint();
+          reloadAfterMutation();
         } else {
+          if (!currId) removeLocalBooking(tempId);
+          else if (snapshot) upsertLocalBooking(snapshot);
+          restoreLocalVehicle(obj.plate, vehiclePrev);
+          try { paintBookingSurfaces(); } catch (paintErr) { console.error(paintErr); }
           Swal.fire('ผิดพลาด', res.msg, 'error');
         }
       }).catch(function (err) {
+        if (!currId) removeLocalBooking(tempId);
+        else if (snapshot) upsertLocalBooking(snapshot);
+        restoreLocalVehicle(obj.plate, vehiclePrev);
+        try { paintBookingSurfaces(); } catch (paintErr) { console.error(paintErr); }
         Swal.fire('ผิดพลาด', err.message || 'บันทึกการจองไม่สำเร็จ', 'error');
       }).finally(function () {
-        btn.innerText = 'บันทึกข้อมูล'; 
+        btn.innerText = 'บันทึกข้อมูล';
         btn.disabled = false;
       });
     };

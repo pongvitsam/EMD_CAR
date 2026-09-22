@@ -97,6 +97,16 @@
     }).then(handleFetchResponse);
   }
 
+  window.emdTakePrefetch = function (action, token) {
+    const pre = window.__emdPrefetch;
+    if (!pre || pre.action !== action || pre.token !== (token || '') || !pre.promise) return null;
+    window.__emdPrefetch = null;
+    return pre.promise.then(function (packed) {
+      if (!packed || !packed.ok) failHttp(packed ? packed.status : 0, packed && packed.text);
+      return parseResponse(packed.text);
+    });
+  };
+
   window.emdApiRequest = function (action, args, token) {
     const key = requestKey(action, args, token);
     if (inflight[key]) return inflight[key];

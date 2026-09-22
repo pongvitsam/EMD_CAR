@@ -182,6 +182,81 @@ function clearAppCache_() {
   cache.remove(LEGACY_APP_DATA_CACHE_KEY);
 }
 
+function readTable_(sheet, width) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 1) return [];
+  const cols = width || Math.max(sheet.getLastColumn(), 1);
+  return sheet.getRange(1, 1, lastRow, cols).getValues();
+}
+
+function mutateAppDataCache_(mutator) {
+  const cache = CacheService.getScriptCache();
+  const keys = [APP_DATA_CACHE_KEY, APP_DATA_CORE_CACHE_KEY];
+  let failed = false;
+  let updated = 0;
+  for (let k = 0; k < keys.length; k++) {
+    const key = keys[k];
+    const payload = readAppDataCache_(cache, key);
+    if (!payload) continue;
+    try {
+      mutator(payload);
+      if (key === APP_DATA_CORE_CACHE_KEY) payload.logs = [];
+      if (!writeAppDataCache_(cache, key, JSON.stringify(payload), CACHE_TTL_SEC)) failed = true;
+      else updated++;
+    } catch (err) {
+      failed = true;
+    }
+  }
+  try { cache.remove(APP_LOGS_CACHE_KEY); } catch (err) {}
+  if (failed) clearAppCache_();
+  return updated;
+}
+
+function upsertBookingCache_(booking, vehiclePatch) {
+  return mutateAppDataCache_(function (payload) {
+    const list = payload.bookings || [];
+    const id = String(booking && booking.id || '');
+    let found = false;
+    for (let i = 0; i < list.length; i++) {
+      if (String(list[i].id) === id) {
+        list[i] = Object.assign({}, list[i], booking);
+        found = true;
+        break;
+      }
+    }
+    if (!found) list.push(booking);
+    payload.bookings = list;
+    if (!vehiclePatch || !vehiclePatch.plate) return;
+    const vehicles = payload.vehicles || [];
+    for (let i = 0; i < vehicles.length; i++) {
+      if (String(vehicles[i].plate).trim() !== String(vehiclePatch.plate).trim()) continue;
+      if (vehiclePatch.currentMile != null && vehiclePatch.currentMile !== '') {
+        vehicles[i].currentMile = vehiclePatch.currentMile;
+      }
+      if (vehiclePatch.parkingSpot) vehicles[i].parkingSpot = vehiclePatch.parkingSpot;
+      break;
+    }
+  });
+}
+
+function withDataLock_(fn) {
+  const lock = LockService.getScriptLock();
+  try { lock.waitLock(12000); } catch (err) {}
+  try {
+    return fn();
+  } finally {
+    try { lock.releaseLock(); } catch (err) {}
+  }
+}
+
+function removeBookingCache_(id) {
+  return mutateAppDataCache_(function (payload) {
+    payload.bookings = (payload.bookings || []).filter(function (b) {
+      return String(b.id) !== String(id);
+    });
+  });
+}
+
 function putCacheSafe_(cache, key, value, ttlSec) {
   try {
     const text = String(value || '');
@@ -373,7 +448,22 @@ function resolveSessionRole_(token) {
 }
 
 function refreshSession_(token, role) {
-  writeSession_(token, role);
+  if (!token || !role) return;
+  const cache = CacheService.getScriptCache();
+  try {
+    cache.put(sessionCachePrefix_(role) + token, '1', SESSION_TTL_SEC);
+  } catch (err) {}
+  const stampKey = 'SESS_TOUCH_' + token;
+  try {
+    if (cache.get(stampKey)) return;
+  } catch (err) {}
+  try { cache.put(stampKey, '1', 1800); } catch (err) {}
+  try {
+    PropertiesService.getScriptProperties().setProperty(
+      SESSION_PROP_PREFIX + token,
+      JSON.stringify({ role: role, exp: Date.now() + (SESSION_TTL_SEC * 1000) })
+    );
+  } catch (err) {}
 }
 
 function pickRequestToken_(source) {
@@ -494,7 +584,25 @@ function getNameRows_() {
 }
 
 function getCurrentUserEmail_() {
-  return Session.getActiveUser().getEmail();
+  try {
+    const cache = CacheService.getScriptCache();
+    const cached = cache.get('OWNER_EMAIL_V1');
+    if (cached != null) return cached === '-' ? '' : cached;
+    const email = Session.getActiveUser().getEmail() || '';
+    try { cache.put('OWNER_EMAIL_V1', email || '-', 21600); } catch (err) {}
+    return email;
+  } catch (err) {
+    return '';
+  }
+}
+
+function getActionEmail_(role) {
+  const email = getCurrentUserEmail_();
+  if (email) return email;
+  if (role === 'ADMIN') return 'Admin';
+  if (role === 'COMPANY') return 'TC Company';
+  if (role === 'EMD') return 'EMD';
+  return 'Unknown User';
 }
 
 function attachCurrentUser_(payload) {
@@ -938,7 +1046,7 @@ function setupDatabase(ss) {
 }
 
 function buildAppPayload_(ss, includeLogs) {
-  const vData = getSheetOrThrow_(ss, 'Vehicles').getDataRange().getValues();
+  const vData = readTable_(getSheetOrThrow_(ss, 'Vehicles'), VEHICLE_HEADERS.length);
   const vehicles = vData.slice(1).map(r => ({
     id: r[0], plate: r[1], img: r[2], type: r[3], email: r[4], pass: r[5],
     serviceMile: parseFloat(r[6]) || 0, currentMile: parseFloat(r[7]) || 0,
@@ -958,7 +1066,7 @@ function buildAppPayload_(ss, includeLogs) {
 
   const vehicleGroups = getVehicleGroups_(ss);
 
-  const bDataVal = getSheetOrThrow_(ss, 'Bookings').getDataRange().getValues();
+  const bDataVal = readTable_(getSheetOrThrow_(ss, 'Bookings'), 18);
   const bookings = bDataVal.slice(1).map(r => ({
     id: r[0], plate: r[1], name: r[2], surname: r[3],
     dept: r[4], start: r[5], end: r[6], dest: r[7], driver: r[8],
@@ -970,13 +1078,13 @@ function buildAppPayload_(ss, includeLogs) {
     handoverAt: r[17] || ''
   }));
 
-  const nData = getSheetOrThrow_(ss, 'Name').getDataRange().getValues();
+  const nData = readTable_(getSheetOrThrow_(ss, 'Name'), 3);
   const names = nData.slice(1).map(r => ({ fullName: (r[0] || '') + ' ' + (r[1] || ''), dept: r[2] || '' }));
 
   let logs = [];
   if (includeLogs) logs = readLogsFromSheet_(ss);
 
-  const sData = getSheetOrThrow_(ss, 'Settings').getDataRange().getValues();
+  const sData = readTable_(getSheetOrThrow_(ss, 'Settings'), 3);
   let settings = { bannerStatus: 'OFF', bannerText: '', mileageReminderExempt: [], lineChannelAccessToken: '', lineGroupId: '', lineReminderMinutes: 180 };
   for (let i = 1; i < sData.length; i++) {
     if (sData[i][0] === 'BannerStatus') settings.bannerStatus = sData[i][1];
@@ -1004,7 +1112,7 @@ function parseMileageReminderExempt_(value) {
 }
 
 function readLogsFromSheet_(ss) {
-  const rawLogs = getSheetOrThrow_(ss, 'Logs').getDataRange().getValues();
+  const rawLogs = readTable_(getSheetOrThrow_(ss, 'Logs'), 7);
   return rawLogs.slice(1).slice(-100).map(r => ({
     timestamp: r[0], email: r[1], action: r[2], target: r[3], detail: r[4], reason: r[5] || '-', ip: r[6] || '-'
   })).reverse();
@@ -1737,22 +1845,114 @@ function deleteVehicle(id, mode, clientIp, token) {
   } catch(e) { return {success: false, msg: e.message}; }
 }
 
+function bookingRecordFromForm_(form, fname, lname, bookingId, contactPhone, startMileValue, endMileValue, bookingParking, userEmail, existingRow) {
+  return {
+    id: bookingId,
+    plate: form.plate,
+    name: fname,
+    surname: lname,
+    dept: form.dept || '',
+    start: form.start,
+    end: form.end,
+    dest: form.dest || '',
+    driver: form.driver || '',
+    userEmail: userEmail || '',
+    startMile: startMileValue,
+    endMile: endMileValue,
+    parkingSpot: bookingParking || '',
+    contactPhone: contactPhone || '',
+    handoverParking: existingRow ? (existingRow[14] || '') : '',
+    handoverBattery: existingRow ? (existingRow[15] || '') : '',
+    handoverRecipient: existingRow ? (existingRow[16] || '') : '',
+    handoverAt: existingRow ? (existingRow[17] || '') : ''
+  };
+}
+
+function loadCachedTables_() {
+  const cache = CacheService.getScriptCache();
+  return readAppDataCache_(cache, APP_DATA_CORE_CACHE_KEY) || readAppDataCache_(cache, APP_DATA_CACHE_KEY);
+}
+
+function bookingToRow_(b) {
+  b = b || {};
+  return [
+    b.id, b.plate, b.name, b.surname, b.dept, b.start, b.end, b.dest, b.driver,
+    b.userEmail, b.startMile, b.endMile, b.parkingSpot, b.contactPhone,
+    b.handoverParking, b.handoverBattery, b.handoverRecipient, b.handoverAt
+  ];
+}
+
+function vehicleToRow_(v) {
+  v = v || {};
+  const row = [];
+  row[0] = v.id;
+  row[1] = v.plate;
+  row[20] = v.managedBy;
+  row[21] = v.vehicleGroup;
+  return row;
+}
+
+function rowsFromPayload_(payload) {
+  return {
+    bData: [[]].concat((payload.bookings || []).map(bookingToRow_)),
+    vData: [[]].concat((payload.vehicles || []).map(vehicleToRow_))
+  };
+}
+
+function findSheetRowById_(sheet, id, col, hintRows) {
+  const want = String(id || '').trim();
+  if (!want || !sheet) return 0;
+  const maxRows = Math.max(sheet.getMaxRows(), 1);
+  const height = Math.min(Math.max(Number(hintRows) || 0, 2) + 20, maxRows);
+  const values = sheet.getRange(1, col, height, 1).getValues();
+  for (let i = 0; i < values.length; i++) {
+    if (String(values[i][0]).trim() === want) return i + 1;
+  }
+  if (height >= maxRows) return 0;
+  const cell = sheet.getRange(1, col, maxRows, 1).createTextFinder(want).matchEntireCell(true).findNext();
+  return cell ? cell.getRow() : 0;
+}
+
+function findSheetRowByPlate_(sheet, plate, hintRows) {
+  const want = normalizePlateKey_(plate);
+  if (!want || !sheet) return 0;
+  const maxRows = Math.max(sheet.getMaxRows(), 1);
+  const height = Math.min(Math.max(Number(hintRows) || 0, 2) + 10, maxRows);
+  const values = sheet.getRange(1, 2, height, 1).getValues();
+  for (let i = 0; i < values.length; i++) {
+    if (normalizePlateKey_(values[i][0]) === want) return i + 1;
+  }
+  return 0;
+}
+
 function saveBooking(form, clientIp, token) {
   try {
-    requireMutationAccess_(token);
-    const ss = getSpreadsheet_();
-    const bSheet = getSheetOrThrow_(ss, 'Bookings');
-    const bData = bSheet.getDataRange().getValues();
-    const ip = resolveClientIp_(clientIp, form);
-
+    const role = requireMutationAccess_(token);
     const newStart = parseTimeSafe_(form.start);
     const newEnd = parseTimeSafe_(form.end);
     if (!newStart || !newEnd || newStart >= newEnd) {
       return {success: false, msg: 'ช่วงเวลาเริ่ม/สิ้นสุดไม่ถูกต้อง'};
     }
 
-    const vSheet = getSheetOrThrow_(ss, 'Vehicles');
-    const vData = vSheet.getDataRange().getValues();
+    const ip = resolveClientIp_(clientIp, form);
+    const payload = loadCachedTables_();
+    let ss = null;
+    function spreadsheet_() {
+      if (!ss) ss = getSpreadsheet_();
+      return ss;
+    }
+
+    let bData;
+    let vData;
+    if (payload && Array.isArray(payload.bookings) && Array.isArray(payload.vehicles)) {
+      const rows = rowsFromPayload_(payload);
+      bData = rows.bData;
+      vData = rows.vData;
+    } else {
+      ss = getSpreadsheet_();
+      bData = readTable_(getSheetOrThrow_(ss, 'Bookings'), 18);
+      vData = readTable_(getSheetOrThrow_(ss, 'Vehicles'), VEHICLE_HEADERS.length);
+    }
 
     const groupValidation = validateVehicleGroupBooking_(form.plate, form.dept, form.dest);
     if (!groupValidation.success) return groupValidation;
@@ -1761,32 +1961,38 @@ function saveBooking(form, clientIp, token) {
     if (!phoneValidation.success) return phoneValidation;
     const contactPhone = phoneValidation.phone || '';
 
-    for(let i=1; i<bData.length; i++) {
-        if(String(bData[i][1]).trim() === String(form.plate).trim() && String(bData[i][0]).trim() !== String(form.id).trim()) {
-            
-            // ✨ เพิ่มเช็คการคืนรถ: ถ้ากรอกเลขไมล์คืนรถแล้ว ไม่นับว่าซ้ำซ้อน
-            const exEndMile = parseMileageNumberStrict_(bData[i][11]); // ไมล์หลังใช้ (Index 11)
-            if (exEndMile !== null && exEndMile > 0) continue;
-
-            const exStart = parseTimeSafe_(bData[i][5]);
-            const exEnd = parseTimeSafe_(bData[i][6]);
-            if(newStart < exEnd && newEnd > exStart) {
-                return {success: false, msg: 'มีการจองซ้ำซ้อน รถคันนี้ถูกจองในช่วงเวลานี้แล้วครับ'};
-            }
+    for (let i = 1; i < bData.length; i++) {
+      if (String(bData[i][1]).trim() === String(form.plate).trim() && String(bData[i][0]).trim() !== String(form.id).trim()) {
+        const exEndMile = parseMileageNumberStrict_(bData[i][11]);
+        if (exEndMile !== null && exEndMile > 0) continue;
+        const exStart = parseTimeSafe_(bData[i][5]);
+        const exEnd = parseTimeSafe_(bData[i][6]);
+        if (newStart < exEnd && newEnd > exStart) {
+          return {success: false, msg: 'มีการจองซ้ำซ้อน รถคันนี้ถูกจองในช่วงเวลานี้แล้วครับ'};
         }
+      }
     }
 
-    const logSheet = getSheetOrThrow_(ss, 'Logs');
-    const nSheet = getSheetOrThrow_(ss, 'Name');
-    const actionEmail = Session.getActiveUser().getEmail() || 'Unknown User';
-    
-    let nameParts = form.user.trim().split(' ');
-    let fname = nameParts[0] || '';
-    let lname = nameParts.slice(1).join(' ') || '';
+    const actionEmail = getActionEmail_(role);
+    const nameParts = String(form.user || '').trim().split(' ');
+    const fname = nameParts[0] || '';
+    const lname = nameParts.slice(1).join(' ') || '';
 
-    if (form.dept && form.dept.trim() !== '') {
-      const nData = nSheet.getDataRange().getValues().map(r => r[2]);
-      if (!nData.includes(form.dept)) nSheet.appendRow(['', '', form.dept]);
+    let addedDept = false;
+    const dept = String(form.dept || '').trim();
+    if (dept) {
+      const known = payload && (payload.names || []).some(function (n) {
+        return String(n.dept || '').trim() === dept;
+      });
+      if (!known) {
+        const nSheet = getSheetOrThrow_(spreadsheet_(), 'Name');
+        const lastNameRow = Math.max(nSheet.getLastRow(), 1);
+        const nData = nSheet.getRange(1, 3, lastNameRow, 1).getValues().map(function (r) { return r[0]; });
+        if (nData.indexOf(dept) === -1) {
+          nSheet.appendRow(['', '', dept]);
+          addedDept = true;
+        }
+      }
     }
 
     const mileageValidation = validateBookingMileage_(form, bData, newStart, newEnd);
@@ -1796,35 +2002,62 @@ function saveBooking(form, clientIp, token) {
     const endMileValue = mileageValidation.endMile;
     const hasPostTripMile = endMileValue !== '' && endMileValue > 0;
     const bookingParking = hasPostTripMile ? (form.parkingSpot || '').trim() : '';
-
-    for (let i = 1; i < vData.length; i++) {
-      if (String(vData[i][1]).trim() === String(form.plate).trim()) {
-        if (hasPostTripMile) {
-          vSheet.getRange(i + 1, 8).setValue(endMileValue);
-          if (bookingParking) vSheet.getRange(i + 1, 9).setValue(bookingParking);
-        }
-        break;
-      }
-    }
+    const vehiclePatch = hasPostTripMile
+      ? { plate: form.plate, currentMile: endMileValue, parkingSpot: bookingParking }
+      : null;
+    const bookingHint = (payload && payload.bookings ? payload.bookings.length : bData.length);
+    const vehicleHint = (payload && payload.vehicles ? payload.vehicles.length : vData.length);
 
     if (form.id) {
+      let existingRow = null;
       for (let i = 1; i < bData.length; i++) {
         if (String(bData[i][0]).trim() === String(form.id).trim()) {
-          bSheet.getRange(i + 1, 2, 1, 13).setValues([[form.plate, fname, lname, form.dept, "'" + form.start, "'" + form.end, form.dest, form.driver, form.originalEmail, startMileValue, endMileValue, bookingParking, contactPhone]]);
-          clearAppCache_();
-          appendLogRow_(logSheet, actionEmail, 'UPDATE_BOOKING', form.plate, `แก้ไข/คืนรถ (จุดจอด: ${bookingParking || '-'}, ไมล์: ${startMileValue || '-'} -> ${endMileValue || '-'}, โทร: ${contactPhone || '-'})`, form.editReason || '-', ip);
-          const lineNotify = notifyCompanyBookingLine_(ss, 'UPDATE', buildBookingNotifyObject_(form, fname, lname, form.id, contactPhone), { skip: form.skipLineNotify, vData: vData });
-          return { success: true, msg: 'อัปเดตการจองและจุดจอดเรียบร้อยครับ', lineNotify: lineNotify };
+          existingRow = bData[i];
+          break;
         }
       }
-    } else {
-      const newBookingId = 'B_' + new Date().getTime();
-      bSheet.appendRow([newBookingId, form.plate, fname, lname, form.dept, "'" + form.start, "'" + form.end, form.dest, form.driver, actionEmail, startMileValue, endMileValue, bookingParking, contactPhone]);
-      clearAppCache_();
-      appendLogRow_(logSheet, actionEmail, 'CREATE_BOOKING', form.plate, `จองไป ${form.dest} (โทร: ${contactPhone || '-'})`, '-', ip);
-      const lineNotify = notifyCompanyBookingLine_(ss, 'NEW', buildBookingNotifyObject_(form, fname, lname, newBookingId, contactPhone), { vData: vData });
-      return { success: true, msg: 'บันทึกการจองสำเร็จครับ', lineNotify: lineNotify };
+      if (!existingRow) return { success: false, msg: 'ไม่พบรหัสการจองนี้ในระบบ' };
+      const saved = bookingRecordFromForm_(form, fname, lname, form.id, contactPhone, startMileValue, endMileValue, bookingParking, form.originalEmail || existingRow[9], existingRow);
+      const bSheet = getSheetOrThrow_(spreadsheet_(), 'Bookings');
+      const vSheet = getSheetOrThrow_(spreadsheet_(), 'Vehicles');
+      withDataLock_(function () {
+        const sheetRow = findSheetRowById_(bSheet, form.id, 1, bookingHint);
+        if (!sheetRow) throw new Error('ไม่พบรหัสการจองนี้ในระบบ');
+        if (hasPostTripMile) {
+          const vRow = findSheetRowByPlate_(vSheet, form.plate, vehicleHint);
+          if (vRow) {
+            vSheet.getRange(vRow, 8).setValue(endMileValue);
+            if (bookingParking) vSheet.getRange(vRow, 9).setValue(bookingParking);
+          }
+        }
+        bSheet.getRange(sheetRow, 2, 1, 13).setValues([[form.plate, fname, lname, form.dept, "'" + form.start, "'" + form.end, form.dest, form.driver, form.originalEmail, startMileValue, endMileValue, bookingParking, contactPhone]]);
+        if (addedDept) clearAppCache_();
+        else upsertBookingCache_(saved, vehiclePatch);
+      });
+      appendLogRow_(getSheetOrThrow_(spreadsheet_(), 'Logs'), actionEmail, 'UPDATE_BOOKING', form.plate, 'แก้ไข/คืนรถ (จุดจอด: ' + (bookingParking || '-') + ', ไมล์: ' + (startMileValue || '-') + ' -> ' + (endMileValue || '-') + ', โทร: ' + (contactPhone || '-') + ')', form.editReason || '-', ip);
+      const lineNotify = notifyCompanyBookingLine_(spreadsheet_(), 'UPDATE', buildBookingNotifyObject_(form, fname, lname, form.id, contactPhone), { skip: form.skipLineNotify, vData: vData });
+      return { success: true, msg: 'อัปเดตการจองและจุดจอดเรียบร้อยครับ', booking: saved, lineNotify: lineNotify };
     }
+
+    const newBookingId = 'B_' + new Date().getTime();
+    const saved = bookingRecordFromForm_(form, fname, lname, newBookingId, contactPhone, startMileValue, endMileValue, bookingParking, actionEmail, null);
+    const bSheet = getSheetOrThrow_(spreadsheet_(), 'Bookings');
+    const vSheet = getSheetOrThrow_(spreadsheet_(), 'Vehicles');
+    withDataLock_(function () {
+      if (hasPostTripMile) {
+        const vRow = findSheetRowByPlate_(vSheet, form.plate, vehicleHint);
+        if (vRow) {
+          vSheet.getRange(vRow, 8).setValue(endMileValue);
+          if (bookingParking) vSheet.getRange(vRow, 9).setValue(bookingParking);
+        }
+      }
+      bSheet.appendRow([newBookingId, form.plate, fname, lname, form.dept, "'" + form.start, "'" + form.end, form.dest, form.driver, actionEmail, startMileValue, endMileValue, bookingParking, contactPhone]);
+      if (addedDept) clearAppCache_();
+      else upsertBookingCache_(saved, vehiclePatch);
+    });
+    appendLogRow_(getSheetOrThrow_(spreadsheet_(), 'Logs'), actionEmail, 'CREATE_BOOKING', form.plate, 'จองไป ' + form.dest + ' (โทร: ' + (contactPhone || '-') + ')', '-', ip);
+    const lineNotify = notifyCompanyBookingLine_(spreadsheet_(), 'NEW', buildBookingNotifyObject_(form, fname, lname, newBookingId, contactPhone), { vData: vData });
+    return { success: true, msg: 'บันทึกการจองสำเร็จครับ', booking: saved, lineNotify: lineNotify };
   } catch (error) { return {success: false, msg: error.message}; }
 }
 
@@ -1884,7 +2117,23 @@ function recordVehicleHandover(form, clientIp, token) {
       }
     }
 
-    clearAppCache_();
+    mutateAppDataCache_(function (payload) {
+      const list = payload.bookings || [];
+      for (let i = 0; i < list.length; i++) {
+        if (String(list[i].id) !== bookingId) continue;
+        list[i].handoverParking = parking;
+        list[i].handoverBattery = battery;
+        list[i].handoverRecipient = recipient;
+        list[i].handoverAt = handoverAt;
+        break;
+      }
+      const vehicles = payload.vehicles || [];
+      for (let i = 0; i < vehicles.length; i++) {
+        if (normalizePlateKey_(vehicles[i].plate) !== normalizePlateKey_(plate)) continue;
+        vehicles[i].parkingSpot = parking;
+        break;
+      }
+    });
     const ip = resolveClientIp_(clientIp, form);
     const logSheet = getSheetOrThrow_(ss, 'Logs');
     appendLogRow_(logSheet, 'TC Company', isEdit ? 'HANDOVER_EDIT' : 'HANDOVER', plate,
@@ -1928,43 +2177,58 @@ function deleteBooking(id, reason, clientIp, token) {
     id = p.id;
   }
   try {
-    requireMutationAccess_(token);
+    const role = requireMutationAccess_(token);
+    const actionEmail = getActionEmail_(role);
+    const ip = sanitizeClientIp_(clientIp);
+    const payload = loadCachedTables_();
+    let row = null;
+    if (payload && Array.isArray(payload.bookings)) {
+      const found = payload.bookings.find(function (b) { return String(b.id) === String(id); });
+      if (found) row = bookingToRow_(found);
+    }
     const ss = getSpreadsheet_();
     const bSheet = getSheetOrThrow_(ss, 'Bookings');
-    const data = bSheet.getDataRange().getValues();
-    const actionEmail = Session.getActiveUser().getEmail() || 'Unknown User';
-    const ip = sanitizeClientIp_(clientIp);
-    
-    for (let i = 1; i < data.length; i++) {
-      if (data[i][0] == id) {
-        const plate = data[i][1];
-        const dest = data[i][7];
-        const startMs = parseTimeSafe_(data[i][5]);
-        const isPast = startMs && startMs < Date.now();
-        const reasonText = String(reason || '').trim();
-        if (isPast && !reasonText) {
-          return { success: false, msg: 'การจองนี้ผ่านวันเวลาแล้ว กรุณาระบุเหตุผลในการลบ' };
+    if (!row) {
+      const data = readTable_(bSheet, 18);
+      for (let i = 1; i < data.length; i++) {
+        if (String(data[i][0]) === String(id)) {
+          row = data[i];
+          break;
         }
-        const bookingNotify = {
-          id: data[i][0],
-          plate: data[i][1],
-          name: data[i][2],
-          surname: data[i][3],
-          dept: data[i][4],
-          start: data[i][5],
-          end: data[i][6],
-          dest: data[i][7],
-          driver: data[i][8],
-          contactPhone: data[i][13] || ''
-        };
-        bSheet.deleteRow(i + 1);
-        clearAppCache_();
-        appendLogRow_(getSheetOrThrow_(ss, 'Logs'), actionEmail, 'DELETE_BOOKING', plate, `ลบการจองไป ${dest}`, reasonText || 'ผู้ใช้กดยกเลิก/ลบการจอง', ip);
-        notifyCompanyBookingLine_(ss, 'DELETE', bookingNotify);
-        return {success: true, msg: 'ลบข้อมูลการจองเรียบร้อยแล้วครับ'};
       }
     }
-    return {success: false, msg: 'ไม่พบรหัสการจองนี้ในระบบ'};
+    if (!row) return {success: false, msg: 'ไม่พบรหัสการจองนี้ในระบบ'};
+
+    const plate = row[1];
+    const dest = row[7];
+    const startMs = parseTimeSafe_(row[5]);
+    const isPast = startMs && startMs < Date.now();
+    const reasonText = String(reason || '').trim();
+    if (isPast && !reasonText) {
+      return { success: false, msg: 'การจองนี้ผ่านวันเวลาแล้ว กรุณาระบุเหตุผลในการลบ' };
+    }
+    const bookingNotify = {
+      id: row[0],
+      plate: row[1],
+      name: row[2],
+      surname: row[3],
+      dept: row[4],
+      start: row[5],
+      end: row[6],
+      dest: row[7],
+      driver: row[8],
+      contactPhone: row[13] || ''
+    };
+    const hint = payload && payload.bookings ? payload.bookings.length : 0;
+    withDataLock_(function () {
+      const sheetRow = findSheetRowById_(bSheet, id, 1, hint || bSheet.getLastRow());
+      if (!sheetRow) throw new Error('ไม่พบรหัสการจองนี้ในระบบ');
+      bSheet.deleteRow(sheetRow);
+      removeBookingCache_(row[0]);
+    });
+    appendLogRow_(getSheetOrThrow_(ss, 'Logs'), actionEmail, 'DELETE_BOOKING', plate, 'ลบการจองไป ' + dest, reasonText || 'ผู้ใช้กดยกเลิก/ลบการจอง', ip);
+    notifyCompanyBookingLine_(ss, 'DELETE', bookingNotify, payload ? { vData: rowsFromPayload_(payload).vData } : undefined);
+    return {success: true, msg: 'ลบข้อมูลการจองเรียบร้อยแล้วครับ'};
   } catch(e) { return {success: false, msg: e.message}; }
 }
 
