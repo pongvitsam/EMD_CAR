@@ -839,8 +839,15 @@
           </div>
         </div>
 
+        <div id="bk-demo-car-wrap" class="hidden bg-slate-100 dark:bg-slate-700/50 p-4 rounded-xl border border-slate-300 dark:border-slate-600">
+          <label class="flex items-start gap-2 cursor-pointer">
+            <input type="checkbox" id="bk-demo-car" class="rounded text-slate-500 mt-1" onchange="window.syncDemoCarBookingFields()">
+            <span class="text-sm font-medium text-slate-700 dark:text-slate-200">DEMO CAR — แสดงให้บริษัทเห็นเท่านั้น<br><span class="text-xs font-normal text-slate-500">กองไม่เห็น · บริษัทเห็นว่ามีคนใช้รถ · คนอื่นจองช่วงเดียวกันได้ตามปกติ · ไม่ต้องกรอกจุดหมาย/เบอร์ · Admin เห็นสีเทา · ไม่แจ้ง LINE</span></span>
+          </label>
+        </div>
+
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div><label class="block text-sm font-medium mb-1">จุดหมาย</label><input type="text" id="bk-dest" required class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600"></div>
+          <div id="bk-dest-wrap"><label class="block text-sm font-medium mb-1">จุดหมาย</label><input type="text" id="bk-dest" required class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600"></div>
           <div><label class="block text-sm font-medium mb-1">ผู้ขับขี่</label>
             <div class="emd-combobox">
               <input type="text" id="bk-driver" onfocus="window.showBookingCombobox('bk-driver')" required autocomplete="off" class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600">
@@ -849,12 +856,6 @@
           </div>
         </div>
 
-        <div id="bk-demo-car-wrap" class="hidden bg-slate-100 dark:bg-slate-700/50 p-4 rounded-xl border border-slate-300 dark:border-slate-600">
-          <label class="flex items-start gap-2 cursor-pointer">
-            <input type="checkbox" id="bk-demo-car" class="rounded text-slate-500 mt-1">
-            <span class="text-sm font-medium text-slate-700 dark:text-slate-200">DEMO CAR — แสดงให้บริษัทเห็นว่าใช้งาน<br><span class="text-xs font-normal text-slate-500">กองไม่เห็น · บริษัทเห็นว่ามีคนใช้รถ · คนอื่นจองช่วงเดียวกันได้ตามปกติ · Admin เห็นสีเทา · ไม่แจ้ง LINE</span></span>
-          </label>
-        </div>
         <div id="bk-phone-wrap" class="hidden bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl border border-blue-200 dark:border-blue-800/40">
           <label class="block text-sm font-medium mb-1 text-blue-700 dark:text-blue-300">📞 เบอร์โทรติดต่อ <span class="text-red-500">*</span></label>
           <input type="tel" id="bk-phone" inputmode="tel" autocomplete="tel" placeholder="08x-xxx-xxxx" class="w-full px-3 py-2 rounded-lg border outline-none dark:bg-slate-700 dark:border-slate-600">
@@ -5207,16 +5208,32 @@
       return car && (car.vehicleGroup || 'ALL') !== 'ALL';
     }
 
+    function isDemoCarCheckboxChecked() {
+      return !!(isAdmin && document.getElementById('bk-demo-car') && document.getElementById('bk-demo-car').checked);
+    }
+
     function syncBookingPhoneField() {
       const wrap = document.getElementById('bk-phone-wrap');
       const input = document.getElementById('bk-phone');
       const plate = document.getElementById('bk-plate').value;
       if (!wrap || !input) return;
-      const needPhone = requiresBookingPhoneForPlate(plate);
+      const needPhone = requiresBookingPhoneForPlate(plate) && !isDemoCarCheckboxChecked();
       wrap.classList.toggle('hidden', !needPhone);
       input.required = needPhone;
       if (!needPhone) input.value = '';
     }
+
+    window.syncDemoCarBookingFields = function () {
+      const isDemo = isDemoCarCheckboxChecked();
+      const destWrap = document.getElementById('bk-dest-wrap');
+      const destInput = document.getElementById('bk-dest');
+      if (destWrap) destWrap.classList.toggle('hidden', isDemo);
+      if (destInput) {
+        destInput.required = !isDemo;
+        if (isDemo) destInput.value = '';
+      }
+      syncBookingPhoneField();
+    };
 
     window.updateCarImage = function() {
       const car = appData.vehicles.find(v => v.plate === document.getElementById('bk-plate').value);
@@ -5442,6 +5459,7 @@
       const demoCb = document.getElementById('bk-demo-car');
       if (demoWrap) demoWrap.classList.toggle('hidden', !isAdmin);
       if (demoCb) demoCb.checked = false;
+      window.syncDemoCarBookingFields();
       document.getElementById('bk-submit-btn').disabled = true;
 
       const fpStart = document.getElementById('bk-start')._flatpickr;
@@ -5480,6 +5498,7 @@
           document.getElementById('bk-plate').value = bk.plate; 
           window.updateCarImage();
           if (demoCb) demoCb.checked = !!(bk.demoCar || bk.fakeTc);
+          window.syncDemoCarBookingFields();
         }
       }
       document.getElementById('booking-modal').style.display = 'flex';
@@ -6201,6 +6220,10 @@
       obj.contactPhone = document.getElementById('bk-phone').value || '';
       obj.demoCar = !!(isAdmin && document.getElementById('bk-demo-car') && document.getElementById('bk-demo-car').checked);
       obj.fakeTc = obj.demoCar;
+      if (obj.demoCar) {
+        obj.dest = '';
+        obj.contactPhone = '';
+      }
 
       if (!obj.demoCar && requiresBookingPhoneForPlate(plate)) {
         const phoneDigits = String(obj.contactPhone).replace(/\D/g, '');
@@ -6212,7 +6235,6 @@
         }
         obj.contactPhone = phoneDigits;
       }
-      if (obj.demoCar) obj.contactPhone = '';
 
       const tempId = currId || ('PENDING_' + Date.now());
       const existing = currId
