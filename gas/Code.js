@@ -8,6 +8,7 @@ const LEGACY_APP_DATA_CACHE_KEY = 'APP_DATA_V1';
 const SCHEMA_READY_CACHE_KEY = 'SCHEMA_READY_V5';
 const DEMO_CAR_BOOKER_NAME = 'พนักงานการไฟฟ้า';
 const DEMO_CAR_CALENDAR_COLOR = '#9ca3af';
+const COMPANY_CALENDAR_ONLY_DEST = 'งาน กปภ.';
 const CACHE_TTL_SEC = 600;
 const LOGS_CACHE_TTL_SEC = 180;
 const CACHE_ITEM_MAX = 90000;
@@ -543,35 +544,55 @@ function filterPayloadForCompany_(payload) {
     };
   });
   const companyPlates = {};
+  const lineNotifyPlates = {};
   vehicles.forEach(function (v) {
-    companyPlates[normalizePlateKey_(v.plate)] = true;
+    const key = normalizePlateKey_(v.plate);
+    companyPlates[key] = true;
+    if (v.tcLineNotify) lineNotifyPlates[key] = true;
   });
   const bookings = (payload.bookings || []).filter(function (b) {
     if (!companyPlates[normalizePlateKey_(b.plate)]) return false;
     const startMs = parseTimeSafe_(b.start);
     return startMs && startMs >= companyVisibleFromMs;
   }).map(function (b) {
-    if (!isDemoCarBooking_(b)) return b;
-    return {
-      id: b.id,
-      plate: b.plate,
-      name: DEMO_CAR_BOOKER_NAME,
-      surname: '',
-      dept: '',
-      start: b.start,
-      end: b.end,
-      dest: '',
-      driver: DEMO_CAR_BOOKER_NAME,
-      userEmail: '',
-      startMile: '',
-      endMile: '',
-      parkingSpot: '',
-      contactPhone: '',
-      handoverParking: '',
-      handoverBattery: '',
-      handoverRecipient: '',
-      handoverAt: ''
-    };
+    if (isDemoCarBooking_(b)) {
+      return {
+        id: b.id,
+        plate: b.plate,
+        name: DEMO_CAR_BOOKER_NAME,
+        surname: '',
+        dept: '',
+        start: b.start,
+        end: b.end,
+        dest: '',
+        driver: DEMO_CAR_BOOKER_NAME,
+        userEmail: '',
+        startMile: '',
+        endMile: '',
+        parkingSpot: '',
+        contactPhone: '',
+        handoverParking: '',
+        handoverBattery: '',
+        handoverRecipient: '',
+        handoverAt: ''
+      };
+    }
+    if (!lineNotifyPlates[normalizePlateKey_(b.plate)]) {
+      return Object.assign({}, b, {
+        surname: '',
+        dest: COMPANY_CALENDAR_ONLY_DEST,
+        contactPhone: '',
+        userEmail: '',
+        startMile: '',
+        endMile: '',
+        parkingSpot: '',
+        handoverParking: '',
+        handoverBattery: '',
+        handoverRecipient: '',
+        handoverAt: ''
+      });
+    }
+    return b;
   });
   const companyGroupIds = {};
   vehicles.forEach(function (v) {
