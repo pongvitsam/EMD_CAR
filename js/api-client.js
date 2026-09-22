@@ -45,7 +45,9 @@
   function failHttp(status, text) {
     const body = String(text || '');
     if (status === 411 || /411/.test(body)) {
-      throw new Error('คำขอ POST ไม่สมบูรณ์ (411) — ระบบจะใช้ GET แทน กรุณารีเฟรชหน้าเว็บ');
+      const err = new Error('คำขอ POST ไม่สมบูรณ์ (411)');
+      err.code = 411;
+      throw err;
     }
     if (status === 502 || /502/.test(body)) {
       throw new Error('เซิร์ฟเวอร์ Google ชั่วคราวไม่พร้อม (502) — ลองใหม่อีกครั้ง');
@@ -61,6 +63,25 @@
       if (!res.ok) failHttp(res.status, text);
       return parseResponse(text);
     });
+  }
+
+  function isTransientNetworkError(err) {
+    if (!err) return false;
+    if (err.code === 411) return true;
+    const msg = String(err.message || err.name || '').toLowerCase();
+    return (
+      err.name === 'TypeError' ||
+      msg.indexOf('failed to fetch') !== -1 ||
+      msg.indexOf('network') !== -1 ||
+      msg.indexOf('connection') !== -1 ||
+      msg.indexOf('err_connection') !== -1 ||
+      msg.indexOf('load failed') !== -1 ||
+      msg.indexOf('411') !== -1
+    );
+  }
+
+  function delay(ms) {
+    return new Promise(function (resolve) { setTimeout(resolve, ms); });
   }
 
   function requestKey(action, args, token) {
@@ -97,6 +118,13 @@
     }).then(handleFetchResponse);
   }
 
+  function withRetry(fn, retries) {
+    return fn().catch(function (err) {
+      if (retries <= 0 || !isTransientNetworkError(err)) throw err;
+      return delay(450).then(function () { return withRetry(fn, retries - 1); });
+    });
+  }
+
   window.emdTakePrefetch = function (action, token) {
     const pre = window.__emdPrefetch;
     if (!pre || pre.action !== action || pre.token !== (token || '') || !pre.promise) return null;
@@ -116,9 +144,26 @@
 
     const qs = buildQuery(action, args, token);
     const fullLen = url.length + 1 + qs.toString().length;
-    const run = fullLen < MAX_GET_URL_LEN
-      ? emdApiGet(action, args, token)
-      : emdApiPost(action, args, token);
+    const isMutation = MUTATION_ACTIONS.has(action);
+    const canGet = fullLen < MAX_GET_URL_LEN;
+
+    let run;
+    if (isMutation) {
+      // Mutations: POST first (more reliable for Apps Script), fall back to GET if needed
+      run = withRetry(function () { return emdApiPost(action, args, token); }, 1)
+        .catch(function (err) {
+          if (!canGet || !isTransientNetworkError(err)) throw err;
+          return withRetry(function () { return emdApiGet(action, args, token); }, 1);
+        });
+    } else if (canGet) {
+      run = withRetry(function () { return emdApiGet(action, args, token); }, 1)
+        .catch(function (err) {
+          if (!isTransientNetworkError(err)) throw err;
+          return emdApiPost(action, args, token);
+        });
+    } else {
+      run = withRetry(function () { return emdApiPost(action, args, token); }, 1);
+    }
 
     inflight[key] = run.finally(function () {
       delete inflight[key];

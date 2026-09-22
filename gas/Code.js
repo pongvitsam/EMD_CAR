@@ -1073,7 +1073,9 @@ function jsonOutput_(obj) {
 }
 
 function sanitizeClientIp_(ip) {
-  const s = String(ip || '').trim();
+  let s = String(ip || '').trim();
+  const ipv4Port = s.match(/^(\d{1,3}(?:\.\d{1,3}){3}):\d+$/);
+  if (ipv4Port) s = ipv4Port[1];
   if (!s || s.length > 45) return '-';
   if (!/^[\d.a-fA-F:]+$/.test(s)) return '-';
   return s;
