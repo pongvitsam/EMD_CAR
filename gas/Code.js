@@ -6,8 +6,8 @@ const APP_DATA_CORE_CACHE_KEY = 'APP_DATA_CORE_V5';
 const APP_LOGS_CACHE_KEY = 'APP_LOGS_V1';
 const LEGACY_APP_DATA_CACHE_KEY = 'APP_DATA_V1';
 const SCHEMA_READY_CACHE_KEY = 'SCHEMA_READY_V5';
-const FAKE_TC_BOOKER_NAME = 'พนักงานการไฟฟ้า';
-const FAKE_TC_CALENDAR_COLOR = '#9ca3af';
+const DEMO_CAR_BOOKER_NAME = 'พนักงานการไฟฟ้า';
+const DEMO_CAR_CALENDAR_COLOR = '#9ca3af';
 const CACHE_TTL_SEC = 600;
 const LOGS_CACHE_TTL_SEC = 180;
 const CACHE_ITEM_MAX = 90000;
@@ -551,17 +551,17 @@ function filterPayloadForCompany_(payload) {
     const startMs = parseTimeSafe_(b.start);
     return startMs && startMs >= companyVisibleFromMs;
   }).map(function (b) {
-    if (!isFakeTcBooking_(b)) return b;
+    if (!isDemoCarBooking_(b)) return b;
     return {
       id: b.id,
       plate: b.plate,
-      name: FAKE_TC_BOOKER_NAME,
+      name: DEMO_CAR_BOOKER_NAME,
       surname: '',
       dept: '',
       start: b.start,
       end: b.end,
       dest: '',
-      driver: FAKE_TC_BOOKER_NAME,
+      driver: DEMO_CAR_BOOKER_NAME,
       userEmail: '',
       startMile: '',
       endMile: '',
@@ -597,7 +597,7 @@ function filterPayloadForCompany_(payload) {
 
 function filterFakeBookingsFromEmd_(payload) {
   const bookings = (payload.bookings || []).filter(function (b) {
-    return !isFakeTcBooking_(b);
+    return !isDemoCarBooking_(b);
   });
   return Object.assign({}, payload, { bookings: bookings });
 }
@@ -668,13 +668,20 @@ function toYesNo_(enabled) {
   return enabled ? 'YES' : 'NO';
 }
 
-function isFakeTcBooking_(bookingOrRow) {
+function isDemoCarBooking_(bookingOrRow) {
   if (!bookingOrRow) return false;
+  if (Object.prototype.hasOwnProperty.call(bookingOrRow, 'demoCar')) {
+    return bookingOrRow.demoCar === true || parseYesNoFlag_(bookingOrRow.demoCar, false);
+  }
   if (Object.prototype.hasOwnProperty.call(bookingOrRow, 'fakeTc')) {
     return bookingOrRow.fakeTc === true || parseYesNoFlag_(bookingOrRow.fakeTc, false);
   }
   if (Array.isArray(bookingOrRow)) return parseYesNoFlag_(bookingOrRow[18], false);
-  return parseYesNoFlag_(bookingOrRow.fakeTc, false);
+  return parseYesNoFlag_(bookingOrRow.demoCar || bookingOrRow.fakeTc, false);
+}
+
+function isFakeTcBooking_(bookingOrRow) {
+  return isDemoCarBooking_(bookingOrRow);
 }
 
 function ensureVehiclesSheet_(ss) {
@@ -813,7 +820,7 @@ function ensureBookingsHandoverColumns_(ss) {
 function ensureBookingsExtraColumns_(ss) {
   const sheet = ss.getSheetByName('Bookings');
   if (!sheet) return;
-  const extra = ['เบอร์ติดต่อ', 'จุดจอดส่งมอบ', 'แบตส่งมอบ', 'ผู้รับกุญแจ', 'เวลาส่งมอบ', 'FakeTc'];
+  const extra = ['เบอร์ติดต่อ', 'จุดจอดส่งมอบ', 'แบตส่งมอบ', 'ผู้รับกุญแจ', 'เวลาส่งมอบ', 'DemoCar'];
   const current = sheet.getRange(1, 14, 1, extra.length).getValues()[0];
   let changed = false;
   const next = extra.map(function (h, i) {
@@ -1171,7 +1178,8 @@ function buildAppPayload_(ss, includeLogs) {
     handoverBattery: r[15] || '',
     handoverRecipient: r[16] || '',
     handoverAt: r[17] || '',
-    fakeTc: parseYesNoFlag_(r[18], false)
+    fakeTc: parseYesNoFlag_(r[18], false),
+    demoCar: parseYesNoFlag_(r[18], false)
   }));
 
   const nData = readTable_(getSheetOrThrow_(ss, 'Name'), 3);
@@ -1967,8 +1975,10 @@ function deleteVehicle(id, mode, clientIp, token) {
 }
 
 function bookingRecordFromForm_(form, fname, lname, bookingId, contactPhone, startMileValue, endMileValue, bookingParking, userEmail, existingRow) {
-  const fakeTc = !!(form && (form.fakeTc === true || form.fakeTc === 'YES' || form.fakeTc === 'true' || form.fakeTc === 1 || form.fakeTc === '1'))
-    || isFakeTcBooking_(existingRow);
+  const demoCar = !!(form && (
+    form.demoCar === true || form.demoCar === 'YES' || form.demoCar === 'true' || form.demoCar === 1 || form.demoCar === '1' ||
+    form.fakeTc === true || form.fakeTc === 'YES' || form.fakeTc === 'true' || form.fakeTc === 1 || form.fakeTc === '1'
+  )) || isDemoCarBooking_(existingRow);
   return {
     id: bookingId,
     plate: form.plate,
@@ -1988,7 +1998,8 @@ function bookingRecordFromForm_(form, fname, lname, bookingId, contactPhone, sta
     handoverBattery: existingRow ? (existingRow[15] || existingRow.handoverBattery || '') : '',
     handoverRecipient: existingRow ? (existingRow[16] || existingRow.handoverRecipient || '') : '',
     handoverAt: existingRow ? (existingRow[17] || existingRow.handoverAt || '') : '',
-    fakeTc: fakeTc
+    demoCar: demoCar,
+    fakeTc: demoCar
   };
 }
 
@@ -2003,7 +2014,7 @@ function bookingToRow_(b) {
     b.id, b.plate, b.name, b.surname, b.dept, b.start, b.end, b.dest, b.driver,
     b.userEmail, b.startMile, b.endMile, b.parkingSpot, b.contactPhone,
     b.handoverParking, b.handoverBattery, b.handoverRecipient, b.handoverAt,
-    isFakeTcBooking_(b) ? 'YES' : 'NO'
+    isDemoCarBooking_(b) ? 'YES' : 'NO'
   ];
 }
 
@@ -2080,9 +2091,12 @@ function saveBooking(form, clientIp, token) {
       vData = readTable_(getSheetOrThrow_(ss, 'Vehicles'), VEHICLE_HEADERS.length);
     }
 
-    const wantFakeTc = !!(form && (form.fakeTc === true || form.fakeTc === 'YES' || form.fakeTc === 'true' || form.fakeTc === 1 || form.fakeTc === '1'));
-    if (wantFakeTc && role !== 'ADMIN') {
-      return { success: false, msg: 'เฉพาะ Admin เท่านั้นที่จองแบบ FAKE TC ได้' };
+    const wantDemoCar = !!(form && (
+      form.demoCar === true || form.demoCar === 'YES' || form.demoCar === 'true' || form.demoCar === 1 || form.demoCar === '1' ||
+      form.fakeTc === true || form.fakeTc === 'YES' || form.fakeTc === 'true' || form.fakeTc === 1 || form.fakeTc === '1'
+    ));
+    if (wantDemoCar && role !== 'ADMIN') {
+      return { success: false, msg: 'เฉพาะ Admin เท่านั้นที่จองแบบ DEMO CAR ได้' };
     }
     const plateIsCompanyVisible = (function () {
       for (let i = 1; i < vData.length; i++) {
@@ -2092,15 +2106,15 @@ function saveBooking(form, clientIp, token) {
       }
       return false;
     })();
-    if (wantFakeTc && !plateIsCompanyVisible) {
-      return { success: false, msg: 'FAKE TC ใช้ได้เฉพาะรถที่เปิดให้บริษัท (TC) เห็นในปฏิทิน' };
+    if (wantDemoCar && !plateIsCompanyVisible) {
+      return { success: false, msg: 'DEMO CAR ใช้ได้เฉพาะรถที่เปิดให้บริษัท (TC) เห็นในปฏิทิน' };
     }
 
     const groupValidation = validateVehicleGroupBooking_(form.plate, form.dept, form.dest);
     if (!groupValidation.success) return groupValidation;
 
     let contactPhone = '';
-    if (!wantFakeTc) {
+    if (!wantDemoCar) {
       const phoneValidation = validateBookingPhone_(form.plate, form.contactPhone, vData);
       if (!phoneValidation.success) return phoneValidation;
       contactPhone = phoneValidation.phone || '';
@@ -2163,9 +2177,14 @@ function saveBooking(form, clientIp, token) {
       }
       if (!existingRow) return { success: false, msg: 'ไม่พบรหัสการจองนี้ในระบบ' };
       if (role !== 'ADMIN') {
-        form.fakeTc = isFakeTcBooking_(existingRow);
-      } else if (!Object.prototype.hasOwnProperty.call(form, 'fakeTc')) {
-        form.fakeTc = isFakeTcBooking_(existingRow);
+        form.demoCar = isDemoCarBooking_(existingRow);
+        form.fakeTc = form.demoCar;
+      } else if (!Object.prototype.hasOwnProperty.call(form, 'demoCar') && !Object.prototype.hasOwnProperty.call(form, 'fakeTc')) {
+        form.demoCar = isDemoCarBooking_(existingRow);
+        form.fakeTc = form.demoCar;
+      } else {
+        form.demoCar = !!(form.demoCar || form.fakeTc);
+        form.fakeTc = form.demoCar;
       }
       const saved = bookingRecordFromForm_(form, fname, lname, form.id, contactPhone, startMileValue, endMileValue, bookingParking, form.originalEmail || existingRow[9], existingRow);
       ensureBookingsExtraColumns_(spreadsheet_());
@@ -2182,17 +2201,18 @@ function saveBooking(form, clientIp, token) {
           }
         }
         bSheet.getRange(sheetRow, 2, 1, 13).setValues([[form.plate, fname, lname, form.dept, "'" + form.start, "'" + form.end, form.dest, form.driver, form.originalEmail, startMileValue, endMileValue, bookingParking, contactPhone]]);
-        bSheet.getRange(sheetRow, 19).setValue(saved.fakeTc ? 'YES' : 'NO');
+        bSheet.getRange(sheetRow, 19).setValue(saved.demoCar ? 'YES' : 'NO');
         if (addedDept) clearAppCache_();
         else upsertBookingCache_(saved, vehiclePatch);
       });
-      appendLogRow_(getSheetOrThrow_(spreadsheet_(), 'Logs'), actionEmail, 'UPDATE_BOOKING', form.plate, (saved.fakeTc ? 'FAKE TC · ' : '') + 'แก้ไข/คืนรถ (จุดจอด: ' + (bookingParking || '-') + ', ไมล์: ' + (startMileValue || '-') + ' -> ' + (endMileValue || '-') + ', โทร: ' + (contactPhone || '-') + ')', form.editReason || '-', ip);
-      const lineNotify = notifyCompanyBookingLine_(spreadsheet_(), 'UPDATE', Object.assign(buildBookingNotifyObject_(form, fname, lname, form.id, contactPhone), { fakeTc: saved.fakeTc }), { skip: form.skipLineNotify || saved.fakeTc, vData: vData });
+      appendLogRow_(getSheetOrThrow_(spreadsheet_(), 'Logs'), actionEmail, 'UPDATE_BOOKING', form.plate, (saved.demoCar ? 'DEMO CAR · ' : '') + 'แก้ไข/คืนรถ (จุดจอด: ' + (bookingParking || '-') + ', ไมล์: ' + (startMileValue || '-') + ' -> ' + (endMileValue || '-') + ', โทร: ' + (contactPhone || '-') + ')', form.editReason || '-', ip);
+      const lineNotify = notifyCompanyBookingLine_(spreadsheet_(), 'UPDATE', Object.assign(buildBookingNotifyObject_(form, fname, lname, form.id, contactPhone), { demoCar: saved.demoCar, fakeTc: saved.demoCar }), { skip: form.skipLineNotify || saved.demoCar, vData: vData });
       return { success: true, msg: 'อัปเดตการจองและจุดจอดเรียบร้อยครับ', booking: saved, lineNotify: lineNotify };
     }
 
     const newBookingId = 'B_' + new Date().getTime();
-    form.fakeTc = wantFakeTc;
+    form.demoCar = wantDemoCar;
+    form.fakeTc = wantDemoCar;
     const saved = bookingRecordFromForm_(form, fname, lname, newBookingId, contactPhone, startMileValue, endMileValue, bookingParking, actionEmail, null);
     ensureBookingsExtraColumns_(spreadsheet_());
     const bSheet = getSheetOrThrow_(spreadsheet_(), 'Bookings');
@@ -2205,13 +2225,13 @@ function saveBooking(form, clientIp, token) {
           if (bookingParking) vSheet.getRange(vRow, 9).setValue(bookingParking);
         }
       }
-      bSheet.appendRow([newBookingId, form.plate, fname, lname, form.dept, "'" + form.start, "'" + form.end, form.dest, form.driver, actionEmail, startMileValue, endMileValue, bookingParking, contactPhone, '', '', '', '', saved.fakeTc ? 'YES' : 'NO']);
+      bSheet.appendRow([newBookingId, form.plate, fname, lname, form.dept, "'" + form.start, "'" + form.end, form.dest, form.driver, actionEmail, startMileValue, endMileValue, bookingParking, contactPhone, '', '', '', '', saved.demoCar ? 'YES' : 'NO']);
       if (addedDept) clearAppCache_();
       else upsertBookingCache_(saved, vehiclePatch);
     });
-    appendLogRow_(getSheetOrThrow_(spreadsheet_(), 'Logs'), actionEmail, 'CREATE_BOOKING', form.plate, (saved.fakeTc ? 'FAKE TC · ' : '') + 'จองไป ' + form.dest + ' (โทร: ' + (contactPhone || '-') + ')', '-', ip);
-    const lineNotify = notifyCompanyBookingLine_(spreadsheet_(), 'NEW', Object.assign(buildBookingNotifyObject_(form, fname, lname, newBookingId, contactPhone), { fakeTc: saved.fakeTc }), { skip: saved.fakeTc, vData: vData });
-    return { success: true, msg: saved.fakeTc ? 'บันทึก FAKE TC สำเร็จครับ' : 'บันทึกการจองสำเร็จครับ', booking: saved, lineNotify: lineNotify };
+    appendLogRow_(getSheetOrThrow_(spreadsheet_(), 'Logs'), actionEmail, 'CREATE_BOOKING', form.plate, (saved.demoCar ? 'DEMO CAR · ' : '') + 'จองไป ' + form.dest + ' (โทร: ' + (contactPhone || '-') + ')', '-', ip);
+    const lineNotify = notifyCompanyBookingLine_(spreadsheet_(), 'NEW', Object.assign(buildBookingNotifyObject_(form, fname, lname, newBookingId, contactPhone), { demoCar: saved.demoCar, fakeTc: saved.demoCar }), { skip: saved.demoCar, vData: vData });
+    return { success: true, msg: saved.demoCar ? 'บันทึก DEMO CAR สำเร็จครับ' : 'บันทึกการจองสำเร็จครับ', booking: saved, lineNotify: lineNotify };
   } catch (error) { return {success: false, msg: error.message}; }
 }
 
@@ -2572,7 +2592,7 @@ function tryNotifyCompanyBookingLine_(ss, eventType, booking, options) {
   options = options || {};
   if (options.skip) return { status: 'skipped', reason: 'skip_flag' };
   if (!booking || !booking.plate) return { status: 'skipped', reason: 'no_booking' };
-  if (isFakeTcBooking_(booking)) return { status: 'skipped', reason: 'fake_tc' };
+  if (isDemoCarBooking_(booking)) return { status: 'skipped', reason: 'demo_car' };
   if (!isCompanyLineNotifyPlate_(ss, booking.plate, options.vData)) {
     if (isCompanyVisiblePlate_(ss, booking.plate, options.vData)) {
       return {

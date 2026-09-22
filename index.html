@@ -825,10 +825,10 @@
           </div>
         </div>
 
-        <div id="bk-fake-tc-wrap" class="hidden bg-slate-100 dark:bg-slate-700/50 p-4 rounded-xl border border-slate-300 dark:border-slate-600">
+        <div id="bk-demo-car-wrap" class="hidden bg-slate-100 dark:bg-slate-700/50 p-4 rounded-xl border border-slate-300 dark:border-slate-600">
           <label class="flex items-start gap-2 cursor-pointer">
-            <input type="checkbox" id="bk-fake-tc" class="rounded text-slate-500 mt-1">
-            <span class="text-sm font-medium text-slate-700 dark:text-slate-200">FAKE TC — แสดงให้บริษัทเห็นเท่านั้น<br><span class="text-xs font-normal text-slate-500">กองไม่เห็น · บริษัทเห็นแค่รถและเวลา · ผู้จองขึ้นว่า «พนักงานการไฟฟ้า» · Admin เห็นสีเทา · ไม่แจ้ง LINE</span></span>
+            <input type="checkbox" id="bk-demo-car" class="rounded text-slate-500 mt-1">
+            <span class="text-sm font-medium text-slate-700 dark:text-slate-200">DEMO CAR — แสดงให้บริษัทเห็นเท่านั้น<br><span class="text-xs font-normal text-slate-500">กองไม่เห็น · บริษัทเห็นแค่รถและเวลา · ผู้จองขึ้นว่า «พนักงานการไฟฟ้า» · Admin เห็นสีเทา · ไม่แจ้ง LINE</span></span>
           </label>
         </div>
         <div id="bk-phone-wrap" class="hidden bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl border border-blue-200 dark:border-blue-800/40">
@@ -1215,12 +1215,12 @@
       return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:00`;
     };
     function mapBookingToCalendarEvent(b) {
-      const isFake = !!(b && b.fakeTc);
-      const displayName = isFake && isAdmin
-        ? ('FAKE · ' + (getBookingDisplayName(b) || 'พนักงานการไฟฟ้า'))
-        : (isFake ? 'พนักงานการไฟฟ้า' : getBookingDisplayName(b));
-      const color = isFake ? '#9ca3af' : getColorForUser(b);
-      const dest = isFake ? 'FAKE TC' : ((b.dest && String(b.dest).trim()) ? String(b.dest).trim() : '-');
+      const isDemo = !!(b && (b.demoCar || b.fakeTc));
+      const displayName = isDemo && isAdmin
+        ? ('DEMO · ' + (getBookingDisplayName(b) || 'พนักงานการไฟฟ้า'))
+        : (isDemo ? 'พนักงานการไฟฟ้า' : getBookingDisplayName(b));
+      const color = isDemo ? '#9ca3af' : getColorForUser(b);
+      const dest = isDemo ? 'DEMO CAR' : ((b.dest && String(b.dest).trim()) ? String(b.dest).trim() : '-');
       return {
         id: b.id,
         title: (b._pending ? 'กำลังบันทึก · ' : '') + `${displayName} → ${dest}`,
@@ -1230,7 +1230,7 @@
         borderColor: color,
         textColor: '#ffffff',
         display: 'block',
-        extendedProps: { userColor: color, fakeTc: isFake }
+        extendedProps: { userColor: color, demoCar: isDemo, fakeTc: isDemo }
       };
     }
     function mountCalendarEventStyle(info) {
@@ -3004,7 +3004,8 @@
         endMile: obj.endMile,
         parkingSpot: obj.parkingSpot || '',
         contactPhone: obj.contactPhone || '',
-        fakeTc: !!obj.fakeTc,
+        fakeTc: !!obj.demoCar || !!obj.fakeTc,
+        demoCar: !!obj.demoCar || !!obj.fakeTc,
         _pending: !obj.id
       };
       if (existing) {
@@ -3062,12 +3063,12 @@
         appData.bookings = getVisibleBookings(appData.bookings, appData.vehicles);
         appData.vehicles = getVisibleVehicles(appData.vehicles);
         if (userRole !== 'COMPANY') {
-          appData.bookings = (appData.bookings || []).filter(function (b) { return !b.fakeTc; });
+          appData.bookings = (appData.bookings || []).filter(function (b) { return !(b.demoCar || b.fakeTc); });
         }
       }
       if (userRole === 'COMPANY') {
         appData.bookings = filterCompanyBookings(appData.bookings).map(function (b) {
-          if (!b.fakeTc) return b;
+          if (!(b.demoCar || b.fakeTc)) return b;
           return Object.assign({}, b, {
             name: 'พนักงานการไฟฟ้า',
             surname: '',
@@ -3083,6 +3084,7 @@
             handoverBattery: '',
             handoverRecipient: '',
             handoverAt: '',
+            demoCar: false,
             fakeTc: false
           });
         });
@@ -5306,10 +5308,10 @@
       document.getElementById('bk-plate').innerHTML = '<option value="">-- กรุณาระบุเวลาด้านบนเพื่อค้นหารถ --</option>';
       document.getElementById('bk-phone').value = '';
       syncBookingPhoneField();
-      const fakeWrap = document.getElementById('bk-fake-tc-wrap');
-      const fakeCb = document.getElementById('bk-fake-tc');
-      if (fakeWrap) fakeWrap.classList.toggle('hidden', !isAdmin);
-      if (fakeCb) fakeCb.checked = false;
+      const demoWrap = document.getElementById('bk-demo-car-wrap');
+      const demoCb = document.getElementById('bk-demo-car');
+      if (demoWrap) demoWrap.classList.toggle('hidden', !isAdmin);
+      if (demoCb) demoCb.checked = false;
       document.getElementById('bk-submit-btn').disabled = true;
 
       const fpStart = document.getElementById('bk-start')._flatpickr;
@@ -5347,7 +5349,7 @@
           window.filterAvailableCars();
           document.getElementById('bk-plate').value = bk.plate; 
           window.updateCarImage();
-          if (fakeCb) fakeCb.checked = !!bk.fakeTc;
+          if (demoCb) demoCb.checked = !!(bk.demoCar || bk.fakeTc);
         }
       }
       document.getElementById('booking-modal').style.display = 'flex';
@@ -6067,9 +6069,10 @@
       obj.endMile = mileageValidation.endMile === null ? '' : mileageValidation.endMile;
       obj.parkingSpot = mileageValidation.endMile !== null ? obj.parkingSpot : '';
       obj.contactPhone = document.getElementById('bk-phone').value || '';
-      obj.fakeTc = !!(isAdmin && document.getElementById('bk-fake-tc') && document.getElementById('bk-fake-tc').checked);
+      obj.demoCar = !!(isAdmin && document.getElementById('bk-demo-car') && document.getElementById('bk-demo-car').checked);
+      obj.fakeTc = obj.demoCar;
 
-      if (!obj.fakeTc && requiresBookingPhoneForPlate(plate)) {
+      if (!obj.demoCar && requiresBookingPhoneForPlate(plate)) {
         const phoneDigits = String(obj.contactPhone).replace(/\D/g, '');
         if (phoneDigits.length < 9) {
           Swal.fire('กรุณาระบุเบอร์โทร', 'รถงานเฉพาะต้องใส่เบอร์ติดต่อสำหรับบริษัทส่งรถ', 'warning');
@@ -6079,7 +6082,7 @@
         }
         obj.contactPhone = phoneDigits;
       }
-      if (obj.fakeTc) obj.contactPhone = '';
+      if (obj.demoCar) obj.contactPhone = '';
 
       const tempId = currId || ('PENDING_' + Date.now());
       const existing = currId
