@@ -170,6 +170,29 @@
       isolation: isolate;
       padding-top: max(0px, env(safe-area-inset-top));
     }
+    #booking-modal,
+    #mileage-modal,
+    #handover-modal,
+    #vehicle-modal,
+    #group-modal,
+    #settings-modal {
+      z-index: 80;
+      align-items: flex-start;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding-top: max(1rem, env(safe-area-inset-top));
+      padding-bottom: max(1rem, env(safe-area-inset-bottom));
+    }
+    #booking-modal > div,
+    #mileage-modal > div,
+    #handover-modal > div,
+    #vehicle-modal > div,
+    #group-modal > div,
+    #settings-modal > div {
+      max-height: none;
+      margin-top: auto;
+      margin-bottom: auto;
+    }
     /* iOS: avoid auto-zoom on focus — inputs need >=16px */
     @media (max-width: 767px) {
       input, select, textarea, .swal2-input, .swal2-textarea {
@@ -194,6 +217,7 @@
       #mileage-modal > div,
       #handover-modal > div,
       #vehicle-modal > div,
+      #group-modal > div,
       #settings-modal > div {
         max-height: calc(100dvh - 2rem);
         overflow-y: auto;
@@ -975,10 +999,10 @@
     </div>
   </div>
 
-  <div id="settings-modal" class="fixed inset-0 bg-slate-900/60 hidden items-center justify-center z-50 px-4">
-    <div class="bg-white dark:bg-slate-800 rounded-3xl p-6 w-full max-w-md shadow-2xl relative border-t-4 border-blue-500">
-      <button onclick="window.closeModal('settings-modal')" class="absolute top-4 right-4 text-slate-400 hover:text-blue-500 text-2xl">&times;</button>
-      <h3 class="text-xl font-semibold text-blue-600 dark:text-blue-400 mb-6 text-center">⚙️ ตั้งค่าระบบ Admin</h3>
+  <div id="settings-modal" class="fixed inset-0 bg-slate-900/60 hidden items-center justify-center z-[80] px-4">
+    <div class="bg-white dark:bg-slate-800 rounded-3xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl relative border-t-4 border-blue-500 my-4">
+      <button onclick="window.closeModal('settings-modal')" class="absolute top-4 right-4 text-slate-400 hover:text-blue-500 text-2xl z-10">&times;</button>
+      <h3 class="text-xl font-semibold text-blue-600 dark:text-blue-400 mb-6 text-center pr-8">⚙️ ตั้งค่าระบบ Admin</h3>
       <form id="settings-form" onsubmit="window.saveSettings(event)" class="space-y-4">
         <div>
           <label class="block text-sm font-medium mb-1">สถานะข้อความประกาศ (Banner)</label>
