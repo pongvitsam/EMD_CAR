@@ -1952,8 +1952,17 @@
       return !!(b && (String(b.handoverAt || '').trim() || String(b.handoverRecipient || '').trim()));
     }
 
+    function isBookingTcLineEnabled(b) {
+      if (!b) return false;
+      const car = (appData.vehicles || []).find(function (v) {
+        return normalizePlateForSearch(v.plate) === normalizePlateForSearch(b.plate);
+      });
+      return isVehicleTcLineEnabled(car);
+    }
+
     function canCompanyHandoverBooking(b) {
       if (!b || bookingHasHandover(b) || userRole !== 'COMPANY') return false;
+      if (!isBookingTcLineEnabled(b)) return false;
       const end = parseTimeSafe(b.end);
       if (!end || Date.now() > end) return false;
       return isCompanyBookingStartVisible(b);
@@ -1961,6 +1970,7 @@
 
     function canCompanyEditHandoverBooking(b) {
       if (!b || !bookingHasHandover(b) || userRole !== 'COMPANY') return false;
+      if (!isBookingTcLineEnabled(b)) return false;
       const end = parseTimeSafe(b.end);
       if (!end || Date.now() > end) return false;
       return isCompanyBookingStartVisible(b);
@@ -2000,6 +2010,7 @@
       const allowedPlates = buildVehiclePlateKeySet(appData.vehicles);
       const upcoming = filterCompanyBookings(appData.bookings).filter(function (b) {
         if (!allowedPlates[normalizePlateForSearch(b.plate)]) return false;
+        if (!isBookingTcLineEnabled(b)) return false;
         const end = parseTimeSafe(b.end);
         return end && now <= end;
       }).sort(function (a, b) { return parseTimeSafe(a.start) - parseTimeSafe(b.start); });
@@ -2067,6 +2078,10 @@
       const bk = (appData.bookings || []).find(function (b) { return String(b.id) === String(bookingId); });
       if (!bk) {
         Swal.fire('ไม่พบข้อมูล', 'ไม่พบการจองนี้', 'warning');
+        return;
+      }
+      if (!isBookingTcLineEnabled(bk)) {
+        Swal.fire('ไม่ต้องส่งมอบกุญแจ', 'รถคันนี้ตั้งเป็นเห็นในปฏิทินอย่างเดียว — ไม่แจ้ง LINE', 'info');
         return;
       }
       if (isEdit) {

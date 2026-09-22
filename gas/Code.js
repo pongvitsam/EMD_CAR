@@ -2263,8 +2263,8 @@ function recordVehicleHandover(form, clientIp, token) {
     }
     if (!row) return { success: false, msg: 'ไม่พบการจอง' };
     const plate = String(row[1] || '').trim();
-    if (!isCompanyManagedPlate_(ss, plate)) {
-      return { success: false, msg: 'รถคันนี้ไม่ใช่รถที่บริษัทดูแล' };
+    if (!isCompanyLineNotifyPlate_(ss, plate)) {
+      return { success: false, msg: 'รถคันนี้ตั้งเป็นเห็นในปฏิทินอย่างเดียว — ไม่ต้องส่งมอบกุญแจ / แจ้ง LINE' };
     }
     const hasExisting = String(row[17] || '').trim() || String(row[16] || '').trim();
     if (isEdit) {
