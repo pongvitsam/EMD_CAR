@@ -1043,7 +1043,7 @@ function doGet(e) {
         }
       }
       if (!Array.isArray(args)) args = [];
-      return jsonOutput_(dispatchApi_(params.action, args, pickRequestToken_(params), params.clientIp || ''));
+      return jsonOutput_(dispatchApiOnce_(params.action, args, pickRequestToken_(params), params.clientIp || '', params.requestId));
     } catch (err) {
       return jsonOutput_({ success: false, msg: String(err.message || err) });
     }
@@ -1060,7 +1060,7 @@ function doPost(e) {
     const action = body.action;
     if (!action) return jsonOutput_({ success: false, msg: 'ไม่ระบุ action' });
     const args = Array.isArray(body.args) ? body.args : [];
-    const result = dispatchApi_(action, args, pickRequestToken_(body), body.clientIp || '');
+    const result = dispatchApiOnce_(action, args, pickRequestToken_(body), body.clientIp || '', body.requestId);
     return jsonOutput_(result);
   } catch (err) {
     return jsonOutput_({ success: false, msg: String(err.message || err) });
@@ -1076,8 +1076,19 @@ function sanitizeClientIp_(ip) {
   let s = String(ip || '').trim();
   const ipv4Port = s.match(/^(\d{1,3}(?:\.\d{1,3}){3}):\d+$/);
   if (ipv4Port) s = ipv4Port[1];
+  const ipv6Bracket = s.match(/^\[([\da-fA-F:.]+)\](?::\d+)?$/);
+  if (ipv6Bracket) s = ipv6Bracket[1];
   if (!s || s.length > 45) return '-';
   if (!/^[\d.a-fA-F:]+$/.test(s)) return '-';
+  if (/^[\d.]+$/.test(s)) {
+    const octets = s.split('.');
+    if (octets.length !== 4) return '-';
+    for (let i = 0; i < 4; i++) {
+      if (octets[i] === '' || Number(octets[i]) > 255) return '-';
+    }
+  } else if (s.indexOf(':') === -1) {
+    return '-';
+  }
   return s;
 }
 
@@ -1104,6 +1115,56 @@ function appendLogRow_(logSheet, email, action, target, detail, reason, clientIp
     reason || '-',
     clientIp || '-'
   ]);
+}
+
+const REQUEST_ID_PATTERN_ = /^[A-Za-z0-9_-]{8,64}$/;
+const REQUEST_PENDING_MARK_ = '__PENDING__';
+const REQUEST_PENDING_TTL_SEC_ = 120;
+const REQUEST_RESULT_TTL_SEC_ = 900;
+const REQUEST_WAIT_MS_ = 25000;
+
+/**
+ * Runs dispatchApi_ at most once per client requestId so that client retries
+ * after a dropped connection (server already executed) do not repeat writes.
+ */
+function dispatchApiOnce_(action, args, token, clientIp, requestId) {
+  const rid = String(requestId || '').trim();
+  if (!rid || !REQUEST_ID_PATTERN_.test(rid)) return dispatchApi_(action, args, token, clientIp);
+
+  const cache = CacheService.getScriptCache();
+  const key = 'emdreq:' + action + ':' + rid;
+  let seen = cache.get(key);
+  if (seen === REQUEST_PENDING_MARK_) {
+    const deadline = Date.now() + REQUEST_WAIT_MS_;
+    while (seen === REQUEST_PENDING_MARK_ && Date.now() < deadline) {
+      Utilities.sleep(500);
+      seen = cache.get(key);
+    }
+    if (seen === REQUEST_PENDING_MARK_) {
+      return { success: false, msg: 'คำขอเดิมยังดำเนินการอยู่ กรุณารีเฟรชหน้าเว็บเพื่อตรวจสอบผล' };
+    }
+  }
+  if (seen) {
+    try {
+      const prior = JSON.parse(seen);
+      if (prior && typeof prior === 'object') return prior;
+    } catch (err) {}
+  }
+
+  cache.put(key, REQUEST_PENDING_MARK_, REQUEST_PENDING_TTL_SEC_);
+  let result;
+  try {
+    result = dispatchApi_(action, args, token, clientIp);
+  } catch (err) {
+    try { cache.remove(key); } catch (e) {}
+    throw err;
+  }
+  const text = JSON.stringify(result === undefined ? null : result);
+  if (!putCacheSafe_(cache, key, text, REQUEST_RESULT_TTL_SEC_)) {
+    const compact = { success: !!(result && result.success), msg: result && result.msg ? String(result.msg) : '', duplicate: true };
+    putCacheSafe_(cache, key, JSON.stringify(compact), REQUEST_RESULT_TTL_SEC_);
+  }
+  return result;
 }
 
 function dispatchApi_(action, args, token, clientIp) {
